@@ -1,0 +1,10 @@
+namespace foo {
+  module bar {
+    fn baz() {
+      say Hello World
+      /tellraw "Ruh roh"
+      minecraft:data/example.values[412] # A handy comment
+      # Second comment!
+    }
+  }
+}
