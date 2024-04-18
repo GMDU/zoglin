@@ -1,7 +1,17 @@
-namespace example {
-  module foo {
-    fn bar() {
-      say Hello
+namespace diamond {
+  fn load() {
+    /scoreboard objectives add jump minecraft.custom:minecraft.jump
+  }
+
+  fn tick() {
+    execute as @a run function diamond:jump/check
+  }
+  
+  module jump {
+    fn check() {
+      execute unless score @s jump matches 1.. run return -1
+      give @s minecraft:diamond
+      /scoreboard players reset @s jump
     }
   }
 }
