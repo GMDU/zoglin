@@ -6,6 +6,8 @@ pub struct Lexer {
   position: usize,
   is_newline: bool,
   json_count: i8,
+  line: usize,
+  column: usize,
 }
 
 static OPERATOR_REGISTRY: &[(&str, TokenKind)] = &[
@@ -34,7 +36,7 @@ static KEYWORD_REGISTRY: &[(&str, TokenKind)] = &[
 
 impl Lexer {
   pub fn new(src: &str) -> Lexer {
-    Lexer{src: src.to_string(), position: 0, is_newline: true, json_count: -1}
+    Lexer{src: src.to_string(), position: 0, is_newline: true, json_count: -1, line: 1, column: 1}
   }
 
   pub fn tokenise(&mut self) -> Vec<Token> {
@@ -62,9 +64,11 @@ impl Lexer {
 
     let mut kind = TokenKind::Invalid;
     let mut position = self.position;
+    let line = self.line;
+    let column = self.column;
 
     if self.current() == '\0' {
-      return Token{kind: TokenKind::EndOfFile, value: "\0".to_string()};
+      return Token{kind: TokenKind::EndOfFile, value: "\0".to_string(), line, column};
     } else if self.json_count == 0 {
       kind = TokenKind::JSON;
       self.tokenise_json();
@@ -115,7 +119,7 @@ impl Lexer {
     }
 
     self.is_newline = false;
-    return Token{kind, value: self.src[position..self.position].to_string()};
+    return Token{kind, value: self.src[position..self.position].to_string(), line, column};
   }
 
   fn parse_punctuation(&mut self) -> Option<TokenKind> {
@@ -156,9 +160,12 @@ impl Lexer {
   }
 
   fn consume(&mut self) -> char {
+    self.column += 1;
     let current = self.current();
     if current == '\n' {
       self.is_newline = true;
+      self.line += 1;
+      self.column = 1;
     }
     self.position += 1;
     current

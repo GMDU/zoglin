@@ -2,7 +2,7 @@ namespace foo {
   # import std:core
 
   fn load() {
-    tellraw @a "Hello, World!"
+    /tellraw @a "Hello, World!"
   }
 
   module bar {
