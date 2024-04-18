@@ -5,6 +5,7 @@ pub struct Lexer {
   src: String,
   position: usize,
   is_newline: bool,
+  json_count: i8,
 }
 
 static OPERATOR_REGISTRY: &[(&str, TokenKind)] = &[
@@ -23,6 +24,7 @@ static KEYWORD_REGISTRY: &[(&str, TokenKind)] = &[
   ("namespace", TokenKind::NamespaceKeyword),
   ("module", TokenKind::ModuleKeyword),
   ("fn", TokenKind::FunctionKeyword),
+  ("res", TokenKind::ResourceKeyword),
   ("execute", TokenKind::Command),
   ("effect", TokenKind::Command),
   ("time", TokenKind::Command),
@@ -32,7 +34,7 @@ static KEYWORD_REGISTRY: &[(&str, TokenKind)] = &[
 
 impl Lexer {
   pub fn new(src: &str) -> Lexer {
-    Lexer{src: src.to_string(), position: 0, is_newline: true}
+    Lexer{src: src.to_string(), position: 0, is_newline: true, json_count: -1}
   }
 
   pub fn tokenise(&mut self) -> Vec<Token> {
@@ -63,6 +65,9 @@ impl Lexer {
 
     if self.current() == '\0' {
       return Token{kind: TokenKind::EndOfFile, value: "\0".to_string()};
+    } else if self.json_count == 0 {
+      kind = TokenKind::JSON;
+      self.tokenise_json();
     } else if self.current() == '/' && self.is_newline {
       self.consume();
       kind = TokenKind::Command;
@@ -99,6 +104,14 @@ impl Lexer {
       while self.current() != '\n' {
         self.consume();
       }
+    }
+
+    if self.json_count >= 0 {
+      self.json_count -= 1;
+    }
+
+    if kind == TokenKind::ResourceKeyword {
+      self.json_count = 2;
     }
 
     self.is_newline = false;
@@ -154,6 +167,53 @@ impl Lexer {
   fn consume_many(&mut self, count: usize) {
     self.position += count;
   }
+
+  fn tokenise_json(&mut self) {
+    let char = self.current();
+    if char == '{' || char == '[' {
+      let closing = (char as u8 + 2) as char;
+      let mut count = 1;
+      self.consume();
+
+      while count > 0 {
+        if self.current() == char {
+          count += 1;
+        }
+
+        if self.current() == closing {
+          count -= 1;
+        }
+
+        if self.current() == '"' || self.current() == '\'' {
+          self.tokenise_string();
+        } else {
+          self.consume();
+        }
+      }
+
+    } else if char == '"' || char == '\'' {
+      self.tokenise_string();
+    } else {
+      while !self.current().is_ascii_whitespace() {
+        self.consume();
+      }
+    }
+
+    // Enclosure chars: { [ " '
+  }
+
+  fn tokenise_string(&mut self) {
+    let char = self.current();
+    self.consume();
+    while self.current() != char {
+      if self.current() == '\\' {
+        self.consume();
+      }
+      self.consume();
+    }
+    self.consume();
+  }
+
 }
 
 fn valid_identifier_start(character: char) -> bool {
@@ -161,5 +221,5 @@ fn valid_identifier_start(character: char) -> bool {
 }
 
 fn valid_identifier_body(character: char) -> bool {
-  character.is_ascii_alphanumeric() || character == '_'
+  character.is_ascii_alphanumeric() || character == '_' || character == '/'
 }

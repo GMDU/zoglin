@@ -12,6 +12,7 @@ pub enum TokenKind {
   NamespaceKeyword,
   FunctionKeyword,
   ModuleKeyword,
+  ResourceKeyword,
   Command,
   Comment,
   Identifier,
@@ -25,4 +26,5 @@ pub enum TokenKind {
   Colon,
   Dot,
   Integer,
+  JSON,
 }

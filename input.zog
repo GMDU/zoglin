@@ -1,10 +1,24 @@
 namespace foo {
+  # import std:core
+
+  fn load() {
+    tellraw @a "Hello, World!"
+  }
+
   module bar {
     fn baz() {
       say Hello World
       /tellraw "Ruh roh"
       minecraft:data/example.values[412] # A handy comment
       # Second comment!
+    }
+
+    res tags/blocks foo {
+      values: [1,2,3],
+      string: "{",
+      object: {
+        foo: bar
+      }
     }
   }
 }
