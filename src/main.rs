@@ -1,10 +1,13 @@
+mod compiler;
 mod lexer;
 mod parser;
+
 use std::fs::read_to_string;
 
 use lexer::Lexer;
 
-use crate::parser::Parser;
+use crate::{compiler::Compiler, parser::Parser};
+
 fn main() {
     let contents = read_to_string("input.zog").unwrap();
     let mut lexer = Lexer::new(&contents);
@@ -13,5 +16,8 @@ fn main() {
     let mut parser = Parser::new(tokens);
     let ast = parser.parse();
 
-    println!("{:#?}", ast);
+    let compiler = Compiler::new(ast);
+    compiler.compile();
+
+    // println!("{:#?}", ast);
 }
