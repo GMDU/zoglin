@@ -1,5 +1,8 @@
+mod commands;
 pub mod token;
 use token::{Token, TokenKind};
+
+use self::commands::COMMANDS;
 
 pub struct Lexer {
   src: String,
@@ -27,11 +30,6 @@ static KEYWORD_REGISTRY: &[(&str, TokenKind)] = &[
   ("module", TokenKind::ModuleKeyword),
   ("fn", TokenKind::FunctionKeyword),
   ("res", TokenKind::ResourceKeyword),
-  ("execute", TokenKind::Command),
-  ("effect", TokenKind::Command),
-  ("time", TokenKind::Command),
-  ("say", TokenKind::Command),
-  ("give", TokenKind::Command),
 ];
 
 impl Lexer {
@@ -85,7 +83,7 @@ impl Lexer {
     } else if self.current() == '{' && self.next_brace_json {
       kind = TokenKind::JSON;
       if !self.tokenise_json() {
-        value = self.src[position+1..self.position-1].to_string();
+        value = self.src[position + 1..self.position - 1].to_string();
       }
     } else if self.current() == '/' && self.is_newline {
       self.consume();
@@ -114,6 +112,8 @@ impl Lexer {
         .find(|(text, _)| *text == identifier_value);
       if keyword.is_some() {
         kind = keyword.unwrap().1.clone();
+      } else if self.is_newline && COMMANDS.contains(&identifier_value) {
+        kind = TokenKind::Command;
       }
     } else {
       self.consume();

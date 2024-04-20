@@ -1,6 +1,6 @@
 namespace diamond {
   fn load() {
-    /scoreboard objectives add jump minecraft.custom:minecraft.jump
+    scoreboard objectives add jump minecraft.custom:minecraft.jump
   }
 
   fn tick() {
@@ -11,7 +11,7 @@ namespace diamond {
     fn check() {
       execute unless score @s jump matches 1.. run return -1
       give @s minecraft:diamond
-      /scoreboard players reset @s jump
+      scoreboard players reset @s jump
     }
   }
 
