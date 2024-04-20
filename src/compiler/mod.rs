@@ -95,6 +95,7 @@ impl Compiler {
     match item {
       ast::Item::Module(module) => Item::Module(self.compile_module(module, path)),
       ast::Item::Function(function) => Item::Function(self.compile_function(function, path)),
+      ast::Item::Resource(resource) => Item::Resource(self.compile_resource(resource, path)),
     }
   }
 
@@ -108,6 +109,14 @@ impl Compiler {
     Module {
       name: module.name.clone(),
       items,
+    }
+  }
+
+  fn compile_resource(&self, resource: &ast::Resource, _path: String) -> Resource {
+    Resource {
+      name: resource.name.clone(),
+      kind: resource.kind.clone(),
+      text: resource.text.clone(),
     }
   }
 

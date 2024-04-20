@@ -1,26 +1,30 @@
-use crate::lexer::token::{Token, TokenKind};
 use self::ast::{File, Function, Item, Module, Namespace};
+use crate::lexer::token::{Token, TokenKind};
 
 pub mod ast;
+mod json;
 
 pub struct Parser {
   tokens: Vec<Token>,
-  position: usize
+  position: usize,
 }
 
 impl Parser {
   pub fn new(tokens: Vec<Token>) -> Parser {
-    Parser{tokens, position: 0}
+    Parser {
+      tokens,
+      position: 0,
+    }
   }
 
   pub fn parse(&mut self) -> File {
     let mut items = Vec::new();
-    
+
     while !self.eof() {
       items.push(self.parse_namespace());
     }
 
-    File{items}
+    File { items }
   }
 
   fn eof(&self) -> bool {
@@ -43,7 +47,7 @@ impl Parser {
     assert_eq!(next.kind, kind);
     next
   }
-  
+
   fn parse_namespace(&mut self) -> ast::Namespace {
     self.expect(TokenKind::NamespaceKeyword);
     let name = self.expect(TokenKind::Identifier).value;
@@ -53,17 +57,19 @@ impl Parser {
       items.push(self.parse_item());
     }
     self.expect(TokenKind::RightBrace);
-    Namespace{name, items}
+    Namespace { name, items }
   }
-  
+
   fn parse_item(&mut self) -> ast::Item {
     if self.current().kind == TokenKind::ModuleKeyword {
       return Item::Module(self.parse_module());
+    } else if self.current().kind == TokenKind::ResourceKeyword {
+      return Item::Resource(self.parse_resource());
     } else {
       return Item::Function(self.parse_function());
     }
   }
-  
+
   fn parse_module(&mut self) -> ast::Module {
     self.expect(TokenKind::ModuleKeyword);
     let name = self.expect(TokenKind::Identifier).value;
@@ -73,9 +79,20 @@ impl Parser {
       items.push(self.parse_item());
     }
     self.expect(TokenKind::RightBrace);
-    Module{name, items}
+    Module { name, items }
   }
-    
+
+  fn parse_resource(&mut self) -> ast::Resource {
+    self.expect(TokenKind::ResourceKeyword);
+    let kind = self.expect(TokenKind::Identifier).value;
+    let name = self.expect(TokenKind::Identifier).value;
+    let json = self.expect(TokenKind::JSON).value;
+
+    let text = json::from_json5(&json);
+
+    ast::Resource { name, kind, text }
+  }
+
   fn parse_function(&mut self) -> ast::Function {
     self.expect(TokenKind::FunctionKeyword);
     let name = self.expect(TokenKind::Identifier).value;
@@ -87,9 +104,9 @@ impl Parser {
       items.push(self.parse_statement());
     }
     self.expect(TokenKind::RightBrace);
-    Function{name, items}
+    Function { name, items }
   }
-  
+
   fn parse_statement(&mut self) -> ast::Statement {
     let command = self.expect(TokenKind::Command).value;
     ast::Statement::Command(command)

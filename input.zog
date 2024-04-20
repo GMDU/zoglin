@@ -15,7 +15,15 @@ namespace diamond {
     }
   }
 
-  res tags/functions foo {
+  res advancements foo {
     
+    test: "hello",
+    'foo': [
+      "bar",
+      17.5,
+      42,
+      false,
+      null
+    ],
   }
 }
