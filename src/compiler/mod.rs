@@ -33,9 +33,9 @@ impl Compiler {
     }
   }
 
-  pub fn compile(&self) {
+  pub fn compile(&self, output: &String) {
     let tree = self.compile_tree();
-    tree.generate(".".to_string());
+    tree.generate(output);
   }
 
   fn compile_tree(&self) -> FileTree {

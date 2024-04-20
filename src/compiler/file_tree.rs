@@ -26,11 +26,11 @@ const DEFAULT_MCMETA: PackMcmeta = PackMcmeta {
 };
 
 impl FileTree {
-  pub fn generate(&self, root_path: String) {
-    let working_path = root_path.clone() + "/generated/data";
+  pub fn generate(&self, root_path: &String) {
+    let working_path = root_path.clone() + "/data";
     fs::create_dir_all(&working_path).unwrap();
     let text = serde_json::to_string_pretty(&DEFAULT_MCMETA).unwrap();
-    fs::write(root_path + "/generated/pack.mcmeta", text).unwrap();
+    fs::write(root_path.clone() + "/pack.mcmeta", text).unwrap();
     for namespace in self.namespaces.iter() {
       namespace.generate(working_path.clone());
     }
