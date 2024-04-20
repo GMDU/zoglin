@@ -5,7 +5,7 @@ pub struct Lexer {
   src: String,
   position: usize,
   is_newline: bool,
-  json_count: i8,
+  next_brace_json: bool,
   line: usize,
   column: usize,
 }
@@ -36,7 +36,14 @@ static KEYWORD_REGISTRY: &[(&str, TokenKind)] = &[
 
 impl Lexer {
   pub fn new(src: &str) -> Lexer {
-    Lexer{src: src.to_string(), position: 0, is_newline: true, json_count: -1, line: 1, column: 1}
+    Lexer {
+      src: src.to_string(),
+      position: 0,
+      is_newline: true,
+      next_brace_json: false,
+      line: 1,
+      column: 1,
+    }
   }
 
   pub fn tokenise(&mut self) -> Vec<Token> {
@@ -66,12 +73,20 @@ impl Lexer {
     let mut position = self.position;
     let line = self.line;
     let column = self.column;
+    let mut value = String::new();
 
     if self.current() == '\0' {
-      return Token{kind: TokenKind::EndOfFile, value: "\0".to_string(), line, column};
-    } else if self.json_count == 0 {
+      return Token {
+        kind: TokenKind::EndOfFile,
+        value: "\0".to_string(),
+        line,
+        column,
+      };
+    } else if self.current() == '{' && self.next_brace_json {
       kind = TokenKind::JSON;
-      self.tokenise_json();
+      if !self.tokenise_json() {
+        value = self.src[position+1..self.position-1].to_string();
+      }
     } else if self.current() == '/' && self.is_newline {
       self.consume();
       kind = TokenKind::Command;
@@ -94,9 +109,9 @@ impl Lexer {
         self.consume();
       }
       let identifier_value = &self.src[position..self.position];
-      let keyword = KEYWORD_REGISTRY.iter().find(
-        |(text, _)| *text == identifier_value
-      );
+      let keyword = KEYWORD_REGISTRY
+        .iter()
+        .find(|(text, _)| *text == identifier_value);
       if keyword.is_some() {
         kind = keyword.unwrap().1.clone();
       }
@@ -110,16 +125,20 @@ impl Lexer {
       }
     }
 
-    if self.json_count >= 0 {
-      self.json_count -= 1;
-    }
-
     if kind == TokenKind::ResourceKeyword {
-      self.json_count = 2;
+      self.next_brace_json = true;
     }
 
     self.is_newline = false;
-    return Token{kind, value: self.src[position..self.position].to_string(), line, column};
+    if &value == "" {
+      value = self.src[position..self.position].to_string();
+    }
+    return Token {
+      kind,
+      value: value,
+      line,
+      column,
+    };
   }
 
   fn parse_punctuation(&mut self) -> Option<TokenKind> {
@@ -132,15 +151,16 @@ impl Lexer {
         .into_iter()
         .filter(|(str, kind)| {
           if str.len() <= index {
-            return false
+            return false;
           }
           let is_match = str.chars().nth(index).unwrap() == current;
           if is_match && str.len() == index + 1 {
             exact = Some(kind.clone());
           }
           is_match
-        }).collect();
-        
+        })
+        .collect();
+
       if matches.len() == 0 {
         break;
       };
@@ -152,7 +172,7 @@ impl Lexer {
     }
     exact
   }
-  
+
   fn skip_whitespace(&mut self) {
     while self.current().is_whitespace() {
       self.consume();
@@ -175,38 +195,45 @@ impl Lexer {
     self.position += count;
   }
 
-  fn tokenise_json(&mut self) {
+  fn tokenise_json(&mut self) -> bool {
+    self.consume();
+    self.skip_whitespace();
     let char = self.current();
-    if char == '{' || char == '[' {
-      let closing = (char as u8 + 2) as char;
-      let mut count = 1;
-      self.consume();
+    let mut include_braces = false;
 
-      while count > 0 {
-        if self.current() == char {
-          count += 1;
-        }
+    if char == '"' || char == '\'' {
+      self.tokenise_string();
+      self.skip_whitespace();
+      include_braces = self.current() == ':';
+    } else if char.is_alphabetic() {
+      while self.current().is_alphanumeric() {
+        self.consume();
+      }
+      self.skip_whitespace();
+      include_braces = self.current() == ':';
+    } else if char == '}' {
+      include_braces = true;
+    }
 
-        if self.current() == closing {
-          count -= 1;
-        }
+    let mut count = 1;
 
-        if self.current() == '"' || self.current() == '\'' {
-          self.tokenise_string();
-        } else {
-          self.consume();
-        }
+    while count > 0 {
+      if self.current() == '{' {
+        count += 1;
       }
 
-    } else if char == '"' || char == '\'' {
-      self.tokenise_string();
-    } else {
-      while !self.current().is_ascii_whitespace() {
+      if self.current() == '}' {
+        count -= 1;
+      }
+
+      if self.current() == '"' || self.current() == '\'' {
+        self.tokenise_string();
+      } else {
         self.consume();
       }
     }
 
-    // Enclosure chars: { [ " '
+    include_braces
   }
 
   fn tokenise_string(&mut self) {
@@ -220,7 +247,6 @@ impl Lexer {
     }
     self.consume();
   }
-
 }
 
 fn valid_identifier_start(character: char) -> bool {
@@ -228,5 +254,5 @@ fn valid_identifier_start(character: char) -> bool {
 }
 
 fn valid_identifier_body(character: char) -> bool {
-  character.is_ascii_alphanumeric() || character == '_' || character == '/'
+  character.is_ascii_alphanumeric() || character == '_'
 }
