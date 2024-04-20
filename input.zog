@@ -15,15 +15,12 @@ namespace diamond {
     }
   }
 
-  res advancements foo {
-    
-    test: "hello",
-    'foo': [
-      "bar",
-      17.5,
-      42,
-      false,
-      null
+  res tags/blocks cool {
+    values: [
+      'minecraft:dirt',
+      'magenta_glazed_terracotta',
+      'muddy_mangrove_roots',
+      "minecraft:copper_block",
     ],
   }
 }

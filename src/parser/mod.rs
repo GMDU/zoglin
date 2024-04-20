@@ -84,13 +84,23 @@ impl Parser {
 
   fn parse_resource(&mut self) -> ast::Resource {
     self.expect(TokenKind::ResourceKeyword);
-    let kind = self.expect(TokenKind::Identifier).value;
+    let kind = self.parse_resource_path();
     let name = self.expect(TokenKind::Identifier).value;
     let json = self.expect(TokenKind::JSON).value;
 
     let text = json::from_json5(&json);
 
     ast::Resource { name, kind, text }
+  }
+
+  fn parse_resource_path(&mut self) -> String {
+    let mut text = self.expect(TokenKind::Identifier).value;
+    while self.current().kind == TokenKind::ForwardSlash {
+      text.push('/');
+      self.consume();
+      text.push_str(&self.expect(TokenKind::Identifier).value);
+    }
+    text
   }
 
   fn parse_function(&mut self) -> ast::Function {
