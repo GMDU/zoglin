@@ -13,8 +13,10 @@ namespace diamond {
       give @s minecraft:diamond
       scoreboard players reset @s jump
     }
-
+    
+    # Other comment
     fn tick() {
+      # This is a comment
       say I wont run!
     }
   }

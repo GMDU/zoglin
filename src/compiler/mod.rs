@@ -2,7 +2,7 @@ use std::cell::RefCell;
 
 use serde::Serialize;
 
-use crate::parser::ast::{self, File};
+use crate::parser::ast::{self, File, Statement};
 
 use self::file_tree::{FileTree, Function, Item, Module, Namespace, Resource, ResourceLocation};
 mod file_tree;
@@ -122,11 +122,18 @@ impl Compiler {
     }
   }
 
+  fn compile_statement(&self, statement: &Statement) -> String {
+    match statement {
+      Statement::Command(command) => command.clone(),
+      Statement::Comment(comment) => comment.clone(),
+    }
+  }
+
   fn compile_function(&self, function: &ast::Function, location: ResourceLocation) -> Function {
     let commands = function
       .items
       .iter()
-      .map(|ast::Statement::Command(cmd)| cmd.clone())
+      .map(|statement| self.compile_statement(statement))
       .collect();
     let function_path = location.join(&function.name);
     if &function.name == "tick" && location.modules.len() < 1 {

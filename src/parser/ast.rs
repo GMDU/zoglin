@@ -38,4 +38,5 @@ pub struct Function {
 #[derive(Debug)]
 pub enum Statement {
   Command(String),
+  Comment(String)
 }

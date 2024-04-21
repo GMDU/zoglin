@@ -27,17 +27,30 @@ impl Parser {
     File { items }
   }
 
-  fn eof(&self) -> bool {
+  fn eof(&mut self) -> bool {
     // self.position > self.tokens.len()
     self.current().kind == TokenKind::EndOfFile
   }
 
-  fn current(&self) -> Token {
+  fn current(&mut self) -> Token {
+    while self.tokens[self.position].kind == TokenKind::Comment {
+      self.position += 1;
+    }
+    self.current_with_comments()
+  }
+  
+  fn current_with_comments(&self) -> Token {
     self.tokens[self.position].clone()
   }
 
   fn consume(&mut self) -> Token {
     let current = self.current();
+    self.position += 1;
+    current
+  }
+
+  fn consume_with_comments(&mut self) -> Token {
+    let current = self.current_with_comments();
     self.position += 1;
     current
   }
@@ -110,7 +123,7 @@ impl Parser {
     self.expect(TokenKind::RightParen);
     self.expect(TokenKind::LeftBrace);
     let mut items = Vec::new();
-    while self.current().kind != TokenKind::RightBrace {
+    while self.current_with_comments().kind != TokenKind::RightBrace {
       items.push(self.parse_statement());
     }
     self.expect(TokenKind::RightBrace);
@@ -118,7 +131,16 @@ impl Parser {
   }
 
   fn parse_statement(&mut self) -> ast::Statement {
-    let command = self.expect(TokenKind::Command).value;
-    ast::Statement::Command(command)
+    match self.current_with_comments().kind {
+      TokenKind::Command => {
+        let command = self.consume_with_comments().value;
+        ast::Statement::Command(command)
+      }
+      TokenKind::Comment => {
+        let comment = self.consume_with_comments().value;
+        ast::Statement::Comment(comment)
+      }
+      _ => unreachable!()
+    }
   }
 }
