@@ -1,5 +1,4 @@
 use std::{fs, path::Path};
-
 use serde::Serialize;
 
 #[derive(Debug)]
@@ -129,7 +128,22 @@ impl Resource {
 }
 
 #[derive(Clone)]
-struct ResourceLocation {
+pub struct ResourceLocation {
   pub namespace: String,
   pub modules: Vec<String>,
+}
+
+impl ResourceLocation {
+  pub fn to_string(&self) -> String {
+    self.namespace.clone() + ":" + &self.modules.join("/")
+  }
+
+  pub fn join(&self, suffix: &String) -> String {
+    let mut prefix = self.to_string();
+    if self.modules.len() > 0 {
+      prefix.push('/');
+    }
+    prefix.push_str(suffix);
+    prefix
+  }
 }

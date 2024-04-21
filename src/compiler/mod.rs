@@ -4,7 +4,7 @@ use serde::Serialize;
 
 use crate::parser::ast::{self, File};
 
-use self::file_tree::{FileTree, Function, Item, Module, Namespace, Resource};
+use self::file_tree::{FileTree, Function, Item, Module, Namespace, Resource, ResourceLocation};
 mod file_tree;
 
 pub struct Compiler {
@@ -82,7 +82,8 @@ impl Compiler {
     let mut items = Vec::new();
 
     for item in namespace.items.iter() {
-      items.push(self.compile_item(item, namespace.name.clone() + ":"));
+      let resource = ResourceLocation {namespace: namespace.name.clone(), modules: Vec::new()};
+      items.push(self.compile_item(item, resource));
     }
 
     Namespace {
@@ -91,19 +92,20 @@ impl Compiler {
     }
   }
 
-  fn compile_item(&self, item: &ast::Item, path: String) -> Item {
+  fn compile_item(&self, item: &ast::Item, location: ResourceLocation) -> Item {
     match item {
-      ast::Item::Module(module) => Item::Module(self.compile_module(module, path)),
-      ast::Item::Function(function) => Item::Function(self.compile_function(function, path)),
-      ast::Item::Resource(resource) => Item::Resource(self.compile_resource(resource, path)),
+      ast::Item::Module(module) => Item::Module(self.compile_module(module, location)),
+      ast::Item::Function(function) => Item::Function(self.compile_function(function, location)),
+      ast::Item::Resource(resource) => Item::Resource(self.compile_resource(resource, location)),
     }
   }
 
-  fn compile_module(&self, module: &ast::Module, path: String) -> Module {
+  fn compile_module(&self, module: &ast::Module, mut location: ResourceLocation) -> Module {
+    location.modules.push(module.name.clone());
     let mut items = Vec::new();
 
     for item in module.items.iter() {
-      items.push(self.compile_item(item, path.clone() + &module.name + "/"));
+      items.push(self.compile_item(item, location.clone()));
     }
 
     Module {
@@ -112,7 +114,7 @@ impl Compiler {
     }
   }
 
-  fn compile_resource(&self, resource: &ast::Resource, _path: String) -> Resource {
+  fn compile_resource(&self, resource: &ast::Resource, _location: ResourceLocation) -> Resource {
     Resource {
       name: resource.name.clone(),
       kind: resource.kind.clone(),
@@ -120,16 +122,16 @@ impl Compiler {
     }
   }
 
-  fn compile_function(&self, function: &ast::Function, path: String) -> Function {
+  fn compile_function(&self, function: &ast::Function, location: ResourceLocation) -> Function {
     let commands = function
       .items
       .iter()
       .map(|ast::Statement::Command(cmd)| cmd.clone())
       .collect();
-    let function_path = path + &function.name;
-    if &function.name == "tick" {
+    let function_path = location.join(&function.name);
+    if &function.name == "tick" && location.modules.len() < 1 {
       self.state.borrow_mut().tick_functions.push(function_path);
-    } else if &function.name == "load" {
+    } else if &function.name == "load" && location.modules.len() < 1 {
       self.state.borrow_mut().load_functions.push(function_path);
     }
 
