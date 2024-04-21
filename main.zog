@@ -13,6 +13,10 @@ namespace diamond {
       give @s minecraft:diamond
       scoreboard players reset @s jump
     }
+
+    fn tick() {
+      say I wont run!
+    }
   }
 
   res tags/blocks cool {
