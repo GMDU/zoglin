@@ -1,4 +1,6 @@
 namespace diamond {
+  include "includes/function"
+  
   fn load() {
     scoreboard objectives add jump minecraft.custom:minecraft.jump
   }
@@ -13,7 +15,7 @@ namespace diamond {
       give @s minecraft:diamond
       scoreboard players reset @s jump
     }
-    
+
     # Other comment
     fn tick() {
       # This is a comment

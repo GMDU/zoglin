@@ -1,0 +1,3 @@
+fn included_fn() {
+  include "commands"
+}
