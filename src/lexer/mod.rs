@@ -1,10 +1,11 @@
 mod commands;
 pub mod token;
+use std::{fs, path::Path};
 use token::{Token, TokenKind};
-
 use self::commands::COMMANDS;
 
 pub struct Lexer {
+  file: String,
   src: String,
   position: usize,
   is_newline: bool,
@@ -30,12 +31,15 @@ static KEYWORD_REGISTRY: &[(&str, TokenKind)] = &[
   ("module", TokenKind::ModuleKeyword),
   ("fn", TokenKind::FunctionKeyword),
   ("res", TokenKind::ResourceKeyword),
+  ("include", TokenKind::IncludeKeyword),
 ];
 
 impl Lexer {
   pub fn new(src: &str) -> Lexer {
+    let contents = fs::read_to_string(src).unwrap();
     Lexer {
-      src: src.to_string(),
+      file: src.to_string(),
+      src: contents,
       position: 0,
       is_newline: true,
       next_brace_json: false,
@@ -48,9 +52,14 @@ impl Lexer {
     let mut tokens = Vec::new();
     loop {
       let next = self.next_token();
-      tokens.push(next);
-      if tokens.last().unwrap().kind == TokenKind::EndOfFile {
-        break;
+      if next.kind == TokenKind::IncludeKeyword {
+        tokens.extend(self.parse_include());
+        tokens.pop();
+      } else {
+        tokens.push(next);
+        if tokens.last().unwrap().kind == TokenKind::EndOfFile {
+          break;
+        }
       }
     }
     tokens
@@ -62,6 +71,10 @@ impl Lexer {
 
   fn current(&self) -> char {
     self.peek(0)
+  }
+
+  fn current_is_delim(&self) -> bool {
+    self.current() == '\n' || self.current() == '\0'
   }
 
   fn next_token(&mut self) -> Token {
@@ -90,7 +103,7 @@ impl Lexer {
       kind = TokenKind::Command;
       position += 1;
     } else if self.current() == '#' {
-      while self.current() != '\n' {
+      while !self.current_is_delim() {
         self.consume();
       }
       kind = TokenKind::Comment;
@@ -101,6 +114,9 @@ impl Lexer {
       while self.current().is_digit(10) {
         self.consume();
       }
+    } else if self.current() == '"' || self.current() == '\'' {
+      kind = TokenKind::String;
+      self.tokenise_string();
     } else if valid_identifier_start(self.current()) {
       kind = TokenKind::Identifier;
       while valid_identifier_body(self.current()) {
@@ -120,7 +136,7 @@ impl Lexer {
     }
 
     if kind == TokenKind::Command {
-      while self.current() != '\n' {
+      while !self.current_is_delim() {
         self.consume();
       }
     }
@@ -246,6 +262,18 @@ impl Lexer {
       self.consume();
     }
     self.consume();
+  }
+
+  fn parse_include(&mut self) -> Vec<Token> {
+    let value = self.next_token();
+    assert_eq!(value.kind, TokenKind::String);
+    let mut path = value.value[1..value.value.len() - 1].to_string();
+    if !path.ends_with(".zog") {
+      path = path + ".zog";
+    }
+    let relative_path = Path::new(&self.file).parent().unwrap().join(path);
+    let mut lexer = Lexer::new(relative_path.to_str().unwrap());
+    lexer.tokenise()
   }
 }
 

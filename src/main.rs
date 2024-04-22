@@ -4,7 +4,7 @@ mod lexer;
 mod parser;
 
 use std::{
-  fs::{self, read_to_string},
+  fs::{self},
   path::Path,
 };
 
@@ -36,9 +36,10 @@ fn main() {
 }
 
 fn build(file: &String, output: &String) {
-  let contents = read_to_string(file).unwrap();
-  let mut lexer = Lexer::new(&contents);
+  let mut lexer = Lexer::new(file);
   let tokens = lexer.tokenise();
+
+  // println!("{:#?}", tokens)
 
   let mut parser = Parser::new(tokens);
   let ast = parser.parse();

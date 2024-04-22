@@ -15,6 +15,7 @@ pub enum TokenKind {
   FunctionKeyword,
   ModuleKeyword,
   ResourceKeyword,
+  IncludeKeyword,
   Command,
   Comment,
   Identifier,
@@ -29,4 +30,5 @@ pub enum TokenKind {
   Dot,
   Integer,
   JSON,
+  String,
 }
