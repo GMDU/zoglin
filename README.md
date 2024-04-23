@@ -2,6 +2,34 @@
 
 A datapack pre-processor focused on power and simplicity.
 
+It is written in Rust, so it is ✨ *blazingly fast* 🚀.
+
+## Current Progress
+Zoglin is under active development, and no releases have been
+made so far.
+
+- CLI ✅
+- Namespaces ✅
+- Modules ✅
+- Functions (1/2)
+  - Function definition ✅
+  - Function calling
+- Commands (1/2)
+  - Commands in functions ✅
+  - Inline expressions
+- Resources (1/2)
+  - JSON Resources ✅
+  - NBT / other resources
+- Include ✅
+- Import
+- Expressions
+- Standard Library
+- Conditionals
+- Variables (0/3)
+  - Storage variables
+  - Scoreboard variables
+  - Compile-time variables
+
 ## Namespaces
 Namespaces are defined using the `namespace` block.
 
@@ -237,10 +265,13 @@ namespace example {
 ```
 
 ## Resources
-Resources represent JSON configuration files within a datapack.
+Resources represent non-mcfunction resources within a datapack, such as JSON files.
 
-They can be defined using the `res` keyword. It takes a resource type,
-followed by its name, then a block containing JSON.
+Resources are defined using the `res` keyword, followed by a resource type.
+
+### JSON
+For JSON resources, after the resource type, a name can be specified,
+followed then by a JSON block.
 
 The JSON block is compatible with JSON5, which will be converted to plain
 JSON at compile time.
@@ -268,6 +299,28 @@ res tags/blocks air_types {
     'minecraft:void_air'
   ]
 }
+```
+
+### NBT / Other files
+For file based resources, such as NBT files, a file path is specified as
+a string, after the resource type.
+
+The file path supports globbing, for passing through multiple files.
+It is relative to the current file.
+
+Example:
+```
+# This copies the file "nbt/structure.nbt" to
+# data/namespace/structures/airship.nbt
+res structures "nbt/structure.nbt"
+
+# This copies all nbt files in nbt/airships to
+# data/namespace/structures/
+res structures "nbt/airships/*.nbt"
+
+# This copies the laboratories folder to
+# data/namespace/structures/laboratories
+res structures "nbt/laboratories"
 ```
 
 ## Private
@@ -372,6 +425,27 @@ foo/bar
 
 # minecraft:data example
 minecraft:data/example
+```
+
+#### Optional Suffix
+Because a variable's path can have the `/` character, there can
+be times where a division would lead to ambiguity.
+
+Example:
+```
+# Is this foo:bar/baz divided by apples, or the path foo:bar/baz/apples?
+foo:bar/baz/apples
+```
+
+To fix this ambiguity, a `:` can be added to the end of the path.
+
+Example:
+```
+# This is foo:bar/baz divided by apples
+foo:bar/baz:/apples
+
+# This is the path foo:bar/baz/apples
+foo:bar/baz/apples
 ```
 
 ### Scoreboard variables
