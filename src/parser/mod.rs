@@ -1,4 +1,4 @@
-use self::ast::{File, Function, Item, Module, Namespace, ResourceContent};
+use self::ast::{Expression, File, Function, FunctionCall, Item, Module, Namespace, ResourceContent, ZoglinResource};
 use crate::lexer::token::{Token, TokenKind};
 
 pub mod ast;
@@ -136,6 +136,52 @@ impl Parser {
     Function { name, items }
   }
 
+  fn parse_expression(&mut self) -> Expression {
+    Expression::FunctionCall(self.parse_function_call())
+  }
+
+  fn parse_function_call(&mut self) -> FunctionCall {
+    let path = self.parse_zoglin_resource();
+    self.expect(TokenKind::LeftParen);
+    self.expect(TokenKind::RightParen);
+    FunctionCall{path}
+  }
+
+  fn parse_zoglin_resource(&mut self) -> ZoglinResource {
+    let mut resource = ZoglinResource {namespace: None, modules: Vec::new(), name: String::new()};
+    let mut allow_colon: bool = true;
+    if self.current().kind == TokenKind::Colon {
+      self.consume();
+      allow_colon = false;
+      resource.namespace = Some(String::new());
+    }
+    loop {
+      let identifier = self.expect(TokenKind::Identifier).value;
+      match self.current().kind {
+        TokenKind::Colon => {
+          self.consume();
+          if allow_colon && self.current().kind == TokenKind::Identifier {
+            resource.namespace = Some(identifier);
+            allow_colon = false;
+          } else {
+            resource.name = identifier;
+            break;
+          }
+        }
+        TokenKind::ForwardSlash => {
+          resource.modules.push(identifier);
+          allow_colon = false;
+          self.consume();
+        }
+        _ => {
+          resource.name = identifier;
+          break;
+        }
+      }
+    }
+    resource
+  }
+
   fn parse_statement(&mut self) -> ast::Statement {
     match self.current_with_comments().kind {
       TokenKind::Command => {
@@ -146,7 +192,7 @@ impl Parser {
         let comment = self.consume_with_comments().value;
         ast::Statement::Comment(comment)
       }
-      _ => unreachable!()
+      _ => ast::Statement::Expression(self.parse_expression())
     }
   }
 }

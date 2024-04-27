@@ -6,7 +6,11 @@ namespace diamond {
   }
 
   fn tick() {
-    execute as @a run function diamond:jump/check
+    execute as @a run function diamond:player
+  }
+
+  fn player() {
+    jump/check()
   }
   
   module jump {

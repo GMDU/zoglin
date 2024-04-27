@@ -11,9 +11,10 @@ made so far.
 - CLI ✅
 - Namespaces ✅
 - Modules ✅
-- Functions (1/2)
+- Functions (2/3)
   - Function definition ✅
-  - Function calling
+  - Function calling ✅
+  - Functions with parameters
 - Commands (1/2)
   - Commands in functions ✅
   - Inline expressions

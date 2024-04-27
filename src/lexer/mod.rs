@@ -191,7 +191,7 @@ impl Lexer {
       .find(|(text, _)| *text == identifier_value);
     if keyword.is_some() {
       kind = keyword.unwrap().1.clone();
-    } else if self.is_newline && COMMANDS.contains(&identifier_value) {
+    } else if self.is_newline && COMMANDS.contains(&identifier_value) && self.next_significant_char() != '(' {
       kind = TokenKind::Command;
     }
     kind
@@ -201,6 +201,14 @@ impl Lexer {
     while self.current().is_whitespace() {
       self.consume();
     }
+  }
+
+  fn next_significant_char(&mut self) -> char {
+    let position = self.position;
+    self.skip_whitespace();
+    let current = self.current();
+    self.position = position;
+    current
   }
 
   fn consume(&mut self) -> char {

@@ -43,5 +43,23 @@ pub struct Function {
 #[derive(Debug)]
 pub enum Statement {
   Command(String),
-  Comment(String)
+  Comment(String),
+  Expression(Expression),
+}
+
+#[derive(Debug)]
+pub enum Expression {
+  FunctionCall(FunctionCall)
+}
+
+#[derive(Debug)]
+pub struct FunctionCall {
+  pub path: ZoglinResource
+}
+
+#[derive(Debug)]
+pub struct ZoglinResource {
+  pub namespace: Option<String>,
+  pub modules: Vec<String>,
+  pub name: String,
 }

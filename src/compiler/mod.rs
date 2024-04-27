@@ -2,7 +2,7 @@ use std::{cell::RefCell, path::Path};
 
 use serde::Serialize;
 
-use crate::parser::ast::{self, File, Statement};
+use crate::parser::ast::{self, Expression, File, FunctionCall, Statement};
 
 use self::file_tree::{FileResource, FileTree, Function, Item, Module, Namespace, ResourceLocation, TextResource};
 mod file_tree;
@@ -137,10 +137,11 @@ impl Compiler {
     }
   }
 
-  fn compile_statement(&self, statement: &Statement) -> String {
+  fn compile_statement(&self, statement: &Statement, location: &ResourceLocation) -> String {
     match statement {
       Statement::Command(command) => command.clone(),
       Statement::Comment(comment) => comment.clone(),
+      Statement::Expression(expression) => self.compile_expression(expression, location),
     }
   }
 
@@ -148,7 +149,7 @@ impl Compiler {
     let commands = function
       .items
       .iter()
-      .map(|statement| self.compile_statement(statement))
+      .map(|statement| self.compile_statement(statement, &location))
       .collect();
     let function_path = location.join(&function.name);
     if &function.name == "tick" && location.modules.len() < 1 {
@@ -161,5 +162,33 @@ impl Compiler {
       name: function.name.clone(),
       commands,
     }
+  }
+
+  fn compile_expression(&self, expression: &Expression, location: &ResourceLocation) -> String {
+    let Expression::FunctionCall(function_call) = expression;
+    self.compile_function_call(function_call, location)
+  }
+
+  fn compile_function_call(&self, function_call: &FunctionCall, location: &ResourceLocation) -> String {
+    let mut path = "function ".to_string();
+    if let Some(namespace) = &function_call.path.namespace {
+      if namespace.len() == 0 {
+        path.push_str(&location.namespace);
+      } else {
+        path.push_str(&namespace);
+      }
+      path.push(':');
+    } else {
+      path.push_str(&location.to_string());
+      if location.modules.len() > 0 {
+        path.push('/');
+      }
+    }
+    path.push_str(&function_call.path.modules.join("/"));
+    if function_call.path.modules.len() > 0 {
+      path.push('/');
+    }
+    path.push_str(&function_call.path.name);
+    path
   }
 }
