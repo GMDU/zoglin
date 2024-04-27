@@ -17,9 +17,9 @@ made so far.
 - Commands (1/2)
   - Commands in functions ✅
   - Inline expressions
-- Resources (1/2)
+- Resources (2/2)
   - JSON Resources ✅
-  - NBT / other resources
+  - NBT / other resources✅
 - Include ✅
 - Import
 - Expressions

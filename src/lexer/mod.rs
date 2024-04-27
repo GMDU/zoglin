@@ -120,19 +120,7 @@ impl Lexer {
       value = self.tokenise_string();
       self.next_brace_json = false;
     } else if valid_identifier_start(self.current()) {
-      kind = TokenKind::Identifier;
-      while valid_identifier_body(self.current()) {
-        self.consume();
-      }
-      let identifier_value = &self.src[position..self.position];
-      let keyword = KEYWORD_REGISTRY
-        .iter()
-        .find(|(text, _)| *text == identifier_value);
-      if keyword.is_some() {
-        kind = keyword.unwrap().1.clone();
-      } else if self.is_newline && COMMANDS.contains(&identifier_value) {
-        kind = TokenKind::Command;
-      }
+      kind = self.tokenise_identifier(position);
     } else {
       self.consume();
     }
@@ -190,6 +178,23 @@ impl Lexer {
       self.consume_many(index);
     }
     exact
+  }
+
+  fn tokenise_identifier(&mut self, position: usize) -> TokenKind {
+    let mut kind = TokenKind::Identifier;
+    while valid_identifier_body(self.current()) {
+      self.consume();
+    }
+    let identifier_value = &self.src[position..self.position];
+    let keyword = KEYWORD_REGISTRY
+      .iter()
+      .find(|(text, _)| *text == identifier_value);
+    if keyword.is_some() {
+      kind = keyword.unwrap().1.clone();
+    } else if self.is_newline && COMMANDS.contains(&identifier_value) {
+      kind = TokenKind::Command;
+    }
+    kind
   }
 
   fn skip_whitespace(&mut self) {
