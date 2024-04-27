@@ -1,10 +1,10 @@
-use std::cell::RefCell;
+use std::{cell::RefCell, path::Path};
 
 use serde::Serialize;
 
 use crate::parser::ast::{self, File, Statement};
 
-use self::file_tree::{FileTree, Function, Item, Module, Namespace, Resource, ResourceLocation};
+use self::file_tree::{FileResource, FileTree, Function, Item, Module, Namespace, ResourceLocation, TextResource};
 mod file_tree;
 
 pub struct Compiler {
@@ -61,12 +61,12 @@ impl Compiler {
       let tick_text = serde_json::to_string_pretty(&tick_json).unwrap();
       let load_text = serde_json::to_string_pretty(&load_json).unwrap();
 
-      mc_namespace.items.push(Item::Resource(Resource {
+      mc_namespace.items.push(Item::TextResource(TextResource {
         name: "tick".to_string(),
         kind: "tags/functions".to_string(),
         text: tick_text,
       }));
-      mc_namespace.items.push(Item::Resource(Resource {
+      mc_namespace.items.push(Item::TextResource(TextResource {
         name: "load".to_string(),
         kind: "tags/functions".to_string(),
         text: load_text,
@@ -96,7 +96,7 @@ impl Compiler {
     match item {
       ast::Item::Module(module) => Item::Module(self.compile_module(module, location)),
       ast::Item::Function(function) => Item::Function(self.compile_function(function, location)),
-      ast::Item::Resource(resource) => Item::Resource(self.compile_resource(resource, location)),
+      ast::Item::Resource(resource) => self.compile_resource(resource, location),
     }
   }
 
@@ -114,11 +114,26 @@ impl Compiler {
     }
   }
 
-  fn compile_resource(&self, resource: &ast::Resource, _location: ResourceLocation) -> Resource {
-    Resource {
-      name: resource.name.clone(),
-      kind: resource.kind.clone(),
-      text: resource.text.clone(),
+  fn compile_resource(&self, resource: &ast::Resource, _location: ResourceLocation) -> Item {
+    match &resource.content {
+      ast::ResourceContent::Text(name, text) => {        
+        return Item::TextResource (
+          TextResource {
+            kind: resource.kind.clone(),
+            name: name.clone(),
+            text: text.clone(),
+          }
+        )
+      },
+      ast::ResourceContent::File(path, file) => {
+        let file_path = Path::new(file).parent().unwrap();
+        return Item::FileResource (
+          FileResource {
+            kind: resource.kind.clone(),
+            path: file_path.join(path).to_str().unwrap().to_string(),
+          }
+        )
+      },
     }
   }
 

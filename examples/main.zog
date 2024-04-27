@@ -31,4 +31,6 @@ namespace diamond {
       "minecraft:copper_block",
     ],
   }
+
+  res structures "*.nbt"
 }

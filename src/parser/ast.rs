@@ -24,9 +24,14 @@ pub struct Module {
 
 #[derive(Debug)]
 pub struct Resource {
-  pub name: String,
   pub kind: String,
-  pub text: String,
+  pub content: ResourceContent,
+}
+
+#[derive(Debug)]
+pub enum ResourceContent {
+  Text(String, String),
+  File(String, String),
 }
 
 #[derive(Debug)]

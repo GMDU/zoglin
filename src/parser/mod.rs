@@ -1,4 +1,4 @@
-use self::ast::{File, Function, Item, Module, Namespace};
+use self::ast::{File, Function, Item, Module, Namespace, ResourceContent};
 use crate::lexer::token::{Token, TokenKind};
 
 pub mod ast;
@@ -98,12 +98,18 @@ impl Parser {
   fn parse_resource(&mut self) -> ast::Resource {
     self.expect(TokenKind::ResourceKeyword);
     let kind = self.parse_resource_path();
-    let name = self.expect(TokenKind::Identifier).value;
-    let json = self.expect(TokenKind::JSON).value;
+    let content: ResourceContent;
+    if self.current().kind == TokenKind::Identifier {
+      let name = self.expect(TokenKind::Identifier).value;
+      let json = self.expect(TokenKind::JSON).value;
+  
+      content = ResourceContent::Text(name, json::from_json5(&json));
+    } else {
+      let token = self.expect(TokenKind::String);
+      content = ResourceContent::File(token.value, token.file);
+    }
 
-    let text = json::from_json5(&json);
-
-    ast::Resource { name, kind, text }
+    ast::Resource { kind, content }
   }
 
   fn parse_resource_path(&mut self) -> String {

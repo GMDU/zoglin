@@ -90,6 +90,7 @@ impl Lexer {
       return Token {
         kind: TokenKind::EndOfFile,
         value: "\0".to_string(),
+        file: self.file.clone(),
         line,
         column,
       };
@@ -116,7 +117,8 @@ impl Lexer {
       }
     } else if self.current() == '"' || self.current() == '\'' {
       kind = TokenKind::String;
-      self.tokenise_string();
+      value = self.tokenise_string();
+      self.next_brace_json = false;
     } else if valid_identifier_start(self.current()) {
       kind = TokenKind::Identifier;
       while valid_identifier_body(self.current()) {
@@ -152,6 +154,7 @@ impl Lexer {
     return Token {
       kind,
       value: value,
+      file: self.file.clone(),
       line,
       column,
     };
@@ -252,22 +255,24 @@ impl Lexer {
     include_braces
   }
 
-  fn tokenise_string(&mut self) {
+  fn tokenise_string(&mut self) -> String {
     let char = self.current();
+    let mut string = String::new();
     self.consume();
     while self.current() != char {
       if self.current() == '\\' {
         self.consume();
       }
-      self.consume();
+      string.push(self.consume());
     }
     self.consume();
+    string
   }
 
   fn parse_include(&mut self) -> Vec<Token> {
-    let value = self.next_token();
-    assert_eq!(value.kind, TokenKind::String);
-    let mut path = value.value[1..value.value.len() - 1].to_string();
+    let token = self.next_token();
+    assert_eq!(token.kind, TokenKind::String);
+    let mut path: String = token.value;
     if !path.ends_with(".zog") {
       path = path + ".zog";
     }

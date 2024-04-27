@@ -1,5 +1,6 @@
-use std::{fs, path::Path};
+use glob::glob;
 use serde::Serialize;
+use std::{fs, path::Path};
 
 #[derive(Debug)]
 pub struct FileTree {
@@ -60,7 +61,8 @@ impl Namespace {
 pub enum Item {
   Module(Module),
   Function(Function),
-  Resource(Resource),
+  TextResource(TextResource),
+  FileResource(FileResource),
 }
 
 impl Item {
@@ -68,7 +70,8 @@ impl Item {
     match self {
       Item::Module(module) => module.generate(root_path, local_path),
       Item::Function(function) => function.generate(root_path, local_path),
-      Item::Resource(resource) => resource.generate(root_path, local_path),
+      Item::TextResource(resource) => resource.generate(root_path, local_path),
+      Item::FileResource(resource) => resource.generate(root_path, local_path),
     }
   }
 }
@@ -108,13 +111,13 @@ impl Function {
 }
 
 #[derive(Debug)]
-pub struct Resource {
+pub struct TextResource {
   pub name: String,
   pub kind: String,
   pub text: String,
 }
 
-impl Resource {
+impl TextResource {
   fn generate(&self, root_path: String, local_path: ResourceLocation) {
     let dir_path = Path::new(&root_path)
       .join(local_path.namespace)
@@ -124,6 +127,32 @@ impl Resource {
     fs::create_dir_all(&dir_path).unwrap();
     let file_path = dir_path.join(self.name.clone() + ".json");
     fs::write(file_path, self.text.clone()).unwrap();
+  }
+}
+
+#[derive(Debug)]
+pub struct FileResource {
+  pub kind: String,
+  pub path: String,
+}
+
+impl FileResource {
+  fn generate(&self, root_path: String, local_path: ResourceLocation) {
+    let dir_path = Path::new(&root_path)
+      .join(local_path.namespace)
+      .join(&self.kind)
+      .join(local_path.modules.join("/"));
+
+    fs::create_dir_all(&dir_path).unwrap();
+    for entry in glob(&self.path).unwrap() {
+      match entry {
+        Ok(path) => {
+          let filename = path.file_name().unwrap();
+          fs::copy(&path, &dir_path.join(filename)).unwrap()
+        },
+        Err(e) => panic!("{:?}", e),
+      };
+    }
   }
 }
 
