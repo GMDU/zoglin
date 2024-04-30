@@ -32,7 +32,7 @@ impl FileTree {
     let text = serde_json::to_string_pretty(&DEFAULT_MCMETA).unwrap();
     fs::write(root_path.clone() + "/pack.mcmeta", text).unwrap();
     for namespace in self.namespaces.iter() {
-      namespace.generate(working_path.clone());
+      namespace.generate(&working_path);
     }
   }
 }
@@ -44,11 +44,11 @@ pub struct Namespace {
 }
 
 impl Namespace {
-  fn generate(&self, path: String) {
+  fn generate(&self, path: &String) {
     for item in self.items.iter() {
       item.generate(
-        path.clone(),
-        ResourceLocation {
+        path,
+        &mut ResourceLocation {
           namespace: self.name.clone(),
           modules: Vec::new(),
         },
@@ -66,7 +66,7 @@ pub enum Item {
 }
 
 impl Item {
-  fn generate(&self, root_path: String, local_path: ResourceLocation) {
+  fn generate(&self, root_path: &String, local_path: &mut ResourceLocation) {
     match self {
       Item::Module(module) => module.generate(root_path, local_path),
       Item::Function(function) => function.generate(root_path, local_path),
@@ -83,10 +83,10 @@ pub struct Module {
 }
 
 impl Module {
-  fn generate(&self, root_path: String, mut local_path: ResourceLocation) {
+  fn generate(&self, root_path: &String, local_path: &mut ResourceLocation) {
     local_path.modules.push(self.name.clone());
     for item in self.items.iter() {
-      item.generate(root_path.clone(), local_path.clone());
+      item.generate(root_path, local_path);
     }
   }
 }
@@ -98,9 +98,9 @@ pub struct Function {
 }
 
 impl Function {
-  fn generate(&self, root_path: String, local_path: ResourceLocation) {
+  fn generate(&self, root_path: &String, local_path: &ResourceLocation) {
     let dir_path = Path::new(&root_path)
-      .join(local_path.namespace)
+      .join(&local_path.namespace)
       .join("functions")
       .join(local_path.modules.join("/"));
 
@@ -118,9 +118,9 @@ pub struct TextResource {
 }
 
 impl TextResource {
-  fn generate(&self, root_path: String, local_path: ResourceLocation) {
+  fn generate(&self, root_path: &String, local_path: &ResourceLocation) {
     let dir_path = Path::new(&root_path)
-      .join(local_path.namespace)
+      .join(&local_path.namespace)
       .join(&self.kind)
       .join(local_path.modules.join("/"));
 
@@ -137,9 +137,9 @@ pub struct FileResource {
 }
 
 impl FileResource {
-  fn generate(&self, root_path: String, local_path: ResourceLocation) {
+  fn generate(&self, root_path: &String, local_path: &ResourceLocation) {
     let dir_path = Path::new(&root_path)
-      .join(local_path.namespace)
+      .join(&local_path.namespace)
       .join(&self.kind)
       .join(local_path.modules.join("/"));
 

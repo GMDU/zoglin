@@ -8,7 +8,7 @@ pub struct Token {
   pub column: usize,
 }
 
-#[derive(PartialEq, Eq, Debug, Clone, Hash)]
+#[derive(PartialEq, Debug, Clone)]
 pub enum TokenKind {
   Invalid,
   EndOfFile,

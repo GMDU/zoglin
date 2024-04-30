@@ -141,7 +141,7 @@ impl Lexer {
     }
     return Token {
       kind,
-      value: value,
+      value,
       file: self.file.clone(),
       line,
       column,
@@ -185,7 +185,7 @@ impl Lexer {
     while valid_identifier_body(self.current()) {
       self.consume();
     }
-    let identifier_value = &self.src[position..self.position];
+    let identifier_value: &str = &self.src[position..self.position];
     let keyword = KEYWORD_REGISTRY
       .iter()
       .find(|(text, _)| *text == identifier_value);
@@ -287,7 +287,7 @@ impl Lexer {
     assert_eq!(token.kind, TokenKind::String);
     let mut path: String = token.value;
     if !path.ends_with(".zog") {
-      path = path + ".zog";
+      path.push_str(".zog");
     }
     let relative_path = Path::new(&self.file).parent().unwrap().join(path);
     let mut lexer = Lexer::new(relative_path.to_str().unwrap());

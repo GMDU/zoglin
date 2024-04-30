@@ -18,8 +18,8 @@ struct CompilerState {
 }
 
 #[derive(Serialize)]
-struct FunctionTag {
-  values: Vec<String>,
+struct FunctionTag<'a> {
+  values: &'a [String],
 }
 
 impl Compiler {
@@ -53,10 +53,10 @@ impl Compiler {
       };
 
       let tick_json = FunctionTag {
-        values: state.tick_functions.clone(),
+        values: &state.tick_functions,
       };
       let load_json = FunctionTag {
-        values: state.load_functions.clone(),
+        values: &state.load_functions,
       };
       let tick_text = serde_json::to_string_pretty(&tick_json).unwrap();
       let load_text = serde_json::to_string_pretty(&load_json).unwrap();
@@ -82,8 +82,8 @@ impl Compiler {
     let mut items = Vec::new();
 
     for item in namespace.items.iter() {
-      let resource = ResourceLocation {namespace: namespace.name.clone(), modules: Vec::new()};
-      items.push(self.compile_item(item, resource));
+      let mut resource = ResourceLocation {namespace: namespace.name.clone(), modules: Vec::new()};
+      items.push(self.compile_item(item, &mut resource));
     }
 
     Namespace {
@@ -92,7 +92,7 @@ impl Compiler {
     }
   }
 
-  fn compile_item(&self, item: &ast::Item, location: ResourceLocation) -> Item {
+  fn compile_item(&self, item: &ast::Item, location: &mut ResourceLocation) -> Item {
     match item {
       ast::Item::Module(module) => Item::Module(self.compile_module(module, location)),
       ast::Item::Function(function) => Item::Function(self.compile_function(function, location)),
@@ -100,12 +100,12 @@ impl Compiler {
     }
   }
 
-  fn compile_module(&self, module: &ast::Module, mut location: ResourceLocation) -> Module {
+  fn compile_module(&self, module: &ast::Module, location: &mut ResourceLocation) -> Module {
     location.modules.push(module.name.clone());
     let mut items = Vec::new();
 
     for item in module.items.iter() {
-      items.push(self.compile_item(item, location.clone()));
+      items.push(self.compile_item(item, location));
     }
 
     Module {
@@ -114,7 +114,7 @@ impl Compiler {
     }
   }
 
-  fn compile_resource(&self, resource: &ast::Resource, _location: ResourceLocation) -> Item {
+  fn compile_resource(&self, resource: &ast::Resource, _location: &ResourceLocation) -> Item {
     match &resource.content {
       ast::ResourceContent::Text(name, text) => {        
         return Item::TextResource (
@@ -145,7 +145,7 @@ impl Compiler {
     }
   }
 
-  fn compile_function(&self, function: &ast::Function, location: ResourceLocation) -> Function {
+  fn compile_function(&self, function: &ast::Function, location: &ResourceLocation) -> Function {
     let commands = function
       .items
       .iter()
