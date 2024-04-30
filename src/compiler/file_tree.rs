@@ -27,12 +27,14 @@ const DEFAULT_MCMETA: PackMcmeta = PackMcmeta {
 
 impl FileTree {
   pub fn generate(&self, root_path: &String) {
-    let working_path = root_path.clone() + "/data";
+    let working_path = Path::new(root_path).join("/data");
     fs::create_dir_all(&working_path).unwrap();
+
     let text = serde_json::to_string_pretty(&DEFAULT_MCMETA).unwrap();
-    fs::write(root_path.clone() + "/pack.mcmeta", text).unwrap();
+    fs::write(Path::new(root_path).join("pack.mcmeta"), text).unwrap();
+
     for namespace in self.namespaces.iter() {
-      namespace.generate(&working_path);
+      namespace.generate(working_path.to_str().unwrap());
     }
   }
 }
@@ -44,7 +46,7 @@ pub struct Namespace {
 }
 
 impl Namespace {
-  fn generate(&self, path: &String) {
+  fn generate(&self, path: &str) {
     for item in self.items.iter() {
       item.generate(
         path,
@@ -66,7 +68,7 @@ pub enum Item {
 }
 
 impl Item {
-  fn generate(&self, root_path: &String, local_path: &mut ResourceLocation) {
+  fn generate(&self, root_path: &str, local_path: &mut ResourceLocation) {
     match self {
       Item::Module(module) => module.generate(root_path, local_path),
       Item::Function(function) => function.generate(root_path, local_path),
@@ -83,7 +85,7 @@ pub struct Module {
 }
 
 impl Module {
-  fn generate(&self, root_path: &String, local_path: &mut ResourceLocation) {
+  fn generate(&self, root_path: &str, local_path: &mut ResourceLocation) {
     local_path.modules.push(self.name.clone());
     for item in self.items.iter() {
       item.generate(root_path, local_path);
@@ -98,8 +100,8 @@ pub struct Function {
 }
 
 impl Function {
-  fn generate(&self, root_path: &String, local_path: &ResourceLocation) {
-    let dir_path = Path::new(&root_path)
+  fn generate(&self, root_path: &str, local_path: &ResourceLocation) {
+    let dir_path = Path::new(root_path)
       .join(&local_path.namespace)
       .join("functions")
       .join(local_path.modules.join("/"));
@@ -118,8 +120,8 @@ pub struct TextResource {
 }
 
 impl TextResource {
-  fn generate(&self, root_path: &String, local_path: &ResourceLocation) {
-    let dir_path = Path::new(&root_path)
+  fn generate(&self, root_path: &str, local_path: &ResourceLocation) {
+    let dir_path = Path::new(root_path)
       .join(&local_path.namespace)
       .join(&self.kind)
       .join(local_path.modules.join("/"));
@@ -137,7 +139,7 @@ pub struct FileResource {
 }
 
 impl FileResource {
-  fn generate(&self, root_path: &String, local_path: &ResourceLocation) {
+  fn generate(&self, root_path: &str, local_path: &ResourceLocation) {
     let dir_path = Path::new(&root_path)
       .join(&local_path.namespace)
       .join(&self.kind)
@@ -149,7 +151,7 @@ impl FileResource {
         Ok(path) => {
           let filename = path.file_name().unwrap();
           fs::copy(&path, &dir_path.join(filename)).unwrap()
-        },
+        }
         Err(e) => panic!("{:?}", e),
       };
     }

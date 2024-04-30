@@ -1,8 +1,8 @@
 mod commands;
 pub mod token;
+use self::commands::COMMANDS;
 use std::{fs, path::Path};
 use token::{Token, TokenKind};
-use self::commands::COMMANDS;
 
 pub struct Lexer {
   file: String,
@@ -87,13 +87,8 @@ impl Lexer {
     let mut value = String::new();
 
     if self.current() == '\0' {
-      return Token {
-        kind: TokenKind::EndOfFile,
-        value: "\0".to_string(),
-        file: self.file.clone(),
-        line,
-        column,
-      };
+      kind = TokenKind::EndOfFile;
+      value.push('\0');
     } else if self.current() == '{' && self.next_brace_json {
       kind = TokenKind::JSON;
       if !self.tokenise_json() {
@@ -136,9 +131,10 @@ impl Lexer {
     }
 
     self.is_newline = false;
-    if &value == "" {
+    if value.len() == 0 {
       value = self.src[position..self.position].to_string();
     }
+
     return Token {
       kind,
       value,
@@ -191,7 +187,10 @@ impl Lexer {
       .find(|(text, _)| *text == identifier_value);
     if keyword.is_some() {
       kind = keyword.unwrap().1.clone();
-    } else if self.is_newline && COMMANDS.contains(&identifier_value) && self.next_significant_char() != '(' {
+    } else if self.is_newline
+      && COMMANDS.contains(&identifier_value)
+      && self.next_significant_char() != '('
+    {
       kind = TokenKind::Command;
     }
     kind

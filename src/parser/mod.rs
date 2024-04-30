@@ -1,4 +1,7 @@
-use self::ast::{Expression, File, Function, FunctionCall, Item, Module, Namespace, ResourceContent, ZoglinResource};
+use self::ast::{
+  Expression, File, Function, FunctionCall, Item, Module, Namespace, ResourceContent,
+  ZoglinResource,
+};
 use crate::lexer::token::{Token, TokenKind};
 
 pub mod ast;
@@ -38,7 +41,7 @@ impl Parser {
     }
     self.current_with_comments()
   }
-  
+
   fn current_with_comments(&self) -> Token {
     self.tokens[self.position].clone()
   }
@@ -65,11 +68,13 @@ impl Parser {
     self.expect(TokenKind::NamespaceKeyword);
     let name = self.expect(TokenKind::Identifier).value;
     self.expect(TokenKind::LeftBrace);
+
     let mut items = Vec::new();
     while self.current().kind != TokenKind::RightBrace {
       items.push(self.parse_item());
     }
     self.expect(TokenKind::RightBrace);
+
     Namespace { name, items }
   }
 
@@ -87,11 +92,13 @@ impl Parser {
     self.expect(TokenKind::ModuleKeyword);
     let name = self.expect(TokenKind::Identifier).value;
     self.expect(TokenKind::LeftBrace);
+
     let mut items = Vec::new();
     while self.current().kind != TokenKind::RightBrace {
       items.push(self.parse_item());
     }
     self.expect(TokenKind::RightBrace);
+
     Module { name, items }
   }
 
@@ -99,10 +106,11 @@ impl Parser {
     self.expect(TokenKind::ResourceKeyword);
     let kind = self.parse_resource_path();
     let content: ResourceContent;
+
     if self.current().kind == TokenKind::Identifier {
       let name = self.expect(TokenKind::Identifier).value;
       let json = self.expect(TokenKind::JSON).value;
-  
+
       content = ResourceContent::Text(name, json::from_json5(&json));
     } else {
       let token = self.expect(TokenKind::String);
@@ -125,15 +133,32 @@ impl Parser {
   fn parse_function(&mut self) -> ast::Function {
     self.expect(TokenKind::FunctionKeyword);
     let name = self.expect(TokenKind::Identifier).value;
+
     self.expect(TokenKind::LeftParen);
     self.expect(TokenKind::RightParen);
+
     self.expect(TokenKind::LeftBrace);
     let mut items = Vec::new();
     while self.current_with_comments().kind != TokenKind::RightBrace {
       items.push(self.parse_statement());
     }
     self.expect(TokenKind::RightBrace);
+
     Function { name, items }
+  }
+
+  fn parse_statement(&mut self) -> ast::Statement {
+    match self.current_with_comments().kind {
+      TokenKind::Command => {
+        let command = self.consume_with_comments().value;
+        ast::Statement::Command(command)
+      }
+      TokenKind::Comment => {
+        let comment = self.consume_with_comments().value;
+        ast::Statement::Comment(comment)
+      }
+      _ => ast::Statement::Expression(self.parse_expression()),
+    }
   }
 
   fn parse_expression(&mut self) -> Expression {
@@ -144,11 +169,15 @@ impl Parser {
     let path = self.parse_zoglin_resource();
     self.expect(TokenKind::LeftParen);
     self.expect(TokenKind::RightParen);
-    FunctionCall{path}
+    FunctionCall { path }
   }
 
   fn parse_zoglin_resource(&mut self) -> ZoglinResource {
-    let mut resource = ZoglinResource {namespace: None, modules: Vec::new(), name: String::new()};
+    let mut resource = ZoglinResource {
+      namespace: None,
+      modules: Vec::new(),
+      name: String::new(),
+    };
     let mut allow_colon: bool = true;
     if self.current().kind == TokenKind::Colon {
       self.consume();
@@ -180,19 +209,5 @@ impl Parser {
       }
     }
     resource
-  }
-
-  fn parse_statement(&mut self) -> ast::Statement {
-    match self.current_with_comments().kind {
-      TokenKind::Command => {
-        let command = self.consume_with_comments().value;
-        ast::Statement::Command(command)
-      }
-      TokenKind::Comment => {
-        let comment = self.consume_with_comments().value;
-        ast::Statement::Comment(comment)
-      }
-      _ => ast::Statement::Expression(self.parse_expression())
-    }
   }
 }

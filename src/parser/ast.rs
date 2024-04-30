@@ -49,12 +49,12 @@ pub enum Statement {
 
 #[derive(Debug)]
 pub enum Expression {
-  FunctionCall(FunctionCall)
+  FunctionCall(FunctionCall),
 }
 
 #[derive(Debug)]
 pub struct FunctionCall {
-  pub path: ZoglinResource
+  pub path: ZoglinResource,
 }
 
 #[derive(Debug)]
