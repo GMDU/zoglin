@@ -1,0 +1,4 @@
+namespace other
+fn foo() {
+  say bar
+}

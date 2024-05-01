@@ -1,40 +1,42 @@
-namespace diamond {
-  include "includes/function"
-  
-  fn load() {
-    scoreboard objectives add jump minecraft.custom:minecraft.jump
-  }
+namespace diamond
 
-  fn tick() {
-    execute as @a run function diamond:player
-  }
+include "includes/function"
 
-  fn player() {
-    jump/check()
-  }
-  
-  module jump {
-    fn check() {
-      execute unless score @s jump matches 1.. run return -1
-      give @s minecraft:diamond
-      scoreboard players reset @s jump
-    }
-
-    # Other comment
-    fn tick() {
-      # This is a comment
-      say I wont run!
-    }
-  }
-
-  res tags/blocks cool {
-    values: [
-      'minecraft:dirt',
-      'magenta_glazed_terracotta',
-      'muddy_mangrove_roots',
-      "minecraft:copper_block",
-    ],
-  }
-
-  res structures "*.nbt"
+fn load() {
+  scoreboard objectives add jump minecraft.custom:minecraft.jump
 }
+
+fn tick() {
+  execute as @a run function diamond:player
+}
+
+include "other"
+
+fn player() {
+  jump/check()
+}
+
+module jump {
+  fn check() {
+    execute unless score @s jump matches 1.. run return -1
+    give @s minecraft:diamond
+    scoreboard players reset @s jump
+  }
+
+  # Other comment
+  fn tick() {
+    # This is a comment
+    say I wont run!
+  }
+}
+
+res tags/blocks cool {
+  values: [
+    'minecraft:dirt',
+    'magenta_glazed_terracotta',
+    'muddy_mangrove_roots',
+    "minecraft:copper_block",
+  ],
+}
+
+res structures "*.nbt"

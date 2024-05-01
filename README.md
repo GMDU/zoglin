@@ -22,6 +22,7 @@ made so far.
   - JSON Resources ✅
   - NBT / other resources✅
 - Include ✅
+- Proper error reporting
 - Import
 - Expressions
 - Standard Library

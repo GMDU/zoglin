@@ -27,7 +27,7 @@ const DEFAULT_MCMETA: PackMcmeta = PackMcmeta {
 
 impl FileTree {
   pub fn generate(&self, root_path: &String) {
-    let working_path = Path::new(root_path).join("/data");
+    let working_path = Path::new(root_path).join("data");
     fs::create_dir_all(&working_path).unwrap();
 
     let text = serde_json::to_string_pretty(&DEFAULT_MCMETA).unwrap();

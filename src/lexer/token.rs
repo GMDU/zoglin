@@ -12,6 +12,7 @@ pub struct Token {
 pub enum TokenKind {
   Invalid,
   EndOfFile,
+  EndOfInclude,
   NamespaceKeyword,
   FunctionKeyword,
   ModuleKeyword,

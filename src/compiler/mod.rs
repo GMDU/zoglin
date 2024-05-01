@@ -4,7 +4,9 @@ use serde::Serialize;
 
 use crate::parser::ast::{self, Expression, File, FunctionCall, Statement};
 
-use self::file_tree::{FileResource, FileTree, Function, Item, Module, Namespace, ResourceLocation, TextResource};
+use self::file_tree::{
+  FileResource, FileTree, Function, Item, Module, Namespace, ResourceLocation, TextResource,
+};
 mod file_tree;
 
 pub struct Compiler {
@@ -82,7 +84,10 @@ impl Compiler {
     let mut items = Vec::new();
 
     for item in namespace.items.iter() {
-      let mut resource = ResourceLocation {namespace: namespace.name.clone(), modules: Vec::new()};
+      let mut resource = ResourceLocation {
+        namespace: namespace.name.clone(),
+        modules: Vec::new(),
+      };
       items.push(self.compile_item(item, &mut resource));
     }
 
@@ -116,24 +121,20 @@ impl Compiler {
 
   fn compile_resource(&self, resource: &ast::Resource, _location: &ResourceLocation) -> Item {
     match &resource.content {
-      ast::ResourceContent::Text(name, text) => {        
-        return Item::TextResource (
-          TextResource {
-            kind: resource.kind.clone(),
-            name: name.clone(),
-            text: text.clone(),
-          }
-        )
-      },
+      ast::ResourceContent::Text(name, text) => {
+        return Item::TextResource(TextResource {
+          kind: resource.kind.clone(),
+          name: name.clone(),
+          text: text.clone(),
+        })
+      }
       ast::ResourceContent::File(path, file) => {
         let file_path = Path::new(file).parent().unwrap();
-        return Item::FileResource (
-          FileResource {
-            kind: resource.kind.clone(),
-            path: file_path.join(path).to_str().unwrap().to_string(),
-          }
-        )
-      },
+        return Item::FileResource(FileResource {
+          kind: resource.kind.clone(),
+          path: file_path.join(path).to_str().unwrap().to_string(),
+        });
+      }
     }
   }
 
@@ -169,7 +170,11 @@ impl Compiler {
     self.compile_function_call(function_call, location)
   }
 
-  fn compile_function_call(&self, function_call: &FunctionCall, location: &ResourceLocation) -> String {
+  fn compile_function_call(
+    &self,
+    function_call: &FunctionCall,
+    location: &ResourceLocation,
+  ) -> String {
     let mut path = "function ".to_string();
     if let Some(namespace) = &function_call.path.namespace {
       if namespace.len() == 0 {

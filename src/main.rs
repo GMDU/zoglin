@@ -44,6 +44,8 @@ fn build(file: &String, output: &String) {
   let mut parser = Parser::new(tokens);
   let ast = parser.parse();
 
+  // println!("{:#?}", ast);
+
   let compiler = Compiler::new(ast);
   compiler.compile(output);
 }

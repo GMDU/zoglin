@@ -1,6 +1,6 @@
 use self::ast::{
-  Expression, File, Function, FunctionCall, Item, Module, Namespace, ResourceContent,
-  ZoglinResource,
+  Expression, File, Function, FunctionCall, Item, Module, Namespace, Resource, ResourceContent,
+  Statement, ZoglinResource,
 };
 use crate::lexer::token::{Token, TokenKind};
 
@@ -10,6 +10,7 @@ mod json;
 pub struct Parser {
   tokens: Vec<Token>,
   position: usize,
+  namepace_nesting: usize,
 }
 
 impl Parser {
@@ -17,6 +18,7 @@ impl Parser {
     Parser {
       tokens,
       position: 0,
+      namepace_nesting: 0,
     }
   }
 
@@ -24,7 +26,7 @@ impl Parser {
     let mut items = Vec::new();
 
     while !self.eof() {
-      items.push(self.parse_namespace());
+      items.extend(self.parse_namespace());
     }
 
     File { items }
@@ -35,25 +37,49 @@ impl Parser {
     self.current().kind == TokenKind::EndOfFile
   }
 
-  fn current(&mut self) -> Token {
-    while self.tokens[self.position].kind == TokenKind::Comment {
-      self.position += 1;
+  fn should_skip(&self, offset: usize, ignore: &[TokenKind]) -> bool {
+    if ignore.contains(&self.tokens[self.position + offset].kind) {
+      return false;
     }
-    self.current_with_comments()
+
+    self.tokens[self.position + offset].kind == TokenKind::Comment
+      || self.tokens[self.position + offset].kind == TokenKind::EndOfInclude
   }
 
-  fn current_with_comments(&self) -> Token {
-    self.tokens[self.position].clone()
+  fn is(&self, kinds: &[TokenKind]) -> bool {
+    kinds.contains(&self.current_including(kinds).kind)
+  }
+
+  fn current(&self) -> Token {
+    let mut offset = 0;
+    while self.should_skip(offset, &[]) {
+      offset += 1;
+    }
+    self.tokens[self.position + offset].clone()
+  }
+
+  fn current_including(&self, kinds: &[TokenKind]) -> Token {
+    let mut offset = 0;
+    while self.should_skip(offset, kinds) {
+      offset += 1;
+    }
+    self.tokens[self.position + offset].clone()
   }
 
   fn consume(&mut self) -> Token {
     let current = self.current();
+    while self.should_skip(0, &[]) {
+      self.position += 1;
+    }
     self.position += 1;
     current
   }
 
-  fn consume_with_comments(&mut self) -> Token {
-    let current = self.current_with_comments();
+  fn consume_including(&mut self, kinds: &[TokenKind]) -> Token {
+    let current = self.current_including(kinds);
+    while self.should_skip(0, kinds) {
+      self.position += 1;
+    }
     self.position += 1;
     current
   }
@@ -64,9 +90,39 @@ impl Parser {
     next
   }
 
-  fn parse_namespace(&mut self) -> ast::Namespace {
+  fn parse_namespace(&mut self) -> Vec<Namespace> {
     self.expect(TokenKind::NamespaceKeyword);
     let name = self.expect(TokenKind::Identifier).value;
+
+    if self.current().kind == TokenKind::LeftBrace {
+      return vec![self.parse_block_namespace(name)];
+    }
+    self.namepace_nesting += 1;
+    let mut namespaces = Vec::new();
+
+    let mut items = Vec::new();
+    while !(self.is(&[TokenKind::EndOfFile])
+      || (self.is(&[TokenKind::EndOfInclude]) && self.namepace_nesting > 1))
+    {
+      if self.current().kind == TokenKind::NamespaceKeyword {
+        namespaces.extend(self.parse_namespace());
+      } else {
+        println!("{:?}", self.current());
+        items.push(self.parse_item());
+      }
+    }
+
+    if self.is(&[TokenKind::EndOfInclude]) {
+      self.consume_including(&[TokenKind::EndOfInclude]);
+    }
+
+    namespaces.push(Namespace { items, name });
+
+    self.namepace_nesting -= 1;
+    namespaces
+  }
+
+  fn parse_block_namespace(&mut self, name: String) -> Namespace {
     self.expect(TokenKind::LeftBrace);
 
     let mut items = Vec::new();
@@ -78,7 +134,7 @@ impl Parser {
     Namespace { name, items }
   }
 
-  fn parse_item(&mut self) -> ast::Item {
+  fn parse_item(&mut self) -> Item {
     if self.current().kind == TokenKind::ModuleKeyword {
       return Item::Module(self.parse_module());
     } else if self.current().kind == TokenKind::ResourceKeyword {
@@ -88,7 +144,7 @@ impl Parser {
     }
   }
 
-  fn parse_module(&mut self) -> ast::Module {
+  fn parse_module(&mut self) -> Module {
     self.expect(TokenKind::ModuleKeyword);
     let name = self.expect(TokenKind::Identifier).value;
     self.expect(TokenKind::LeftBrace);
@@ -102,7 +158,7 @@ impl Parser {
     Module { name, items }
   }
 
-  fn parse_resource(&mut self) -> ast::Resource {
+  fn parse_resource(&mut self) -> Resource {
     self.expect(TokenKind::ResourceKeyword);
     let kind = self.parse_resource_path();
     let content: ResourceContent;
@@ -117,7 +173,7 @@ impl Parser {
       content = ResourceContent::File(token.value, token.file);
     }
 
-    ast::Resource { kind, content }
+    Resource { kind, content }
   }
 
   fn parse_resource_path(&mut self) -> String {
@@ -130,7 +186,7 @@ impl Parser {
     text
   }
 
-  fn parse_function(&mut self) -> ast::Function {
+  fn parse_function(&mut self) -> Function {
     self.expect(TokenKind::FunctionKeyword);
     let name = self.expect(TokenKind::Identifier).value;
 
@@ -139,7 +195,7 @@ impl Parser {
 
     self.expect(TokenKind::LeftBrace);
     let mut items = Vec::new();
-    while self.current_with_comments().kind != TokenKind::RightBrace {
+    while self.current().kind != TokenKind::RightBrace {
       items.push(self.parse_statement());
     }
     self.expect(TokenKind::RightBrace);
@@ -147,17 +203,17 @@ impl Parser {
     Function { name, items }
   }
 
-  fn parse_statement(&mut self) -> ast::Statement {
-    match self.current_with_comments().kind {
+  fn parse_statement(&mut self) -> Statement {
+    match self.current_including(&[TokenKind::Comment]).kind {
       TokenKind::Command => {
-        let command = self.consume_with_comments().value;
-        ast::Statement::Command(command)
+        let command = self.consume().value;
+        Statement::Command(command)
       }
       TokenKind::Comment => {
-        let comment = self.consume_with_comments().value;
-        ast::Statement::Comment(comment)
+        let comment = self.consume_including(&[TokenKind::Comment]).value;
+        Statement::Comment(comment)
       }
-      _ => ast::Statement::Expression(self.parse_expression()),
+      _ => Statement::Expression(self.parse_expression()),
     }
   }
 

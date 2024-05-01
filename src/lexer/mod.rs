@@ -54,7 +54,7 @@ impl Lexer {
       let next = self.next_token();
       if next.kind == TokenKind::IncludeKeyword {
         tokens.extend(self.parse_include());
-        tokens.pop();
+        tokens.last_mut().unwrap().kind = TokenKind::EndOfInclude;
       } else {
         tokens.push(next);
         if tokens.last().unwrap().kind == TokenKind::EndOfFile {
