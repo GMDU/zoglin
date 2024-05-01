@@ -107,7 +107,6 @@ impl Parser {
       if self.current().kind == TokenKind::NamespaceKeyword {
         namespaces.extend(self.parse_namespace());
       } else {
-        println!("{:?}", self.current());
         items.push(self.parse_item());
       }
     }

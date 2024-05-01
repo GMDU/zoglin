@@ -1,6 +1,6 @@
 namespace diamond
 
-include "includes/function"
+include "includes/*"
 
 fn load() {
   scoreboard objectives add jump minecraft.custom:minecraft.jump

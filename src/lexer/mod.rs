@@ -1,6 +1,8 @@
 mod commands;
 pub mod token;
 use self::commands::COMMANDS;
+use core::panic;
+use glob::glob;
 use std::{fs, path::Path};
 use token::{Token, TokenKind};
 
@@ -54,7 +56,6 @@ impl Lexer {
       let next = self.next_token();
       if next.kind == TokenKind::IncludeKeyword {
         tokens.extend(self.parse_include());
-        tokens.last_mut().unwrap().kind = TokenKind::EndOfInclude;
       } else {
         tokens.push(next);
         if tokens.last().unwrap().kind == TokenKind::EndOfFile {
@@ -284,13 +285,25 @@ impl Lexer {
   fn parse_include(&mut self) -> Vec<Token> {
     let token = self.next_token();
     assert_eq!(token.kind, TokenKind::String);
+
     let mut path: String = token.value;
     if !path.ends_with(".zog") {
       path.push_str(".zog");
     }
     let relative_path = Path::new(&self.file).parent().unwrap().join(path);
-    let mut lexer = Lexer::new(relative_path.to_str().unwrap());
-    lexer.tokenise()
+    let mut tokens = Vec::new();
+
+    for entry in glob(relative_path.to_str().unwrap()).unwrap() {
+      match entry {
+        Ok(path) => {
+          let mut lexer = Lexer::new(path.to_str().unwrap());
+          tokens.extend(lexer.tokenise());
+          tokens.last_mut().unwrap().kind = TokenKind::EndOfInclude;
+        }
+        Err(e) => panic!("{:?}", e),
+      }
+    }
+    tokens
   }
 }
 

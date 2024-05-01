@@ -526,6 +526,8 @@ including file.
 
 Include takes a single argument as a string, which is a path to
 the target file, relative to the including file.
+This path supports globbing, but the order of the included files is not guaranteed,
+so only use this if the files are order-insensitive
 
 For example, if there was a file defining a module:
 ```
