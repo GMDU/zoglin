@@ -1,4 +1,4 @@
-use std::{cell::RefCell, path::Path};
+use std::{cell::RefCell, collections::HashMap, path::Path};
 
 use serde::Serialize;
 
@@ -17,11 +17,35 @@ pub struct Compiler {
 struct CompilerState {
   tick_functions: Vec<String>,
   load_functions: Vec<String>,
+  function_registry: Vec<HashMap<String, ResourceLocation>>,
 }
 
 #[derive(Serialize)]
 struct FunctionTag<'a> {
   values: &'a [String],
+}
+
+impl CompilerState {
+  fn enter_scope(&mut self) {
+    self.function_registry.push(HashMap::new());
+  }
+
+  fn exit_scope(&mut self) {
+    self.function_registry.pop();
+  }
+
+  fn register_function(&mut self, name: String, location: ResourceLocation) {
+    self.function_registry.last_mut().unwrap().insert(name, location);
+  }
+
+  fn lookup_function(&self, name: &String) -> Option<&ResourceLocation> {
+    for scope in self.function_registry.iter().rev() {
+      if let Some(resource_location) = scope.get(name) {
+        return Some(resource_location);
+      }
+    }
+    None
+  }
 }
 
 impl Compiler {
@@ -31,6 +55,7 @@ impl Compiler {
       state: RefCell::new(CompilerState {
         tick_functions: Vec::new(),
         load_functions: Vec::new(),
+        function_registry: Vec::new(),
       }),
     }
   }
@@ -81,6 +106,7 @@ impl Compiler {
   }
 
   fn compile_namespace(&self, namespace: &ast::Namespace) -> Namespace {
+    self.state.borrow_mut().enter_scope();
     let mut items = Vec::new();
 
     for item in namespace.items.iter() {
@@ -90,6 +116,8 @@ impl Compiler {
       };
       items.push(self.compile_item(item, &mut resource));
     }
+
+    self.state.borrow_mut().exit_scope();
 
     Namespace {
       name: namespace.name.clone(),
@@ -106,6 +134,8 @@ impl Compiler {
   }
 
   fn compile_module(&self, module: &ast::Module, location: &mut ResourceLocation) -> Module {
+    self.state.borrow_mut().enter_scope();
+
     location.modules.push(module.name.clone());
     let mut items = Vec::new();
 
@@ -113,6 +143,7 @@ impl Compiler {
       items.push(self.compile_item(item, location));
     }
 
+    self.state.borrow_mut().exit_scope();
     Module {
       name: module.name.clone(),
       items,
@@ -153,10 +184,14 @@ impl Compiler {
       .map(|statement| self.compile_statement(statement, &location))
       .collect();
     let function_path = location.join(&function.name);
+    let mut state = self.state.borrow_mut();
+
+    state.register_function(function.name.clone(), location.clone());
+
     if &function.name == "tick" && location.modules.len() < 1 {
-      self.state.borrow_mut().tick_functions.push(function_path);
+      state.tick_functions.push(function_path);
     } else if &function.name == "load" && location.modules.len() < 1 {
-      self.state.borrow_mut().load_functions.push(function_path);
+      state.load_functions.push(function_path);
     }
 
     Function {
@@ -176,6 +211,13 @@ impl Compiler {
     location: &ResourceLocation,
   ) -> String {
     let mut path = "function ".to_string();
+    
+    if function_call.path.namespace.is_none() && function_call.path.modules.is_empty() {
+      if let Some(location) = self.state.borrow().lookup_function(&function_call.path.name) {
+        path.push_str(&location.join(&function_call.path.name));
+        return path;
+      }
+    }
     if let Some(namespace) = &function_call.path.namespace {
       if namespace.len() == 0 {
         path.push_str(&location.namespace);

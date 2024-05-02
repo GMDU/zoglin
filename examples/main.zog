@@ -18,6 +18,7 @@ fn player() {
 
 module jump {
   fn check() {
+    player()
     execute unless score @s jump matches 1.. run return -1
     give @s minecraft:diamond
     scoreboard players reset @s jump
@@ -27,6 +28,15 @@ module jump {
   fn tick() {
     # This is a comment
     say I wont run!
+  }
+
+  module foo {
+    fn check() {
+    }
+
+    fn bar() {
+      check()
+    }
   }
 }
 
