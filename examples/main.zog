@@ -1,7 +1,5 @@
 namespace diamond
 
-include "includes/*"
-
 fn load() {
   scoreboard objectives add jump minecraft.custom:minecraft.jump
 }
@@ -10,7 +8,7 @@ fn tick() {
   execute as @a run function diamond:player
 }
 
-include "other"
+include "includes/other"
 
 fn player() {
   jump/check()

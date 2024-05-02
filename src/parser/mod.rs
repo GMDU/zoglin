@@ -13,7 +13,6 @@ mod json;
 pub struct Parser {
   tokens: Vec<Token>,
   position: usize,
-  namepace_nesting: usize,
 }
 
 impl Parser {
@@ -21,7 +20,6 @@ impl Parser {
     Parser {
       tokens,
       position: 0,
-      namepace_nesting: 0,
     }
   }
 
@@ -99,19 +97,16 @@ impl Parser {
   }
 
   fn parse_namespace(&mut self) -> Vec<Namespace> {
-    self.expect(TokenKind::NamespaceKeyword);
+    let file = self.expect(TokenKind::NamespaceKeyword).location.file;
     let name = self.expect(TokenKind::Identifier).value;
 
     if self.current().kind == TokenKind::LeftBrace {
       return vec![self.parse_block_namespace(name)];
     }
-    self.namepace_nesting += 1;
     let mut namespaces = Vec::new();
 
     let mut items = Vec::new();
-    while !(self.is(&[TokenKind::EndOfFile])
-      || (self.is(&[TokenKind::EndOfInclude]) && self.namepace_nesting > 1))
-    {
+    while !self.is_namespace_end(&file) {
       if self.current().kind == TokenKind::NamespaceKeyword {
         namespaces.extend(self.parse_namespace());
       } else {
@@ -125,8 +120,22 @@ impl Parser {
 
     namespaces.push(Namespace { items, name });
 
-    self.namepace_nesting -= 1;
     namespaces
+  }
+
+  fn is_namespace_end(&mut self, file: &String) -> bool {
+    let next = self.current_including(&[TokenKind::EndOfInclude, TokenKind::EndOfFile]);
+    if next.kind == TokenKind::EndOfFile {
+      return true;
+    }
+    if next.kind == TokenKind::EndOfInclude  {
+      if next.location.file == *file {
+        return true;
+      }
+      self.consume_including(&[TokenKind::EndOfInclude]);
+      return self.is_namespace_end(file);
+    }
+    false
   }
 
   fn parse_block_namespace(&mut self, name: String) -> Namespace {
@@ -146,7 +155,10 @@ impl Parser {
       TokenKind::ModuleKeyword => Item::Module(self.parse_module()),
       TokenKind::ResourceKeyword => Item::Resource(self.parse_resource()),
       TokenKind::FunctionKeyword => Item::Function(self.parse_function()),
-      _ => raise_error(&self.current().location, &format!("Unexpected token kind: {:?}", self.current().kind)),
+      _ => raise_error(
+        &self.current().location,
+        &format!("Unexpected token kind: {:?}", self.current().kind),
+      ),
     }
   }
 
