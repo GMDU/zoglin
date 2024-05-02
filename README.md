@@ -499,23 +499,158 @@ Example:
 
 Same name path rules apply as with storage variables.
 
-## Imports
+## Imports and Exports
+### Imports
 Functions and modules from other namespaces can be imported with the `import` keyword.
-
-Imports are scoped to the namespace / module they were imported to.
+When a function/module is imported, it can be referenced by its name without the rest of the path, for the remainder of the current scope.
 
 Example:
 ```
 namespace example {
-  module code {
-    # Aliases std:string/reverse() and std:string/concat()
-    # to reverse() and concat()
-    import std:string/{reverse, concat}
+  module foo {
+    import lib:api/foo
     
-    reverse("Hello")
+    fn do_thing() {
+      foo() # Calls lib:api/foo
+    }
   }
   
-  :code/concat("Hello", "World")
+  fn other() {
+    # The import is not in scope any more, so you must use the full path
+    lib:api/foo()
+  }
+  
+  # This allows lib:api to be referenced as api
+  import lib:api
+  
+  fn bar() {
+    api/bar()
+  }
+}
+
+namespace lib {
+  module api {
+    export fn foo() {
+      ...
+    }
+    
+    fn bar() {
+      ...
+    }
+  }
+  
+  fn other() {
+    ...
+  }
+}
+```
+
+You can use the `as` keyword to import a module/function and reference it by a different name.
+
+Example:
+```
+import lib:api # aliased to api
+import lib:api as lib_api # aliased to lib_api
+import lib as library
+
+lib_api/foo()
+library:api/bar()
+```
+
+You can use curly braces (`{`, `}`) to import mutiple modules/functions at once.
+
+Example:
+```
+import lib:api/{foo, bar}
+foo()
+bar()
+
+import lib:{api, other}
+api/foo()
+other()
+```
+
+When a module or namespace is imported, the compiler also automatically imports anything exported by that module/namespace (see [exports](#Exports))
+If you don't want to inlcude the exports of a module, you can suffix it with a `/`.
+
+Example:
+```
+import lib:api # Includes exports
+import lib:api/ # Excludes exports
+
+# api can still be used normally
+api/foo()
+# api cannot be used as a function, as it is explicitly a module
+api() # ERROR
+```
+
+If the situation is the other way around, and you don't want the module name, but only the exports, you can use `/@`.
+
+Example:
+```
+import lib:api/@
+
+foo()
+api/foo() # ERROR: only imported the exports
+```
+
+If you want to import everything from a module, including non-exported functions and modules (but excluding private ones), you can use `/*`.
+
+Example:
+```
+import lib:*
+
+api/foo()
+other()
+```
+
+### Exports
+
+Exports can be used to automatically include modules/functions when importing a module or namespace.
+
+You can export something using the `export` keyword, followed by either a module/function definition, or the resource location of a function or module.
+Everything exported from a module must not be private, and must be from within that module, or a child of it.
+
+Example:
+```
+namespace main {
+  import lib
+  baz() # lib exports baz, so this refers to lib:api/sub/baz
+  
+  import lib:api
+  sub/baz() # lib:api exports sub
+  foo()
+  bar()
+}
+
+namespace lib {
+  export api/sub/baz
+  
+  private fn internal() {
+    ...
+  }
+  
+  export internal # ERROR: internal is private
+
+  module api {
+    export fn foo() {
+      ...
+    }
+
+    export bar
+
+    fn bar() {
+      ...
+    }
+
+    export module sub {
+      export :api/foo # ERROR: cannot export from a parent module
+      
+      fn baz() {
+        ...
+      }
+    }
+  }
 }
 ```
 
@@ -534,11 +669,11 @@ For example, if there was a file defining a module:
 # src/api.zog
 module api {
   fn start() {
-  ...
+    ...
   }
   
   fn step() {
-  ...
+    ...
   }
 }
 ```
@@ -551,7 +686,7 @@ namespace example {
   include "./api"
   
   module test {
-  ...
+    ...
   }
 }
 ```
