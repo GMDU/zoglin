@@ -7,7 +7,12 @@ pub struct Location {
   pub file: String,
 }
 
-pub fn raise_error(location: &Location, message: &str) {
-  eprintln!("{}:{}:{}:\x1b[31m {}", location.file, location.line, location.column, message);
+const RED: &str = "\x1b[31m";
+
+pub fn raise_error(location: &Location, message: &str) -> ! {
+  eprintln!(
+    "{}:{}:{}: {}{}",
+    location.file, location.line, location.column, RED, message
+  );
   exit(1);
 }

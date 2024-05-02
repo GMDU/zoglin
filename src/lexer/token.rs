@@ -11,7 +11,6 @@ pub struct Token {
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum TokenKind {
-  Invalid,
   EndOfFile,
   EndOfInclude,
   NamespaceKeyword,

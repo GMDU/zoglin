@@ -3,7 +3,6 @@ pub mod token;
 use crate::error::{raise_error, Location};
 
 use self::commands::COMMANDS;
-use core::panic;
 use glob::glob;
 use std::{fs, path::Path};
 use token::{Token, TokenKind};
@@ -83,7 +82,7 @@ impl Lexer {
   fn next_token(&mut self) -> Token {
     self.skip_whitespace();
 
-    let mut kind = TokenKind::Invalid;
+    let kind;
     let mut position = self.position;
     let line = self.line;
     let column = self.column;
@@ -120,7 +119,14 @@ impl Lexer {
     } else if valid_identifier_start(self.current()) {
       kind = self.tokenise_identifier(position);
     } else {
-      self.consume();
+      raise_error(
+        &Location {
+          file: self.file.clone(),
+          line,
+          column,
+        },
+        &format!("Unexpected character: {}", self.current()),
+      );
     }
 
     if kind == TokenKind::Command {
@@ -145,7 +151,7 @@ impl Lexer {
         file: self.file.clone(),
         line,
         column,
-      }
+      },
     };
   }
 
@@ -288,7 +294,9 @@ impl Lexer {
 
   fn parse_include(&mut self) -> Vec<Token> {
     let token = self.next_token();
-    if token.kind != TokenKind::String { raise_error(&token.location, "Expected file name.") }
+    if token.kind != TokenKind::String {
+      raise_error(&token.location, "Expected file name.")
+    }
 
     let mut path: String = token.value;
     if !path.ends_with(".zog") {

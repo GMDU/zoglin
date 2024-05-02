@@ -2,7 +2,10 @@ use self::ast::{
   Expression, File, Function, FunctionCall, Item, Module, Namespace, Resource, ResourceContent,
   Statement, ZoglinResource,
 };
-use crate::{error::raise_error, lexer::token::{Token, TokenKind}};
+use crate::{
+  error::raise_error,
+  lexer::token::{Token, TokenKind},
+};
 
 pub mod ast;
 mod json;
@@ -86,7 +89,12 @@ impl Parser {
 
   fn expect(&mut self, kind: TokenKind) -> Token {
     let next = self.consume();
-    if next.kind != kind { raise_error(&next.location, &format!("Expected {:?}, got {:?}", kind, next.kind)) }
+    if next.kind != kind {
+      raise_error(
+        &next.location,
+        &format!("Expected {:?}, got {:?}", kind, next.kind),
+      )
+    }
     next
   }
 
@@ -134,12 +142,11 @@ impl Parser {
   }
 
   fn parse_item(&mut self) -> Item {
-    if self.current().kind == TokenKind::ModuleKeyword {
-      return Item::Module(self.parse_module());
-    } else if self.current().kind == TokenKind::ResourceKeyword {
-      return Item::Resource(self.parse_resource());
-    } else {
-      return Item::Function(self.parse_function());
+    match self.current().kind {
+      TokenKind::ModuleKeyword => Item::Module(self.parse_module()),
+      TokenKind::ResourceKeyword => Item::Resource(self.parse_resource()),
+      TokenKind::FunctionKeyword => Item::Function(self.parse_function()),
+      _ => raise_error(&self.current().location, &format!("Unexpected token kind: {:?}", self.current().kind)),
     }
   }
 
