@@ -2,7 +2,7 @@ use self::ast::{
   Expression, File, Function, FunctionCall, Item, Module, Namespace, Resource, ResourceContent,
   Statement, ZoglinResource,
 };
-use crate::lexer::token::{Token, TokenKind};
+use crate::{error::raise_error, lexer::token::{Token, TokenKind}};
 
 pub mod ast;
 mod json;
@@ -86,7 +86,7 @@ impl Parser {
 
   fn expect(&mut self, kind: TokenKind) -> Token {
     let next = self.consume();
-    assert_eq!(next.kind, kind);
+    if next.kind != kind { raise_error(&next.location, &format!("Expected {:?}, got {:?}", kind, next.kind)) }
     next
   }
 
@@ -169,7 +169,7 @@ impl Parser {
       content = ResourceContent::Text(name, json::from_json5(&json));
     } else {
       let token = self.expect(TokenKind::String);
-      content = ResourceContent::File(token.value, token.file);
+      content = ResourceContent::File(token.value, token.location.file);
     }
 
     Resource { kind, content }

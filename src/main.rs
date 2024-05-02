@@ -2,6 +2,7 @@ use clap::{self, Arg, Command};
 mod compiler;
 mod lexer;
 mod parser;
+mod error;
 
 use std::{
   fs::{self},

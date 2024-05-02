@@ -1,5 +1,7 @@
 mod commands;
 pub mod token;
+use crate::error::{raise_error, Location};
+
 use self::commands::COMMANDS;
 use core::panic;
 use glob::glob;
@@ -139,9 +141,11 @@ impl Lexer {
     return Token {
       kind,
       value,
-      file: self.file.clone(),
-      line,
-      column,
+      location: Location {
+        file: self.file.clone(),
+        line,
+        column,
+      }
     };
   }
 
@@ -284,7 +288,7 @@ impl Lexer {
 
   fn parse_include(&mut self) -> Vec<Token> {
     let token = self.next_token();
-    assert_eq!(token.kind, TokenKind::String);
+    if token.kind != TokenKind::String { raise_error(&token.location, "Expected file name.") }
 
     let mut path: String = token.value;
     if !path.ends_with(".zog") {
@@ -300,7 +304,7 @@ impl Lexer {
           tokens.extend(lexer.tokenise());
           tokens.last_mut().unwrap().kind = TokenKind::EndOfInclude;
         }
-        Err(e) => panic!("{:?}", e),
+        Err(e) => raise_error(&token.location, &e.to_string()),
       }
     }
     tokens

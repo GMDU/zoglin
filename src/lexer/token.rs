@@ -1,11 +1,12 @@
+use error::Location;
+use crate::error;
+
 #[derive(Debug, Clone)]
 
 pub struct Token {
   pub kind: TokenKind,
   pub value: String,
-  pub file: String,
-  pub line: usize,
-  pub column: usize,
+  pub location: Location,
 }
 
 #[derive(PartialEq, Debug, Clone)]
