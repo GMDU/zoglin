@@ -17,7 +17,21 @@ pub struct Compiler {
 struct CompilerState {
   tick_functions: Vec<String>,
   load_functions: Vec<String>,
-  function_registry: Vec<HashMap<String, ResourceLocation>>,
+  scopes: Vec<Scope>,
+}
+
+struct Scope {
+  function_registry: HashMap<String, ResourceLocation>,
+  imported_items: HashMap<String, ResourceLocation>,
+}
+
+impl Scope {
+  fn new() -> Scope {
+    Scope {
+      function_registry: HashMap::new(),
+      imported_items: HashMap::new(),
+    }
+  }
 }
 
 #[derive(Serialize)]
@@ -27,20 +41,43 @@ struct FunctionTag<'a> {
 
 impl CompilerState {
   fn enter_scope(&mut self) {
-    self.function_registry.push(HashMap::new());
+    self.scopes.push(Scope::new());
   }
 
   fn exit_scope(&mut self) {
-    self.function_registry.pop();
+    self.scopes.pop();
   }
 
   fn register_function(&mut self, name: String, location: ResourceLocation) {
-    self.function_registry.last_mut().unwrap().insert(name, location);
+    self
+      .scopes
+      .last_mut()
+      .unwrap()
+      .function_registry
+      .insert(name, location);
   }
 
   fn lookup_function(&self, name: &String) -> Option<&ResourceLocation> {
-    for scope in self.function_registry.iter().rev() {
-      if let Some(resource_location) = scope.get(name) {
+    for scope in self.scopes.iter().rev() {
+      if let Some(resource_location) = scope.function_registry.get(name) {
+        return Some(resource_location);
+      }
+    }
+    None
+  }
+
+  fn register_import(&mut self, name: String, location: ResourceLocation) {
+    self
+      .scopes
+      .last_mut()
+      .unwrap()
+      .imported_items
+      .insert(name, location);
+  }
+
+  fn lookup_import(&self, name: &String) -> Option<&ResourceLocation> {
+    for scope in self.scopes.iter().rev() {
+      if let Some(resource_location) = scope.imported_items.get(name) {
         return Some(resource_location);
       }
     }
@@ -55,7 +92,7 @@ impl Compiler {
       state: RefCell::new(CompilerState {
         tick_functions: Vec::new(),
         load_functions: Vec::new(),
-        function_registry: Vec::new(),
+        scopes: Vec::new(),
       }),
     }
   }
@@ -128,6 +165,10 @@ impl Compiler {
   fn compile_item(&self, item: &ast::Item, location: &mut ResourceLocation) -> Item {
     match item {
       ast::Item::Module(module) => Item::Module(self.compile_module(module, location)),
+      ast::Item::Import(import) => {
+        self.compile_import(import, location);
+        Item::Ignored
+      }
       ast::Item::Function(function) => Item::Function(self.compile_function(function, location)),
       ast::Item::Resource(resource) => self.compile_resource(resource, location),
     }
@@ -148,6 +189,12 @@ impl Compiler {
       name: module.name.clone(),
       items,
     }
+  }
+
+  fn compile_import(&self, import: &ast::Import, location: &ResourceLocation) {
+    let name = import.path.name.clone();
+    let path = ResourceLocation::from_zoglin_resource(location, &import.path);
+    self.state.borrow_mut().register_import(name, path);
   }
 
   fn compile_resource(&self, resource: &ast::Resource, _location: &ResourceLocation) -> Item {
@@ -211,9 +258,13 @@ impl Compiler {
     location: &ResourceLocation,
   ) -> String {
     let mut path = "function ".to_string();
-    
+
     if function_call.path.namespace.is_none() && function_call.path.modules.is_empty() {
-      if let Some(location) = self.state.borrow().lookup_function(&function_call.path.name) {
+      if let Some(location) = self
+        .state
+        .borrow()
+        .lookup_function(&function_call.path.name)
+      {
         path.push_str(&location.join(&function_call.path.name));
         return path;
       }
@@ -226,9 +277,22 @@ impl Compiler {
       }
       path.push(':');
     } else {
-      path.push_str(&location.to_string());
-      if location.modules.len() > 0 {
-        path.push('/');
+      let first = if function_call.path.modules.len() > 0 {
+        &function_call.path.modules[0]
+      } else {
+        &function_call.path.name
+      };
+
+      if let Some(import) = self.state.borrow().lookup_import(first) {
+        path.push_str(&import.to_string());
+        if import.modules.len() > 0 {
+          path.push('/');
+        }
+      } else {
+        path.push_str(&location.to_string());
+        if location.modules.len() > 0 {
+          path.push('/');
+        }
       }
     }
     path.push_str(&function_call.path.modules.join("/"));

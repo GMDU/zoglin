@@ -1,6 +1,9 @@
 namespace other
-fn foo() {
-  say bar
+module api {
+  fn foo() {
+    say bar
+  }
+  
+  include "function"
 }
 
-include "function"

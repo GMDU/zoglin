@@ -1,6 +1,5 @@
 use self::ast::{
-  Expression, File, Function, FunctionCall, Item, Module, Namespace, Resource, ResourceContent,
-  Statement, ZoglinResource,
+  Expression, File, Function, FunctionCall, Import, Item, Module, Namespace, Resource, ResourceContent, Statement, ZoglinResource
 };
 use crate::{
   error::raise_error,
@@ -153,6 +152,7 @@ impl Parser {
   fn parse_item(&mut self) -> Item {
     match self.current().kind {
       TokenKind::ModuleKeyword => Item::Module(self.parse_module()),
+      TokenKind::ImportKeyword => Item::Import(self.parse_import()),
       TokenKind::ResourceKeyword => Item::Resource(self.parse_resource()),
       TokenKind::FunctionKeyword => Item::Function(self.parse_function()),
       _ => raise_error(
@@ -174,6 +174,12 @@ impl Parser {
     self.expect(TokenKind::RightBrace);
 
     Module { name, items }
+  }
+
+  fn parse_import(&mut self) -> Import {
+    self.expect(TokenKind::ImportKeyword);
+    let path = self.parse_zoglin_resource();
+    Import { path }
   }
 
   fn parse_resource(&mut self) -> Resource {

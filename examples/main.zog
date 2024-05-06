@@ -1,14 +1,16 @@
 namespace diamond
+include "includes/other"
+
+import other:api
 
 fn load() {
   scoreboard objectives add jump minecraft.custom:minecraft.jump
+  api/included_fn()
 }
 
 fn tick() {
   execute as @a run function diamond:player
 }
-
-include "includes/other"
 
 fn player() {
   jump/check()

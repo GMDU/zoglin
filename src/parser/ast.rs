@@ -12,6 +12,7 @@ pub struct Namespace {
 #[derive(Debug)]
 pub enum Item {
   Module(Module),
+  Import(Import),
   Function(Function),
   Resource(Resource),
 }
@@ -20,6 +21,11 @@ pub enum Item {
 pub struct Module {
   pub name: String,
   pub items: Vec<Item>,
+}
+
+#[derive(Debug)]
+pub struct Import {
+  pub path: ZoglinResource,
 }
 
 #[derive(Debug)]

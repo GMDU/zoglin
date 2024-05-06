@@ -2,6 +2,8 @@ use glob::glob;
 use serde::Serialize;
 use std::{fs, path::Path};
 
+use crate::parser::ast;
+
 #[derive(Debug)]
 pub struct FileTree {
   pub namespaces: Vec<Namespace>,
@@ -61,6 +63,7 @@ impl Namespace {
 
 #[derive(Debug)]
 pub enum Item {
+  Ignored,
   Module(Module),
   Function(Function),
   TextResource(TextResource),
@@ -70,6 +73,7 @@ pub enum Item {
 impl Item {
   fn generate(&self, root_path: &str, local_path: &mut ResourceLocation) {
     match self {
+      Item::Ignored => {}
       Item::Module(module) => module.generate(root_path, local_path),
       Item::Function(function) => function.generate(root_path, local_path),
       Item::TextResource(resource) => resource.generate(root_path, local_path),
@@ -165,6 +169,20 @@ pub struct ResourceLocation {
 }
 
 impl ResourceLocation {
+  pub fn from_zoglin_resource(
+    base_location: &ResourceLocation,
+    resource: &ast::ZoglinResource,
+  ) -> ResourceLocation {
+    let namespace = if let Some(namespace) = resource.namespace.clone() {
+      namespace
+    } else {
+      base_location.namespace.clone()
+    };
+
+    let modules = resource.modules.clone();
+    ResourceLocation { namespace, modules }
+  }
+
   pub fn to_string(&self) -> String {
     self.namespace.clone() + ":" + &self.modules.join("/")
   }

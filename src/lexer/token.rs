@@ -18,6 +18,7 @@ pub enum TokenKind {
   ModuleKeyword,
   ResourceKeyword,
   IncludeKeyword,
+  ImportKeyword,
   Command,
   Comment,
   Identifier,
