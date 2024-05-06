@@ -36,6 +36,7 @@ static KEYWORD_REGISTRY: &[(&str, TokenKind)] = &[
   ("res", TokenKind::ResourceKeyword),
   ("include", TokenKind::IncludeKeyword),
   ("import", TokenKind::ImportKeyword),
+  ("as", TokenKind::AsKeyword),
 ];
 
 impl Lexer {

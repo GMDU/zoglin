@@ -19,6 +19,7 @@ pub enum TokenKind {
   ResourceKeyword,
   IncludeKeyword,
   ImportKeyword,
+  AsKeyword,
   Command,
   Comment,
   Identifier,

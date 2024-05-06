@@ -2,7 +2,7 @@ use std::{cell::RefCell, collections::HashMap, path::Path};
 
 use serde::Serialize;
 
-use crate::parser::ast::{self, Expression, File, FunctionCall, Statement};
+use crate::parser::ast::{self, Expression, File, FunctionCall, Statement, ZoglinResource};
 
 use self::file_tree::{
   FileResource, FileTree, Function, Item, Module, Namespace, ResourceLocation, TextResource,
@@ -57,9 +57,21 @@ impl CompilerState {
       .insert(name, location);
   }
 
-  fn lookup_function(&self, name: &String) -> Option<&ResourceLocation> {
+  fn lookup_resource(&self, resource: &ZoglinResource) -> Option<&ResourceLocation> {
+    if resource.namespace.is_some() {
+      return None;
+    }
+
+    let first = resource.modules.first().unwrap_or(&resource.name);
+    let valid_function = resource.modules.is_empty();
+
     for scope in self.scopes.iter().rev() {
-      if let Some(resource_location) = scope.function_registry.get(name) {
+      if valid_function {
+        if let Some(resource_location) = scope.function_registry.get(first) {
+          return Some(resource_location);
+        }
+      }
+      if let Some(resource_location) = scope.imported_items.get(first) {
         return Some(resource_location);
       }
     }
@@ -73,15 +85,6 @@ impl CompilerState {
       .unwrap()
       .imported_items
       .insert(name, location);
-  }
-
-  fn lookup_import(&self, name: &String) -> Option<&ResourceLocation> {
-    for scope in self.scopes.iter().rev() {
-      if let Some(resource_location) = scope.imported_items.get(name) {
-        return Some(resource_location);
-      }
-    }
-    None
   }
 }
 
@@ -192,7 +195,10 @@ impl Compiler {
   }
 
   fn compile_import(&self, import: &ast::Import, location: &ResourceLocation) {
-    let name = import.path.name.clone();
+    let name = import
+      .alias
+      .clone()
+      .unwrap_or_else(|| import.path.name.clone());
     let path = ResourceLocation::from_zoglin_resource(location, &import.path);
     self.state.borrow_mut().register_import(name, path);
   }
@@ -233,7 +239,9 @@ impl Compiler {
     let function_path = location.join(&function.name);
     let mut state = self.state.borrow_mut();
 
-    state.register_function(function.name.clone(), location.clone());
+    let mut function_location = location.clone();
+    function_location.modules.push(function.name.clone());
+    state.register_function(function.name.clone(), function_location);
 
     if &function.name == "tick" && location.modules.len() < 1 {
       state.tick_functions.push(function_path);
@@ -257,49 +265,47 @@ impl Compiler {
     function_call: &FunctionCall,
     location: &ResourceLocation,
   ) -> String {
-    let mut path = "function ".to_string();
+    let mut command = "function ".to_string();
 
-    if function_call.path.namespace.is_none() && function_call.path.modules.is_empty() {
-      if let Some(location) = self
-        .state
-        .borrow()
-        .lookup_function(&function_call.path.name)
-      {
-        path.push_str(&location.join(&function_call.path.name));
-        return path;
-      }
-    }
-    if let Some(namespace) = &function_call.path.namespace {
+    let path = self.resolve_zoglin_resource(&function_call.path, location);
+    command.push_str(&path.to_string());
+
+    command
+  }
+
+  fn resolve_zoglin_resource(
+    &self,
+    resource: &ast::ZoglinResource,
+    location: &ResourceLocation,
+  ) -> ResourceLocation {
+    let mut result = ResourceLocation {
+      namespace: String::new(),
+      modules: Vec::new(),
+    };
+
+    if let Some(namespace) = &resource.namespace {
       if namespace.len() == 0 {
-        path.push_str(&location.namespace);
+        result.namespace = location.namespace.clone();
       } else {
-        path.push_str(&namespace);
+        result.namespace = namespace.clone();
       }
-      path.push(':');
     } else {
-      let first = if function_call.path.modules.len() > 0 {
-        &function_call.path.modules[0]
-      } else {
-        &function_call.path.name
-      };
-
-      if let Some(import) = self.state.borrow().lookup_import(first) {
-        path.push_str(&import.to_string());
-        if import.modules.len() > 0 {
-          path.push('/');
+      if let Some(resolved) = self.state.borrow().lookup_resource(resource) {
+        result = resolved.clone();
+        if resource.modules.len() > 1 {
+          result.modules.extend_from_slice(&resource.modules[1..]);
         }
-      } else {
-        path.push_str(&location.to_string());
-        if location.modules.len() > 0 {
-          path.push('/');
+        if !resource.modules.is_empty() {
+          result.modules.push(resource.name.clone());
         }
+        return result;
+      } else {
+        result = location.clone();
       }
     }
-    path.push_str(&function_call.path.modules.join("/"));
-    if function_call.path.modules.len() > 0 {
-      path.push('/');
-    }
-    path.push_str(&function_call.path.name);
-    path
+    result.modules.extend(resource.modules.clone());
+    result.modules.push(resource.name.clone());
+
+    result
   }
 }

@@ -26,6 +26,7 @@ pub struct Module {
 #[derive(Debug)]
 pub struct Import {
   pub path: ZoglinResource,
+  pub alias: Option<String>,
 }
 
 #[derive(Debug)]

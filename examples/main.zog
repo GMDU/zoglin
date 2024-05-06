@@ -1,11 +1,9 @@
 namespace diamond
 include "includes/other"
 
-import other:api
 
 fn load() {
   scoreboard objectives add jump minecraft.custom:minecraft.jump
-  api/included_fn()
 }
 
 fn tick() {
@@ -17,8 +15,10 @@ fn player() {
 }
 
 module jump {
+  import other:api/foo as bar
   fn check() {
     player()
+    bar()
     execute unless score @s jump matches 1.. run return -1
     give @s minecraft:diamond
     scoreboard players reset @s jump
@@ -38,6 +38,10 @@ module jump {
       check()
     }
   }
+}
+
+fn no_import() {
+  api/included_fn()
 }
 
 res tags/blocks cool {

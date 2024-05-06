@@ -179,7 +179,12 @@ impl Parser {
   fn parse_import(&mut self) -> Import {
     self.expect(TokenKind::ImportKeyword);
     let path = self.parse_zoglin_resource();
-    Import { path }
+    let mut alias = None;
+    if self.current().kind == TokenKind::AsKeyword {
+      self.consume();
+      alias = Some(self.expect(TokenKind::Identifier).value);
+    }
+    Import { path, alias }
   }
 
   fn parse_resource(&mut self) -> Resource {

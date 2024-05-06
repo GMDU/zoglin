@@ -20,10 +20,15 @@ made so far.
   - Inline expressions
 - Resources (2/2)
   - JSON Resources ✅
-  - NBT / other resources✅
+  - NBT / other resources ✅
 - Include ✅
-- Proper error reporting
-- Import
+- Proper error reporting ✅
+- Import (2/4)
+  - Basic imports ✅
+  - Import aliasing ✅
+  - Importing multiple things
+  - Selective imports
+- Exports
 - Expressions
 - Standard Library
 - Conditionals

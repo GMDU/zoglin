@@ -162,7 +162,7 @@ impl FileResource {
   }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct ResourceLocation {
   pub namespace: String,
   pub modules: Vec<String>,
@@ -179,7 +179,8 @@ impl ResourceLocation {
       base_location.namespace.clone()
     };
 
-    let modules = resource.modules.clone();
+    let mut modules = resource.modules.clone();
+    modules.push(resource.name.clone());
     ResourceLocation { namespace, modules }
   }
 
