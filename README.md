@@ -504,6 +504,108 @@ Example:
 
 Same name path rules apply as with storage variables.
 
+## Expressions
+An expression can be one of:
+- Function call
+- Variable reference
+- Literal (number, array, string, etc.)
+- Unary expression
+- Binary expression
+
+### Operators
+#### Assignment
+- `=`
+- `+=`
+- `-=`
+- `*=`
+- `/=`
+- `%=`
+
+#### Comparison
+- `==`
+- `!=`
+- `<`
+- `<=`
+- `>`
+- `>=`
+
+#### Arithmetic
+- `+`
+- `-` (binary or unary)
+- `*`
+- `/`
+- `%`
+- `**`
+
+#### Logical
+- `||`
+- `&&`
+- `!` (unary)
+
+## Control-flow
+### If-else
+An if-else statement executes code based on a condition. The condition can be any expression.
+
+The code in the block of an if statement gets run if the condition is truthy. Otherwise it goes on to the next statement in the chain.
+
+Example:
+```
+if foo() + 1 {
+  print("Foo")
+} else if -bar() / 2 == 17 {
+  print("Bar")
+} else {
+  print("Baz")
+}
+```
+
+### While
+A while loop repeatedly executes a block of code while a given condition is truthy.
+
+Example:
+```
+$i = 0
+while $i < 10 {
+  print(i)
+  i += 1
+}
+```
+
+### For
+For iterates over a sequence of values, and runs code for each one. If given an array, the variable is set to the next item in the array; if given a number it runs the code that number of times, and the variable increments each iteration (starting at 0).
+
+A special range type can be used in for loops, to begin at a specific value other than 0.
+
+```
+for i in 1..10 {
+  print(i) # prints 1 - 9 inclusive
+}
+```
+
+### Break and continue
+Sometimes you want to exit a loop before it would normally be done. This can be done using the `break` keyword.
+
+Or, if you want to simply go to the next iteration of the loop, you can use `continue`.
+
+Example:
+```
+$i = 0
+while true {
+  if $i == 10 {
+    break
+  }
+  print($i) # Prints 0 - 9 inclusive
+  $i += 1
+}
+
+for i in 10 {
+  if i % 2 == 0 {
+    continue
+  }
+  print(i) # prints 1, 3, 5, 7, 9
+}
+```
+
 ## Imports and Exports
 ### Imports
 Functions and modules from other namespaces can be imported with the `import` keyword.
