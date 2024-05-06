@@ -18,6 +18,7 @@ fn main() {
     .subcommand(Command::new("build").args([
       Arg::new("file").short('f').default_value("main.zog"),
       Arg::new("output").short('o').default_value("build"),
+      Arg::new("debug_mode").long("debug").default_value("none"),
     ]))
     .subcommand(Command::new("init").arg(Arg::new("name")))
     .get_matches();
@@ -25,7 +26,8 @@ fn main() {
   if let Some(matches) = matches.subcommand_matches("build") {
     let file: &String = matches.get_one("file").unwrap();
     let output: &String = matches.get_one("output").unwrap();
-    build(file, output);
+    let debug_mode: &String = matches.get_one("debug_mode").unwrap();
+    build(file, output, debug_mode);
   } else if let Some(matches) = matches.subcommand_matches("init") {
     let name = matches.get_one("name");
     if let Some(name) = name {
@@ -36,16 +38,22 @@ fn main() {
   }
 }
 
-fn build(file: &String, output: &String) {
+fn build(file: &String, output: &String, debug_mode: &String) {
   let mut lexer = Lexer::new(file);
   let tokens = lexer.tokenise();
 
-  // println!("{:#?}", tokens)
+  if debug_mode == "tokens" {
+    println!("{:#?}", tokens);
+    return;
+  }
 
   let mut parser = Parser::new(tokens);
   let ast = parser.parse();
 
-  // println!("{:#?}", ast);
+  if debug_mode == "ast" {
+    println!("{:#?}", ast);
+    return;
+  }
 
   let compiler = Compiler::new(ast);
   compiler.compile(output);
