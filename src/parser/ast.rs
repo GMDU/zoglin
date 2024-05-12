@@ -57,6 +57,8 @@ pub enum Statement {
 #[derive(Debug)]
 pub enum Expression {
   FunctionCall(FunctionCall),
+  Integer(i32),
+  Variable(ZoglinResource)
 }
 
 #[derive(Debug)]

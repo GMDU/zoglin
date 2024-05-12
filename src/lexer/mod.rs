@@ -27,6 +27,7 @@ static OPERATOR_REGISTRY: &[(&str, TokenKind)] = &[
   ("/", TokenKind::ForwardSlash),
   (":", TokenKind::Colon),
   (".", TokenKind::Dot),
+  ("=", TokenKind::Equals),
 ];
 
 static KEYWORD_REGISTRY: &[(&str, TokenKind)] = &[

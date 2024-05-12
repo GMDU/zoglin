@@ -1,7 +1,6 @@
 namespace diamond
 include "includes/other"
 
-
 fn load() {
   scoreboard objectives add jump minecraft.custom:minecraft.jump
 }

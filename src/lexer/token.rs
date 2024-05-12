@@ -35,4 +35,5 @@ pub enum TokenKind {
   Integer,
   JSON,
   String,
+  Equals
 }

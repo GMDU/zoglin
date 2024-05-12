@@ -39,6 +39,11 @@ struct FunctionTag<'a> {
   values: &'a [String],
 }
 
+enum ExpressionType {
+  Void,
+  Integer(i32)
+}
+
 impl CompilerState {
   fn enter_scope(&mut self) {
     self.scopes.push(Scope::new());
@@ -222,11 +227,11 @@ impl Compiler {
     }
   }
 
-  fn compile_statement(&self, statement: &Statement, location: &ResourceLocation) -> String {
+  fn compile_statement(&self, statement: &Statement, location: &ResourceLocation) -> Vec<String> {
     match statement {
-      Statement::Command(command) => command.clone(),
-      Statement::Comment(comment) => comment.clone(),
-      Statement::Expression(expression) => self.compile_expression(expression, location),
+      Statement::Command(command) => vec![command.clone()],
+      Statement::Comment(comment) => vec![comment.clone()],
+      Statement::Expression(expression) => self.compile_expression(expression, location).0,
     }
   }
 
@@ -234,7 +239,7 @@ impl Compiler {
     let commands = function
       .items
       .iter()
-      .map(|statement| self.compile_statement(statement, &location))
+      .flat_map(|statement| self.compile_statement(statement, &location))
       .collect();
     let function_path = location.join(&function.name);
     let mut state = self.state.borrow_mut();
@@ -255,9 +260,11 @@ impl Compiler {
     }
   }
 
-  fn compile_expression(&self, expression: &Expression, location: &ResourceLocation) -> String {
-    let Expression::FunctionCall(function_call) = expression;
-    self.compile_function_call(function_call, location)
+  fn compile_expression(&self, expression: &Expression, location: &ResourceLocation) -> (Vec<String>, ExpressionType) {
+    match expression {
+      Expression::FunctionCall(function_call) => (vec![self.compile_function_call(function_call, location)], ExpressionType::Void),
+      Expression::Integer(integer) => (Vec::new(), ExpressionType::Integer(integer.clone()))
+    }    
   }
 
   fn compile_function_call(

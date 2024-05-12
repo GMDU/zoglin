@@ -247,11 +247,24 @@ impl Parser {
   }
 
   fn parse_expression(&mut self) -> Expression {
-    Expression::FunctionCall(self.parse_function_call())
+    match self.current().kind {
+      TokenKind::Integer => {
+        let value = self.consume().value.parse().unwrap();
+        Expression::Integer(value)
+      }
+      TokenKind::Colon | TokenKind::Identifier => {
+        let resource = self.parse_zoglin_resource();
+        if self.current().kind == TokenKind::LeftParen {
+          Expression::FunctionCall(self.parse_function_call(resource))
+        } else {
+          Expression::Variable(resource)
+        }
+      }
+      _ => raise_error(&self.current().location, &format!("Expected expression, got {:?}.", self.current().kind))
+    }
   }
 
-  fn parse_function_call(&mut self) -> FunctionCall {
-    let path = self.parse_zoglin_resource();
+  fn parse_function_call(&mut self, path: ZoglinResource) -> FunctionCall {
     self.expect(TokenKind::LeftParen);
     self.expect(TokenKind::RightParen);
     FunctionCall { path }
