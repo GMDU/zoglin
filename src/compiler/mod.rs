@@ -1,13 +1,18 @@
-use std::{cell::RefCell, collections::HashMap, path::Path};
+use std::{cell::RefCell, path::Path};
 
 use serde::Serialize;
 
 use crate::parser::ast::{self, Expression, File, FunctionCall, Statement, ZoglinResource};
 
-use self::file_tree::{
-  FileResource, FileTree, Function, Item, Module, Namespace, ResourceLocation, TextResource,
+use self::{
+  file_tree::{
+    FileResource, FileTree, Function, Item, Module, Namespace, ResourceLocation, TextResource,
+  },
+  scope::Scope,
 };
 mod file_tree;
+mod register;
+mod scope;
 
 pub struct Compiler {
   ast: File,
@@ -18,20 +23,7 @@ struct CompilerState {
   tick_functions: Vec<String>,
   load_functions: Vec<String>,
   scopes: Vec<Scope>,
-}
-
-struct Scope {
-  function_registry: HashMap<String, ResourceLocation>,
-  imported_items: HashMap<String, ResourceLocation>,
-}
-
-impl Scope {
-  fn new() -> Scope {
-    Scope {
-      function_registry: HashMap::new(),
-      imported_items: HashMap::new(),
-    }
-  }
+  current_scope: usize,
 }
 
 #[derive(Serialize)]
@@ -40,21 +32,23 @@ struct FunctionTag<'a> {
 }
 
 impl CompilerState {
-  fn enter_scope(&mut self) {
-    self.scopes.push(Scope::new());
+  fn push_scope(&mut self, name: String, parent: usize) -> usize {
+    self.scopes.push(Scope::new(parent));
+    let index = self.scopes.len() - 1;
+    self.scopes[parent].add_child(name, index);
+    index
+  }
+
+  fn enter_scope(&mut self, name: &String) {
+    self.current_scope = *self.scopes[self.current_scope].children.get(name).unwrap();
   }
 
   fn exit_scope(&mut self) {
-    self.scopes.pop();
+    self.current_scope = self.scopes[self.current_scope].parent;
   }
 
-  fn register_function(&mut self, name: String, location: ResourceLocation) {
-    self
-      .scopes
-      .last_mut()
-      .unwrap()
-      .function_registry
-      .insert(name, location);
+  fn register_function(&mut self, scope: usize, name: String, location: ResourceLocation) {
+    self.scopes[scope].function_registry.insert(name, location);
   }
 
   fn lookup_resource(&self, resource: &ZoglinResource) -> Option<&ResourceLocation> {
@@ -64,8 +58,10 @@ impl CompilerState {
 
     let first = resource.modules.first().unwrap_or(&resource.name);
     let valid_function = resource.modules.is_empty();
+    let mut index = self.current_scope;
 
-    for scope in self.scopes.iter().rev() {
+    while index != 0 {
+      let scope = &self.scopes[index];
       if valid_function {
         if let Some(resource_location) = scope.function_registry.get(first) {
           return Some(resource_location);
@@ -74,17 +70,14 @@ impl CompilerState {
       if let Some(resource_location) = scope.imported_items.get(first) {
         return Some(resource_location);
       }
+
+      index = scope.parent;
     }
     None
   }
 
-  fn register_import(&mut self, name: String, location: ResourceLocation) {
-    self
-      .scopes
-      .last_mut()
-      .unwrap()
-      .imported_items
-      .insert(name, location);
+  fn register_import(&mut self, scope: usize, name: String, location: ResourceLocation) {
+    self.scopes[scope].imported_items.insert(name, location);
   }
 }
 
@@ -96,11 +89,13 @@ impl Compiler {
         tick_functions: Vec::new(),
         load_functions: Vec::new(),
         scopes: Vec::new(),
+        current_scope: 0,
       }),
     }
   }
 
   pub fn compile(&self, output: &String) {
+    self.register();
     let tree = self.compile_tree();
     tree.generate(output);
   }
@@ -108,8 +103,8 @@ impl Compiler {
   fn compile_tree(&self) -> FileTree {
     let mut namespaces = Vec::new();
 
-    for namepace in self.ast.items.iter() {
-      namespaces.push(self.compile_namespace(namepace));
+    for namespace in self.ast.items.iter() {
+      namespaces.push(self.compile_namespace(namespace));
     }
 
     let state = self.state.borrow();
@@ -146,7 +141,7 @@ impl Compiler {
   }
 
   fn compile_namespace(&self, namespace: &ast::Namespace) -> Namespace {
-    self.state.borrow_mut().enter_scope();
+    self.state.borrow_mut().enter_scope(&namespace.name);
     let mut items = Vec::new();
 
     for item in namespace.items.iter() {
@@ -168,17 +163,14 @@ impl Compiler {
   fn compile_item(&self, item: &ast::Item, location: &mut ResourceLocation) -> Item {
     match item {
       ast::Item::Module(module) => Item::Module(self.compile_module(module, location)),
-      ast::Item::Import(import) => {
-        self.compile_import(import, location);
-        Item::Ignored
-      }
+      ast::Item::Import(_) => Item::Ignored,
       ast::Item::Function(function) => Item::Function(self.compile_function(function, location)),
       ast::Item::Resource(resource) => self.compile_resource(resource, location),
     }
   }
 
   fn compile_module(&self, module: &ast::Module, location: &mut ResourceLocation) -> Module {
-    self.state.borrow_mut().enter_scope();
+    self.state.borrow_mut().enter_scope(&module.name);
 
     location.modules.push(module.name.clone());
     let mut items = Vec::new();
@@ -192,15 +184,6 @@ impl Compiler {
       name: module.name.clone(),
       items,
     }
-  }
-
-  fn compile_import(&self, import: &ast::Import, location: &ResourceLocation) {
-    let name = import
-      .alias
-      .clone()
-      .unwrap_or_else(|| import.path.name.clone());
-    let path = ResourceLocation::from_zoglin_resource(location, &import.path);
-    self.state.borrow_mut().register_import(name, path);
   }
 
   fn compile_resource(&self, resource: &ast::Resource, _location: &ResourceLocation) -> Item {
@@ -236,18 +219,6 @@ impl Compiler {
       .iter()
       .map(|statement| self.compile_statement(statement, &location))
       .collect();
-    let function_path = location.join(&function.name);
-    let mut state = self.state.borrow_mut();
-
-    let mut function_location = location.clone();
-    function_location.modules.push(function.name.clone());
-    state.register_function(function.name.clone(), function_location);
-
-    if &function.name == "tick" && location.modules.len() < 1 {
-      state.tick_functions.push(function_path);
-    } else if &function.name == "load" && location.modules.len() < 1 {
-      state.load_functions.push(function_path);
-    }
 
     Function {
       name: function.name.clone(),
