@@ -1,6 +1,6 @@
 namespace diamond
 include "includes/other"
-
+include "test"
 
 fn load() {
   scoreboard objectives add jump minecraft.custom:minecraft.jump
@@ -41,7 +41,7 @@ module jump {
 }
 
 fn no_import() {
-  api/included_fn()
+  other:api/included_fn()
 }
 
 res tags/blocks cool {

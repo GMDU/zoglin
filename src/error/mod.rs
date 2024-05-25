@@ -1,5 +1,3 @@
-use std::process::exit;
-
 #[derive(Debug, Clone)]
 pub struct Location {
   pub line: usize,
@@ -7,12 +5,25 @@ pub struct Location {
   pub file: String,
 }
 
+const RESET: &str = "\x1b[0m";
 const RED: &str = "\x1b[31m";
 
-pub fn raise_error(location: &Location, message: &str) -> ! {
-  eprintln!(
-    "{}:{}:{}: {}{}",
-    location.file, location.line, location.column, RED, message
-  );
-  exit(1);
+pub struct Error {
+  location: Location,
+  message: String,
+}
+
+impl Error {
+  pub fn print(&self) {
+    eprintln!(
+      "{}:{}:{}: {}{}{}",
+      self.location.file, self.location.line, self.location.column, RED, self.message, RESET
+    );
+  }
+}
+
+pub type Result<T> = std::result::Result<T, Error>;
+
+pub fn raise_error(location: Location, message: &str) -> Error {
+  Error{ location: location, message: message.to_string() }
 }

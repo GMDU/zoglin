@@ -1,15 +1,16 @@
 mod commands;
 pub mod token;
-use crate::error::{raise_error, Location};
+use crate::error::{raise_error, Location, Result};
 
 use self::commands::COMMANDS;
 use glob::glob;
-use std::{fs, path::Path};
+use std::{collections::HashSet, fs, path::Path};
 use token::{Token, TokenKind};
 
 pub struct Lexer {
   file: String,
   src: String,
+  pub dependent_files: HashSet<String>,
   position: usize,
   is_newline: bool,
   next_brace_json: bool,
@@ -50,15 +51,17 @@ impl Lexer {
       next_brace_json: false,
       line: 1,
       column: 1,
+      dependent_files: HashSet::new(),
     }
   }
 
-  pub fn tokenise(&mut self) -> Vec<Token> {
+  pub fn tokenise(&mut self) -> Result<Vec<Token>> {
     let mut tokens = Vec::new();
+    self.dependent_files.insert(self.file.clone());
     loop {
-      let next = self.next_token();
+      let next = self.next_token()?;
       if next.kind == TokenKind::IncludeKeyword {
-        tokens.extend(self.parse_include());
+        tokens.extend(self.parse_include()?);
       } else {
         tokens.push(next);
         if tokens.last().unwrap().kind == TokenKind::EndOfFile {
@@ -66,7 +69,7 @@ impl Lexer {
         }
       }
     }
-    tokens
+    Ok(tokens)
   }
 
   fn peek(&self, offset: usize) -> char {
@@ -81,7 +84,7 @@ impl Lexer {
     self.current() == '\n' || self.current() == '\0'
   }
 
-  fn next_token(&mut self) -> Token {
+  fn next_token(&mut self) -> Result<Token> {
     self.skip_whitespace();
 
     let kind;
@@ -121,14 +124,14 @@ impl Lexer {
     } else if valid_identifier_start(self.current()) {
       kind = self.tokenise_identifier(position);
     } else {
-      raise_error(
-        &Location {
+      return Err(raise_error(
+        Location {
           file: self.file.clone(),
           line,
           column,
         },
         &format!("Unexpected character: {}", self.current()),
-      );
+      ));
     }
 
     if kind == TokenKind::Command {
@@ -146,7 +149,7 @@ impl Lexer {
       value = self.src[position..self.position].to_string();
     }
 
-    return Token {
+    return Ok(Token {
       kind,
       value,
       location: Location {
@@ -154,7 +157,7 @@ impl Lexer {
         line,
         column,
       },
-    };
+    });
   }
 
   fn parse_punctuation(&mut self) -> Option<TokenKind> {
@@ -294,10 +297,11 @@ impl Lexer {
     string
   }
 
-  fn parse_include(&mut self) -> Vec<Token> {
-    let token = self.next_token();
+  fn parse_include(&mut self) -> Result<Vec<Token>> {
+    let token = self.next_token()?;
+
     if token.kind != TokenKind::String {
-      raise_error(&token.location, "Expected file name.")
+      return Err(raise_error(token.location, "Expected file name."));
     }
 
     let mut path: String = token.value;
@@ -310,14 +314,21 @@ impl Lexer {
     for entry in glob(relative_path.to_str().unwrap()).unwrap() {
       match entry {
         Ok(path) => {
-          let mut lexer = Lexer::new(path.to_str().unwrap());
-          tokens.extend(lexer.tokenise());
+          let path_str = path.to_str().unwrap();
+          self.dependent_files.insert(path_str.to_string());
+
+          let mut lexer = Lexer::new(path_str);
+
+          tokens.extend(lexer.tokenise()?);
+          self.dependent_files.extend(lexer.dependent_files);
           tokens.last_mut().unwrap().kind = TokenKind::EndOfInclude;
         }
-        Err(e) => raise_error(&token.location, &e.to_string()),
+        Err(e) => {
+          return Err(raise_error(token.location, &e.to_string()));
+        }
       }
     }
-    tokens
+    Ok(tokens)
   }
 }
 
