@@ -31,6 +31,7 @@ pub struct Import {
 
 #[derive(Debug)]
 pub struct Resource {
+  pub is_asset: bool,
   pub kind: String,
   pub content: ResourceContent,
 }

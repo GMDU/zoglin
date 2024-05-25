@@ -154,7 +154,7 @@ impl Parser {
     Ok(match self.current().kind {
       TokenKind::ModuleKeyword => Item::Module(self.parse_module()?),
       TokenKind::ImportKeyword => Item::Import(self.parse_import()?),
-      TokenKind::ResourceKeyword => Item::Resource(self.parse_resource()?),
+      TokenKind::ResourceKeyword | TokenKind::AssetKeyword => Item::Resource(self.parse_resource()?),
       TokenKind::FunctionKeyword => Item::Function(self.parse_function()?),
       _ => {
         return Err(raise_error(
@@ -191,7 +191,7 @@ impl Parser {
   }
 
   fn parse_resource(&mut self) -> Result<Resource> {
-    self.expect(TokenKind::ResourceKeyword)?;
+    let is_asset = self.consume().kind == TokenKind::AssetKeyword;
     let kind = self.parse_resource_path()?;
     let content: ResourceContent;
 
@@ -205,7 +205,7 @@ impl Parser {
       content = ResourceContent::File(token.value, token.location.file);
     }
 
-    Ok(Resource { kind, content })
+    Ok(Resource { kind, content, is_asset })
   }
 
   fn parse_resource_path(&mut self) -> Result<String> {

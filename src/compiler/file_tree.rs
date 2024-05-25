@@ -29,15 +29,15 @@ const DEFAULT_MCMETA: PackMcmeta = PackMcmeta {
 
 impl FileTree {
   pub fn generate(&self, root_path: &String) {
+    let _ = fs::remove_dir_all(root_path);
     let working_path = Path::new(root_path).join("data");
-    let _ = fs::remove_dir_all(&working_path);
     fs::create_dir_all(&working_path).unwrap();
 
     let text = serde_json::to_string_pretty(&DEFAULT_MCMETA).unwrap();
     fs::write(Path::new(root_path).join("pack.mcmeta"), text).unwrap();
 
     for namespace in self.namespaces.iter() {
-      namespace.generate(working_path.to_str().unwrap());
+      namespace.generate(&root_path);
     }
   }
 }
@@ -107,6 +107,7 @@ pub struct Function {
 impl Function {
   fn generate(&self, root_path: &str, local_path: &ResourceLocation) {
     let dir_path = Path::new(root_path)
+      .join("data")
       .join(&local_path.namespace)
       .join("functions")
       .join(local_path.modules.join("/"));
@@ -121,12 +122,15 @@ impl Function {
 pub struct TextResource {
   pub name: String,
   pub kind: String,
+  pub is_asset: bool,
   pub text: String,
 }
 
 impl TextResource {
   fn generate(&self, root_path: &str, local_path: &ResourceLocation) {
+    let resource_dir = if self.is_asset { "assets" } else { "data" };
     let dir_path = Path::new(root_path)
+      .join(resource_dir)
       .join(&local_path.namespace)
       .join(&self.kind)
       .join(local_path.modules.join("/"));
@@ -140,12 +144,15 @@ impl TextResource {
 #[derive(Debug)]
 pub struct FileResource {
   pub kind: String,
+  pub is_asset: bool,
   pub path: String,
 }
 
 impl FileResource {
   fn generate(&self, root_path: &str, local_path: &ResourceLocation) {
+    let resource_dir = if self.is_asset { "assets" } else { "data" };
     let dir_path = Path::new(&root_path)
+      .join(resource_dir)
       .join(&local_path.namespace)
       .join(&self.kind)
       .join(local_path.modules.join("/"));

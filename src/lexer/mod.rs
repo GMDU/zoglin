@@ -35,6 +35,7 @@ static KEYWORD_REGISTRY: &[(&str, TokenKind)] = &[
   ("module", TokenKind::ModuleKeyword),
   ("fn", TokenKind::FunctionKeyword),
   ("res", TokenKind::ResourceKeyword),
+  ("asset", TokenKind::AssetKeyword),
   ("include", TokenKind::IncludeKeyword),
   ("import", TokenKind::ImportKeyword),
   ("as", TokenKind::AsKeyword),
@@ -140,7 +141,7 @@ impl Lexer {
       }
     }
 
-    if kind == TokenKind::ResourceKeyword {
+    if kind == TokenKind::ResourceKeyword || kind == TokenKind::AssetKeyword {
       self.next_brace_json = true;
     }
 

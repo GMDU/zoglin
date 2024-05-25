@@ -18,10 +18,10 @@ made so far.
 - Commands (1/2)
   - Commands in functions ✅
   - Inline expressions
-- Resources (2/3)
+- Resources (3/3)
   - JSON Resources ✅
   - NBT / other resources ✅
-  - assets
+  - Assets ✅
 - Include ✅
 - Proper error reporting ✅
 - Import (2/4)
