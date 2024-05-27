@@ -125,13 +125,13 @@ impl Compiler {
 
       mc_namespace.items.push(Item::TextResource(TextResource {
         name: "tick".to_string(),
-        kind: "tags/functions".to_string(),
+        kind: "tags/function".to_string(),
         is_asset: false,
         text: tick_text,
       }));
       mc_namespace.items.push(Item::TextResource(TextResource {
         name: "load".to_string(),
-        kind: "tags/functions".to_string(),
+        kind: "tags/function".to_string(),
         is_asset: false,
         text: load_text,
       }));

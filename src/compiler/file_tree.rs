@@ -109,7 +109,7 @@ impl Function {
     let dir_path = Path::new(root_path)
       .join("data")
       .join(&local_path.namespace)
-      .join("functions")
+      .join("function")
       .join(local_path.modules.join("/"));
 
     fs::create_dir_all(&dir_path).unwrap();
