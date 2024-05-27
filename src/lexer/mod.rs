@@ -99,6 +99,7 @@ impl Lexer {
       value.push('\0');
     } else if self.current() == '{' && self.next_brace_json {
       kind = TokenKind::JSON;
+      self.next_brace_json = false;
       if !self.tokenise_json() {
         value = self.src[position + 1..self.position - 1].to_string();
       }
