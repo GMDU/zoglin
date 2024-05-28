@@ -53,7 +53,7 @@ impl Namespace {
     for item in self.items.iter() {
       item.generate(
         path,
-        &mut ResourceLocation {
+        &ResourceLocation {
           namespace: self.name.clone(),
           modules: Vec::new(),
         },
@@ -72,7 +72,7 @@ pub enum Item {
 }
 
 impl Item {
-  fn generate(&self, root_path: &str, local_path: &mut ResourceLocation) {
+  fn generate(&self, root_path: &str, local_path: &ResourceLocation) {
     match self {
       Item::Ignored => {}
       Item::Module(module) => module.generate(root_path, local_path),
@@ -90,10 +90,11 @@ pub struct Module {
 }
 
 impl Module {
-  fn generate(&self, root_path: &str, local_path: &mut ResourceLocation) {
+  fn generate(&self, root_path: &str, local_path: &ResourceLocation) {
+    let mut local_path = local_path.clone();
     local_path.modules.push(self.name.clone());
     for item in self.items.iter() {
-      item.generate(root_path, local_path);
+      item.generate(root_path, &mut local_path);
     }
   }
 }
