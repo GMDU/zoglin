@@ -163,7 +163,9 @@ impl FileResource {
       match entry {
         Ok(path) => {
           let filename = path.file_name().unwrap();
-          fs::copy(&path, &dir_path.join(filename)).unwrap()
+          if Path::new(&filename).is_file() {
+            fs::copy(&path, &dir_path.join(filename)).unwrap();
+          }
         }
         Err(e) => panic!("{:?}", e),
       };
