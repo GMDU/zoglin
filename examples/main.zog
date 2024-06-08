@@ -32,10 +32,11 @@ module jump {
 
   module foo {
     fn check() {
+      execute at @a run &{tick()}
     }
 
     fn bar() {
-      check()
+      schedule function &{fn player} 10t
     }
   }
 }
@@ -58,6 +59,7 @@ res structures "*.nbt"
 asset models/item next_brace_jason {
   parent: "minecraft:item/generated",
   textures: {
+    // layer0: &{item/next_brace_jason}
     layer0: "diamond:item/next_brace_jason"
   }
 }

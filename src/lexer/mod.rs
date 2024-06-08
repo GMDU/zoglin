@@ -63,6 +63,9 @@ impl Lexer {
       let next = self.next_token()?;
       if next.kind == TokenKind::IncludeKeyword {
         tokens.extend(self.parse_include()?);
+      } else if next.kind == TokenKind::CommandBegin {
+        tokens.push(next);
+        tokens.extend(self.parse_command()?);
       } else {
         tokens.push(next);
         if tokens.last().unwrap().kind == TokenKind::EndOfFile {
@@ -89,7 +92,7 @@ impl Lexer {
     self.skip_whitespace();
 
     let kind;
-    let mut position = self.position;
+    let position = self.position;
     let line = self.line;
     let column = self.column;
     let mut value = String::new();
@@ -105,8 +108,7 @@ impl Lexer {
       }
     } else if self.current() == '/' && self.is_newline {
       self.consume();
-      kind = TokenKind::Command;
-      position += 1;
+      kind = TokenKind::CommandBegin;
     } else if self.current() == '#' {
       while !self.current_is_delim() {
         self.consume();
@@ -127,19 +129,9 @@ impl Lexer {
       kind = self.tokenise_identifier(position);
     } else {
       return Err(raise_error(
-        Location {
-          file: self.file.clone(),
-          line,
-          column,
-        },
+        self.location(line, column),
         &format!("Unexpected character: {}", self.current()),
       ));
-    }
-
-    if kind == TokenKind::Command {
-      while !self.current_is_delim() {
-        self.consume();
-      }
     }
 
     if kind == TokenKind::ResourceKeyword || kind == TokenKind::AssetKeyword {
@@ -154,11 +146,7 @@ impl Lexer {
     return Ok(Token {
       kind,
       value,
-      location: Location {
-        file: self.file.clone(),
-        line,
-        column,
-      },
+      location: self.location(line, column),
     });
   }
 
@@ -209,7 +197,8 @@ impl Lexer {
       && COMMANDS.contains(&identifier_value)
       && self.next_significant_char() != '('
     {
-      kind = TokenKind::Command;
+      kind = TokenKind::CommandBegin;
+      self.position = position;
     }
     kind
   }
@@ -331,6 +320,73 @@ impl Lexer {
       }
     }
     Ok(tokens)
+  }
+
+  fn parse_command(&mut self) -> Result<Vec<Token>> {
+    let mut tokens = Vec::new();
+
+    let mut current_part = String::new();
+    let mut line = self.line;
+    let mut column = self.column;
+    
+    while !self.current_is_delim() {
+      if self.current() == '\\' && self.peek(1) == '&' {
+        self.consume();
+        current_part.push(self.current());
+        self.consume();
+        continue;
+      }
+
+      if self.current() == '&' && self.peek(1) == '{' {
+        tokens.push(Token {
+          kind: TokenKind::CommandString,
+          value: current_part,
+          location: self.location(line, column),
+        });
+        current_part = String::new();
+
+        self.consume();
+        self.consume();
+        let mut brace_level = 0;
+        while self.current() != '}' || brace_level > 0 {
+          let next = self.next_token()?;
+          if next.kind == TokenKind::LeftBrace {
+            brace_level += 1;
+          } else if next.kind == TokenKind::RightBrace {
+            brace_level -= 1;
+          }
+          tokens.push(next);
+        }
+        self.consume();
+
+        line = self.line;
+        column = self.column;
+        continue;
+      }
+
+      current_part.push(self.consume());
+    }
+
+    tokens.push(Token {
+      kind: TokenKind::CommandString,
+      value: current_part,
+      location: self.location(line, column),
+    });
+    tokens.push(Token {
+      kind: TokenKind::CommandEnd,
+      value: String::new(),
+      location: self.location(self.line, self.column),
+    });
+
+    Ok(tokens)
+  }
+
+  fn location(&self, line: usize, column: usize) -> Location {
+    Location {
+      file: self.file.clone(),
+      line,
+      column,
+    }
   }
 }
 

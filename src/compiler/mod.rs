@@ -2,7 +2,9 @@ use std::{cell::RefCell, path::Path};
 
 use serde::Serialize;
 
-use crate::parser::ast::{self, Expression, File, FunctionCall, Statement, ZoglinResource};
+use crate::parser::ast::{
+  self, Command, Expression, File, FunctionCall, Statement, StaticExpr, ZoglinResource,
+};
 
 use self::{
   file_tree::{
@@ -209,14 +211,6 @@ impl Compiler {
     }
   }
 
-  fn compile_statement(&self, statement: &Statement, location: &ResourceLocation) -> String {
-    match statement {
-      Statement::Command(command) => command.clone(),
-      Statement::Comment(comment) => comment.clone(),
-      Statement::Expression(expression) => self.compile_expression(expression, location),
-    }
-  }
-
   fn compile_function(&self, function: &ast::Function, location: &ResourceLocation) -> Function {
     let commands = function
       .items
@@ -227,6 +221,43 @@ impl Compiler {
     Function {
       name: function.name.clone(),
       commands,
+    }
+  }
+
+  fn compile_statement(&self, statement: &Statement, location: &ResourceLocation) -> String {
+    match statement {
+      Statement::Command(command) => self.compile_command(command, location),
+      Statement::Comment(comment) => comment.clone(),
+      Statement::Expression(expression) => self.compile_expression(expression, location),
+    }
+  }
+
+  fn compile_command(&self, command: &Command, location: &ResourceLocation) -> String {
+    let mut result = String::new();
+
+    for part in command.parts.iter() {
+      match part {
+        ast::CommandPart::Literal(lit) => result.push_str(&lit),
+        ast::CommandPart::Expression(expr) => {
+          result.push_str(&self.compile_static_expr(expr, location))
+        }
+      }
+    }
+
+    result
+  }
+
+  fn compile_static_expr(&self, expr: &StaticExpr, location: &ResourceLocation) -> String {
+    match expr {
+      StaticExpr::FunctionCall(call) => self.compile_function_call(call, location),
+      StaticExpr::ResourceRef {
+        resource,
+        is_fn: true,
+      } => self.resolve_zoglin_resource(resource, location).to_string(),
+      StaticExpr::ResourceRef {
+        resource,
+        is_fn: false,
+      } => ResourceLocation::from_zoglin_resource(location, resource).to_string(),
     }
   }
 

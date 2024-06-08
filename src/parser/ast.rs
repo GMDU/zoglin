@@ -50,9 +50,29 @@ pub struct Function {
 
 #[derive(Debug)]
 pub enum Statement {
-  Command(String),
+  Command(Command),
   Comment(String),
   Expression(Expression),
+}
+
+#[derive(Debug)]
+pub struct Command {
+  pub parts: Vec<CommandPart>,
+}
+
+#[derive(Debug)]
+pub enum CommandPart {
+  Literal(String),
+  Expression(StaticExpr),
+}
+
+#[derive(Debug)]
+pub enum StaticExpr {
+  FunctionCall(FunctionCall),
+  ResourceRef {
+    resource: ZoglinResource,
+    is_fn: bool,
+  },
 }
 
 #[derive(Debug)]

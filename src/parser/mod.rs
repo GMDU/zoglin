@@ -1,3 +1,5 @@
+use ast::{Command, CommandPart, StaticExpr};
+
 use self::ast::{
   Expression, File, Function, FunctionCall, Import, Item, Module, Namespace, Resource,
   ResourceContent, Statement, ZoglinResource,
@@ -154,7 +156,9 @@ impl Parser {
     Ok(match self.current().kind {
       TokenKind::ModuleKeyword => Item::Module(self.parse_module()?),
       TokenKind::ImportKeyword => Item::Import(self.parse_import()?),
-      TokenKind::ResourceKeyword | TokenKind::AssetKeyword => Item::Resource(self.parse_resource()?),
+      TokenKind::ResourceKeyword | TokenKind::AssetKeyword => {
+        Item::Resource(self.parse_resource()?)
+      }
       TokenKind::FunctionKeyword => Item::Function(self.parse_function()?),
       _ => {
         return Err(raise_error(
@@ -197,15 +201,19 @@ impl Parser {
 
     if self.current().kind == TokenKind::Identifier {
       let name = self.expect(TokenKind::Identifier)?.value;
-      let json = self.expect(TokenKind::JSON)?.value;
+      let token = self.expect(TokenKind::JSON)?;
 
-      content = ResourceContent::Text(name, json::from_json5(&json));
+      content = ResourceContent::Text(name, json::from_json5(&token.value, token.location)?);
     } else {
       let token = self.expect(TokenKind::String)?;
       content = ResourceContent::File(token.value, token.location.file);
     }
 
-    Ok(Resource { kind, content, is_asset })
+    Ok(Resource {
+      kind,
+      content,
+      is_asset,
+    })
   }
 
   fn parse_resource_path(&mut self) -> Result<String> {
@@ -241,16 +249,50 @@ impl Parser {
 
   fn parse_statement(&mut self) -> Result<Statement> {
     Ok(match self.current_including(&[TokenKind::Comment]).kind {
-      TokenKind::Command => {
-        let command = self.consume().value;
-        Statement::Command(command)
-      }
+      TokenKind::CommandBegin => Statement::Command(self.parse_command()?),
       TokenKind::Comment => {
         let comment = self.consume_including(&[TokenKind::Comment]).value;
         Statement::Comment(comment)
       }
       _ => Statement::Expression(self.parse_expression()?),
     })
+  }
+
+  fn parse_command(&mut self) -> Result<Command> {
+    self.expect(TokenKind::CommandBegin)?;
+    let mut parts = Vec::new();
+
+    while self.current().kind != TokenKind::CommandEnd {
+      match self.current().kind {
+        TokenKind::CommandString => parts.push(CommandPart::Literal(self.consume().value)),
+        _ => parts.push(CommandPart::Expression(self.parse_static_expr()?)),
+      }
+    }
+
+    self.consume();
+
+    Ok(Command { parts })
+  }
+
+  fn parse_static_expr(&mut self) -> Result<StaticExpr> {
+    let is_fn = self.current().kind == TokenKind::FunctionKeyword;
+    if is_fn {
+      self.consume();
+    }
+    let resource = self.parse_zoglin_resource()?;
+    if self.current().kind == TokenKind::LeftParen {
+      if is_fn {
+        return Err(raise_error(
+          self.current().location,
+          "`fn` keyword not required when calling a function",
+        ));
+      }
+      self.consume();
+      self.expect(TokenKind::RightParen)?;
+
+      return Ok(StaticExpr::FunctionCall(FunctionCall { path: resource }));
+    }
+    return Ok(StaticExpr::ResourceRef { resource, is_fn });
   }
 
   fn parse_expression(&mut self) -> Result<Expression> {
