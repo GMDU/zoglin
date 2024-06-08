@@ -206,7 +206,12 @@ impl Parser {
       content = ResourceContent::Text(name, json::from_json5(&token.value, token.location)?);
     } else {
       let token = self.expect(TokenKind::String)?;
-      content = ResourceContent::File(token.value, token.location.file);
+      let (base_path, path) = if token.value.starts_with('/') {
+        (token.location.root, token.value[1..].to_string())
+      } else {
+        (token.location.file, token.value)
+      };
+      content = ResourceContent::File(path, base_path);
     }
 
     Ok(Resource {

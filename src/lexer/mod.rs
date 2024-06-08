@@ -9,6 +9,7 @@ use token::{Token, TokenKind};
 
 pub struct Lexer {
   file: String,
+  root: String,
   src: String,
   pub dependent_files: HashSet<String>,
   position: usize,
@@ -42,10 +43,11 @@ static KEYWORD_REGISTRY: &[(&str, TokenKind)] = &[
 ];
 
 impl Lexer {
-  pub fn new(src: &str) -> Lexer {
-    let contents = fs::read_to_string(src).unwrap();
+  pub fn new(file: &str, root_path: &str) -> Lexer {
+    let contents = fs::read_to_string(file).unwrap();
     Lexer {
-      file: src.to_string(),
+      file: file.to_string(),
+      root: root_path.to_string(),
       src: contents,
       position: 0,
       is_newline: true,
@@ -299,7 +301,11 @@ impl Lexer {
     if !path.ends_with(".zog") {
       path.push_str(".zog");
     }
-    let relative_path = Path::new(&self.file).parent().unwrap().join(path);
+    let relative_path = if path.starts_with('/') {
+      Path::new(&self.root).parent().unwrap().join(&path[1..])
+    } else {
+      Path::new(&self.file).parent().unwrap().join(path)
+    };
     let mut tokens = Vec::new();
 
     for entry in glob(relative_path.to_str().unwrap()).unwrap() {
@@ -308,7 +314,7 @@ impl Lexer {
           let path_str = path.to_str().unwrap();
           self.dependent_files.insert(path_str.to_string());
 
-          let mut lexer = Lexer::new(path_str);
+          let mut lexer = Lexer::new(path_str, &self.root);
 
           tokens.extend(lexer.tokenise()?);
           self.dependent_files.extend(lexer.dependent_files);
@@ -328,7 +334,7 @@ impl Lexer {
     let mut current_part = String::new();
     let mut line = self.line;
     let mut column = self.column;
-    
+
     while !self.current_is_delim() {
       if self.current() == '\\' && self.peek(1) == '&' {
         self.consume();
@@ -384,6 +390,7 @@ impl Lexer {
   fn location(&self, line: usize, column: usize) -> Location {
     Location {
       file: self.file.clone(),
+      root: self.root.clone(),
       line,
       column,
     }

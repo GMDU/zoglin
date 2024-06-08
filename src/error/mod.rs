@@ -3,6 +3,7 @@ pub struct Location {
   pub line: usize,
   pub column: usize,
   pub file: String,
+  pub root: String,
 }
 
 const RESET: &str = "\x1b[0m";

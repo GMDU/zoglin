@@ -6,7 +6,12 @@ mod parser;
 
 use error::Result;
 use std::{
-  collections::{HashMap, HashSet}, fs, path::Path, process::exit, thread, time::{Duration, SystemTime}
+  collections::{HashMap, HashSet},
+  fs,
+  path::Path,
+  process::exit,
+  thread,
+  time::{Duration, SystemTime},
 };
 
 use lexer::Lexer;
@@ -52,7 +57,7 @@ fn main() {
 fn build(file: &String, output: &String, debug_mode: &str) -> (HashSet<String>, Result<()>) {
   print!("Building {} into {}... ", file, output);
   let start = SystemTime::now();
-  let mut lexer = Lexer::new(file);
+  let mut lexer = Lexer::new(file, file);
   let result = lexer.tokenise();
   let tokens = match result {
     Ok(tokens) => tokens,
