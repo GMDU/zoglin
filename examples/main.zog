@@ -63,3 +63,7 @@ asset models/item next_brace_jason {
 }
 
 asset textures/item "items/*.png"
+
+asset . sounds {
+  foobar: "baz"
+}

@@ -209,6 +209,10 @@ impl Parser {
   }
 
   fn parse_resource_path(&mut self) -> Result<String> {
+    if self.current().kind == TokenKind::Dot {
+      return Ok(self.consume().value);
+    }
+
     let mut text = self.expect(TokenKind::Identifier)?.value;
     while self.current().kind == TokenKind::ForwardSlash {
       text.push('/');
