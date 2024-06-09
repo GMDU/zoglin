@@ -1,8 +1,11 @@
+use ast::{Command, CommandPart, StaticExpr};
+
 use self::ast::{
-  Expression, File, Function, FunctionCall, Import, Item, Module, Namespace, Resource, ResourceContent, Statement, ZoglinResource
+  Expression, File, Function, FunctionCall, Import, Item, Module, Namespace, Resource,
+  ResourceContent, Statement, ZoglinResource,
 };
 use crate::{
-  error::raise_error,
+  error::{raise_error, Result},
   lexer::token::{Token, TokenKind},
 };
 
@@ -22,14 +25,14 @@ impl Parser {
     }
   }
 
-  pub fn parse(&mut self) -> File {
+  pub fn parse(&mut self) -> Result<File> {
     let mut items = Vec::new();
 
     while !self.eof() {
-      items.extend(self.parse_namespace());
+      items.extend(self.parse_namespace()?);
     }
 
-    File { items }
+    Ok(File { items })
   }
 
   fn eof(&mut self) -> bool {
@@ -84,32 +87,32 @@ impl Parser {
     current
   }
 
-  fn expect(&mut self, kind: TokenKind) -> Token {
+  fn expect(&mut self, kind: TokenKind) -> Result<Token> {
     let next = self.consume();
     if next.kind != kind {
-      raise_error(
-        &next.location,
+      return Err(raise_error(
+        next.location,
         &format!("Expected {:?}, got {:?}", kind, next.kind),
-      )
+      ));
     }
-    next
+    Ok(next)
   }
 
-  fn parse_namespace(&mut self) -> Vec<Namespace> {
-    let file = self.expect(TokenKind::NamespaceKeyword).location.file;
-    let name = self.expect(TokenKind::Identifier).value;
+  fn parse_namespace(&mut self) -> Result<Vec<Namespace>> {
+    let file = self.expect(TokenKind::NamespaceKeyword)?.location.file;
+    let name = self.expect(TokenKind::Identifier)?.value;
 
     if self.current().kind == TokenKind::LeftBrace {
-      return vec![self.parse_block_namespace(name)];
+      return Ok(vec![self.parse_block_namespace(name)?]);
     }
     let mut namespaces = Vec::new();
 
     let mut items = Vec::new();
     while !self.is_namespace_end(&file) {
       if self.current().kind == TokenKind::NamespaceKeyword {
-        namespaces.extend(self.parse_namespace());
+        namespaces.extend(self.parse_namespace()?);
       } else {
-        items.push(self.parse_item());
+        items.push(self.parse_item()?);
       }
     }
 
@@ -119,7 +122,7 @@ impl Parser {
 
     namespaces.push(Namespace { items, name });
 
-    namespaces
+    Ok(namespaces)
   }
 
   fn is_namespace_end(&mut self, file: &String) -> bool {
@@ -127,7 +130,7 @@ impl Parser {
     if next.kind == TokenKind::EndOfFile {
       return true;
     }
-    if next.kind == TokenKind::EndOfInclude  {
+    if next.kind == TokenKind::EndOfInclude {
       if next.location.file == *file {
         return true;
       }
@@ -137,140 +140,191 @@ impl Parser {
     false
   }
 
-  fn parse_block_namespace(&mut self, name: String) -> Namespace {
-    self.expect(TokenKind::LeftBrace);
+  fn parse_block_namespace(&mut self, name: String) -> Result<Namespace> {
+    self.expect(TokenKind::LeftBrace)?;
 
     let mut items = Vec::new();
     while self.current().kind != TokenKind::RightBrace {
-      items.push(self.parse_item());
+      items.push(self.parse_item()?);
     }
-    self.expect(TokenKind::RightBrace);
+    self.expect(TokenKind::RightBrace)?;
 
-    Namespace { name, items }
+    Ok(Namespace { name, items })
   }
 
-  fn parse_item(&mut self) -> Item {
-    match self.current().kind {
-      TokenKind::ModuleKeyword => Item::Module(self.parse_module()),
-      TokenKind::ImportKeyword => Item::Import(self.parse_import()),
-      TokenKind::ResourceKeyword => Item::Resource(self.parse_resource()),
-      TokenKind::FunctionKeyword => Item::Function(self.parse_function()),
-      _ => raise_error(
-        &self.current().location,
-        &format!("Unexpected token kind: {:?}", self.current().kind),
-      ),
-    }
+  fn parse_item(&mut self) -> Result<Item> {
+    Ok(match self.current().kind {
+      TokenKind::ModuleKeyword => Item::Module(self.parse_module()?),
+      TokenKind::ImportKeyword => Item::Import(self.parse_import()?),
+      TokenKind::ResourceKeyword | TokenKind::AssetKeyword => {
+        Item::Resource(self.parse_resource()?)
+      }
+      TokenKind::FunctionKeyword => Item::Function(self.parse_function()?),
+      _ => {
+        return Err(raise_error(
+          self.current().location,
+          &format!("Unexpected token kind: {:?}", self.current().kind),
+        ))
+      }
+    })
   }
 
-  fn parse_module(&mut self) -> Module {
-    self.expect(TokenKind::ModuleKeyword);
-    let name = self.expect(TokenKind::Identifier).value;
-    self.expect(TokenKind::LeftBrace);
+  fn parse_module(&mut self) -> Result<Module> {
+    self.expect(TokenKind::ModuleKeyword)?;
+    let name = self.expect(TokenKind::Identifier)?.value;
+    self.expect(TokenKind::LeftBrace)?;
 
     let mut items = Vec::new();
     while self.current().kind != TokenKind::RightBrace {
-      items.push(self.parse_item());
+      items.push(self.parse_item()?);
     }
-    self.expect(TokenKind::RightBrace);
+    self.expect(TokenKind::RightBrace)?;
 
-    Module { name, items }
+    Ok(Module { name, items })
   }
 
-  fn parse_import(&mut self) -> Import {
-    self.expect(TokenKind::ImportKeyword);
-    let path = self.parse_zoglin_resource();
+  fn parse_import(&mut self) -> Result<Import> {
+    self.expect(TokenKind::ImportKeyword)?;
+    let path = self.parse_zoglin_resource()?;
     let mut alias = None;
     if self.current().kind == TokenKind::AsKeyword {
       self.consume();
-      alias = Some(self.expect(TokenKind::Identifier).value);
+      alias = Some(self.expect(TokenKind::Identifier)?.value);
     }
-    Import { path, alias }
+    Ok(Import { path, alias })
   }
 
-  fn parse_resource(&mut self) -> Resource {
-    self.expect(TokenKind::ResourceKeyword);
-    let kind = self.parse_resource_path();
+  fn parse_resource(&mut self) -> Result<Resource> {
+    let is_asset = self.consume().kind == TokenKind::AssetKeyword;
+    let kind = self.parse_resource_path()?;
     let content: ResourceContent;
 
     if self.current().kind == TokenKind::Identifier {
-      let name = self.expect(TokenKind::Identifier).value;
-      let json = self.expect(TokenKind::JSON).value;
+      let name = self.expect(TokenKind::Identifier)?.value;
+      let token = self.expect(TokenKind::JSON)?;
 
-      content = ResourceContent::Text(name, json::from_json5(&json));
+      content = ResourceContent::Text(name, json::from_json5(&token.value, token.location)?);
     } else {
-      let token = self.expect(TokenKind::String);
-      content = ResourceContent::File(token.value, token.location.file);
+      let token = self.expect(TokenKind::String)?;
+      let (base_path, path) = if token.value.starts_with('/') {
+        (token.location.root, token.value[1..].to_string())
+      } else {
+        (token.location.file, token.value)
+      };
+      content = ResourceContent::File(path, base_path);
     }
 
-    Resource { kind, content }
+    Ok(Resource {
+      kind,
+      content,
+      is_asset,
+    })
   }
 
-  fn parse_resource_path(&mut self) -> String {
-    let mut text = self.expect(TokenKind::Identifier).value;
+  fn parse_resource_path(&mut self) -> Result<String> {
+    if self.current().kind == TokenKind::Dot {
+      return Ok(self.consume().value);
+    }
+
+    let mut text = self.expect(TokenKind::Identifier)?.value;
     while self.current().kind == TokenKind::ForwardSlash {
       text.push('/');
       self.consume();
-      text.push_str(&self.expect(TokenKind::Identifier).value);
+      text.push_str(&self.expect(TokenKind::Identifier)?.value);
     }
-    text
+    Ok(text)
   }
 
-  fn parse_function(&mut self) -> Function {
-    self.expect(TokenKind::FunctionKeyword);
-    let name = self.expect(TokenKind::Identifier).value;
+  fn parse_function(&mut self) -> Result<Function> {
+    self.expect(TokenKind::FunctionKeyword)?;
+    let name = self.expect(TokenKind::Identifier)?.value;
 
-    self.expect(TokenKind::LeftParen);
-    self.expect(TokenKind::RightParen);
+    self.expect(TokenKind::LeftParen)?;
+    self.expect(TokenKind::RightParen)?;
 
-    self.expect(TokenKind::LeftBrace);
+    self.expect(TokenKind::LeftBrace)?;
     let mut items = Vec::new();
     while self.current().kind != TokenKind::RightBrace {
-      items.push(self.parse_statement());
+      items.push(self.parse_statement()?);
     }
-    self.expect(TokenKind::RightBrace);
+    self.expect(TokenKind::RightBrace)?;
 
-    Function { name, items }
+    Ok(Function { name, items })
   }
 
-  fn parse_statement(&mut self) -> Statement {
-    match self.current_including(&[TokenKind::Comment]).kind {
-      TokenKind::Command => {
-        let command = self.consume().value;
-        Statement::Command(command)
-      }
+  fn parse_statement(&mut self) -> Result<Statement> {
+    Ok(match self.current_including(&[TokenKind::Comment]).kind {
+      TokenKind::CommandBegin => Statement::Command(self.parse_command()?),
       TokenKind::Comment => {
         let comment = self.consume_including(&[TokenKind::Comment]).value;
         Statement::Comment(comment)
       }
-      _ => Statement::Expression(self.parse_expression()),
-    }
+      _ => Statement::Expression(self.parse_expression()?),
+    })
   }
 
-  fn parse_expression(&mut self) -> Expression {
+  fn parse_command(&mut self) -> Result<Command> {
+    self.expect(TokenKind::CommandBegin)?;
+    let mut parts = Vec::new();
+
+    while self.current().kind != TokenKind::CommandEnd {
+      match self.current().kind {
+        TokenKind::CommandString => parts.push(CommandPart::Literal(self.consume().value)),
+        _ => parts.push(CommandPart::Expression(self.parse_static_expr()?)),
+      }
+    }
+
+    self.consume();
+
+    Ok(Command { parts })
+  }
+
+  fn parse_expression(&mut self) -> Result<Expression> {
     match self.current().kind {
       TokenKind::Integer => {
         let value = self.consume().value.parse().unwrap();
-        Expression::Integer(value)
+        Ok(Expression::Integer(value))
       }
       TokenKind::Colon | TokenKind::Identifier => {
-        let resource = self.parse_zoglin_resource();
+        let resource = self.parse_zoglin_resource()?;
         if self.current().kind == TokenKind::LeftParen {
-          Expression::FunctionCall(self.parse_function_call(resource))
+          Ok(Expression::FunctionCall(self.parse_function_call(resource)?))
         } else {
-          Expression::Variable(resource)
+          Ok(Expression::Variable(resource))
         }
       }
-      _ => raise_error(&self.current().location, &format!("Expected expression, got {:?}.", self.current().kind))
+      _ => Err(raise_error(self.current().location, &format!("Expected expression, got {:?}.", self.current().kind)))
     }
   }
 
-  fn parse_function_call(&mut self, path: ZoglinResource) -> FunctionCall {
-    self.expect(TokenKind::LeftParen);
-    self.expect(TokenKind::RightParen);
-    FunctionCall { path }
+  fn parse_static_expr(&mut self) -> Result<StaticExpr> {
+    let is_fn = self.current().kind == TokenKind::FunctionKeyword;
+    if is_fn {
+      self.consume();
+    }
+    let resource = self.parse_zoglin_resource()?;
+    if self.current().kind == TokenKind::LeftParen {
+      if is_fn {
+        return Err(raise_error(
+          self.current().location,
+          "`fn` keyword not required when calling a function",
+        ));
+      }
+      self.consume();
+      self.expect(TokenKind::RightParen)?;
+
+      return Ok(StaticExpr::FunctionCall(FunctionCall { path: resource }));
+    }
+    return Ok(StaticExpr::ResourceRef { resource, is_fn });
   }
 
-  fn parse_zoglin_resource(&mut self) -> ZoglinResource {
+  fn parse_function_call(&mut self, path: ZoglinResource) -> Result<FunctionCall> {
+    self.expect(TokenKind::LeftParen)?;
+    self.expect(TokenKind::RightParen)?;
+    Ok(FunctionCall { path })
+  }
+
+  fn parse_zoglin_resource(&mut self) -> Result<ZoglinResource> {
     let mut resource = ZoglinResource {
       namespace: None,
       modules: Vec::new(),
@@ -283,7 +337,7 @@ impl Parser {
       resource.namespace = Some(String::new());
     }
     loop {
-      let identifier = self.expect(TokenKind::Identifier).value;
+      let identifier = self.expect(TokenKind::Identifier)?.value;
       match self.current().kind {
         TokenKind::Colon => {
           self.consume();
@@ -306,6 +360,6 @@ impl Parser {
         }
       }
     }
-    resource
+    Ok(resource)
   }
 }

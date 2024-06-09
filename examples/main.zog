@@ -1,5 +1,6 @@
 namespace diamond
 include "includes/other"
+include "test"
 
 fn load() {
   scoreboard objectives add jump minecraft.custom:minecraft.jump
@@ -31,16 +32,17 @@ module jump {
 
   module foo {
     fn check() {
+      execute at @a run &{tick()}
     }
 
     fn bar() {
-      check()
+      schedule function &{fn player} 10t
     }
   }
 }
 
 fn no_import() {
-  api/included_fn()
+  other:api/included_fn()
 }
 
 res tags/blocks cool {
@@ -53,3 +55,16 @@ res tags/blocks cool {
 }
 
 res structures "*.nbt"
+
+asset models/item next_brace_jason {
+  parent: "minecraft:item/generated",
+  textures: {
+    layer0: "diamond:item/next_brace_jason"
+  }
+}
+
+asset textures/item "items/*.png"
+
+asset . sounds {
+  foobar: "baz"
+}

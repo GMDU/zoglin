@@ -15,12 +15,13 @@ made so far.
   - Function definition ✅
   - Function calling ✅
   - Functions with parameters
-- Commands (1/2)
+- Commands (2/2)
   - Commands in functions ✅
-  - Inline expressions
-- Resources (2/2)
+  - Inline expressions ✅
+- Resources (3/3)
   - JSON Resources ✅
   - NBT / other resources ✅
+  - Assets ✅
 - Include ✅
 - Proper error reporting ✅
 - Import (2/4)
@@ -36,6 +37,8 @@ made so far.
   - Storage variables
   - Scoreboard variables
   - Compile-time variables
+- CLI
+  - watch ✅
 
 ## Namespaces
 Namespaces are defined using the `namespace` block.
