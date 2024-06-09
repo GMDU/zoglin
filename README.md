@@ -15,9 +15,9 @@ made so far.
   - Function definition ✅
   - Function calling ✅
   - Functions with parameters
-- Commands (1/2)
+- Commands (2/2)
   - Commands in functions ✅
-  - Inline expressions
+  - Inline expressions ✅
 - Resources (3/3)
   - JSON Resources ✅
   - NBT / other resources ✅

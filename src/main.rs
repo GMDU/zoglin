@@ -57,7 +57,7 @@ fn main() {
 fn build(file: &String, output: &String, debug_mode: &str) -> (HashSet<String>, Result<()>) {
   print!("Building {} into {}... ", file, output);
   let start = SystemTime::now();
-  let mut lexer = Lexer::new(file, file);
+  let mut lexer = Lexer::new(file);
   let result = lexer.tokenise();
   let tokens = match result {
     Ok(tokens) => tokens,

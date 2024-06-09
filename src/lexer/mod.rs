@@ -1,6 +1,6 @@
 mod commands;
 pub mod token;
-use crate::error::{raise_error, Location, Result};
+use crate::error::{raise_error, raise_warning, Location, Result};
 
 use self::commands::COMMANDS;
 use glob::glob;
@@ -17,6 +17,7 @@ pub struct Lexer {
   next_brace_json: bool,
   line: usize,
   column: usize,
+  include_chain: Vec<String>,
 }
 
 static OPERATOR_REGISTRY: &[(&str, TokenKind)] = &[
@@ -43,7 +44,24 @@ static KEYWORD_REGISTRY: &[(&str, TokenKind)] = &[
 ];
 
 impl Lexer {
-  pub fn new(file: &str, root_path: &str) -> Lexer {
+  pub fn new(file: &str) -> Lexer {
+    let contents = fs::read_to_string(file).unwrap();
+    Lexer {
+      file: file.to_string(),
+      root: file.to_string(),
+      src: contents,
+      position: 0,
+      is_newline: true,
+      next_brace_json: false,
+      line: 1,
+      column: 1,
+      dependent_files: HashSet::new(),
+      include_chain: vec![file.to_string()],
+    }
+  }
+
+  fn child(file: &str, root_path: &str, mut include_chain: Vec<String>) -> Lexer {
+    include_chain.push(file.to_string());
     let contents = fs::read_to_string(file).unwrap();
     Lexer {
       file: file.to_string(),
@@ -55,6 +73,7 @@ impl Lexer {
       line: 1,
       column: 1,
       dependent_files: HashSet::new(),
+      include_chain: include_chain,
     }
   }
 
@@ -312,9 +331,16 @@ impl Lexer {
       match entry {
         Ok(path) => {
           let path_str = path.to_str().unwrap();
-          self.dependent_files.insert(path_str.to_string());
+          let path_string = path_str.to_string();
+          if let Some(index) = self.include_chain.iter().position(|file| &path_string == file) {
+            if index != (self.include_chain.len() - 1) {
+              raise_warning(token.location.clone(), "Circular dependency detected, not including file.");
+            }
+            continue;
+          }
+          self.dependent_files.insert(path_string);
 
-          let mut lexer = Lexer::new(path_str, &self.root);
+          let mut lexer = Lexer::child(path_str, &self.root, self.include_chain.clone());
 
           tokens.extend(lexer.tokenise()?);
           self.dependent_files.extend(lexer.dependent_files);
