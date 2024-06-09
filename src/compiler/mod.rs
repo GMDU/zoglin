@@ -257,6 +257,7 @@ impl Compiler {
       Expression::FunctionCall(function_call) => (vec![self.compile_function_call(function_call, location)], ExpressionType::Void),
       Expression::Integer(integer) => (Vec::new(), ExpressionType::Integer(integer.clone())),
       Expression::Variable(_) => todo!(),
+      Expression::BinaryOperation(binary_operation) => todo!(),
     }
   }
 

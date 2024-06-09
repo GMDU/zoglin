@@ -11,6 +11,7 @@ use crate::{
 
 pub mod ast;
 mod json;
+mod binary_operation;
 
 pub struct Parser {
   tokens: Vec<Token>,
@@ -259,7 +260,7 @@ impl Parser {
         let comment = self.consume_including(&[TokenKind::Comment]).value;
         Statement::Comment(comment)
       }
-      _ => Statement::Expression(self.parse_expression()?),
+      _ => Statement::Expression(self.parse_expression(0)?),
     })
   }
 
@@ -279,21 +280,17 @@ impl Parser {
     Ok(Command { parts })
   }
 
-  fn parse_expression(&mut self) -> Result<Expression> {
-    match self.current().kind {
-      TokenKind::Integer => {
-        let value = self.consume().value.parse().unwrap();
-        Ok(Expression::Integer(value))
-      }
-      TokenKind::Colon | TokenKind::Identifier => {
-        let resource = self.parse_zoglin_resource()?;
-        if self.current().kind == TokenKind::LeftParen {
-          Ok(Expression::FunctionCall(self.parse_function_call(resource)?))
-        } else {
-          Ok(Expression::Variable(resource))
-        }
-      }
-      _ => Err(raise_error(self.current().location, &format!("Expected expression, got {:?}.", self.current().kind)))
+  fn parse_integer(&mut self) -> Result<Expression> {
+    let value = self.consume().value.parse().unwrap();
+    Ok(Expression::Integer(value))
+  }
+
+  fn parse_identifier(&mut self) -> Result<Expression> {
+    let resource = self.parse_zoglin_resource()?;
+    if self.current().kind == TokenKind::LeftParen {
+      Ok(Expression::FunctionCall(self.parse_function_call(resource)?))
+    } else {
+      Ok(Expression::Variable(resource))
     }
   }
 

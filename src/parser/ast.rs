@@ -79,7 +79,8 @@ pub enum StaticExpr {
 pub enum Expression {
   FunctionCall(FunctionCall),
   Integer(i32),
-  Variable(ZoglinResource)
+  Variable(ZoglinResource),
+  BinaryOperation(BinaryOperation),
 }
 
 #[derive(Debug)]
@@ -92,4 +93,34 @@ pub struct ZoglinResource {
   pub namespace: Option<String>,
   pub modules: Vec<String>,
   pub name: String,
+}
+
+#[derive(Debug)]
+pub struct BinaryOperation {
+  pub left: Box<Expression>,
+  pub right: Box<Expression>,
+  pub operator: Operator,
+}
+
+
+#[derive(Debug, Clone)]
+pub enum Operator {
+  Plus,
+  Minus,
+  Divide,
+  Multiply,
+  Modulo,
+  Power,
+  LeftShift,
+  RightShift,
+  LessThan,
+  GreaterThan,
+  LessThanEquals,
+  GreaterThanEquals,
+  Equal,
+  NotEqual,
+  LogicalAnd,
+  LogicalOr,
+  Assign,
+  OperatorAssign(Box<Operator>)
 }
