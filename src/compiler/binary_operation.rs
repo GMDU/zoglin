@@ -3,8 +3,8 @@ use std::borrow::Borrow;
 use crate::parser::ast::{BinaryOperation, Expression, Operator};
 
 use super::{
-  file_tree::{FunctionLocation, StorageLocation},
-  Compiler, ExpressionType,
+  file_tree::{FunctionLocation, ScoreboardLocation, StorageLocation},
+  Compiler, ExpressionType, ScoreKind, StorageKind,
 };
 
 impl Compiler {
@@ -14,7 +14,7 @@ impl Compiler {
     location: &FunctionLocation,
   ) -> (Vec<String>, ExpressionType) {
     match binary_operation.operator {
-      Operator::Plus => todo!(),
+      Operator::Plus => self.compile_plus(binary_operation, location),
       Operator::Minus => todo!(),
       Operator::Divide => todo!(),
       Operator::Multiply => todo!(),
@@ -46,12 +46,75 @@ impl Compiler {
 
     let (mut lines, typ) = self.compile_expression(&binary_operation.right, location);
 
-    lines.push(format!(
-      "data modify storage {} set {}",
-      StorageLocation::from_zoglin_resource(location.clone(), variable).to_string(),
-      typ.to_storage()
-    ));
+    let (code, kind) = typ.to_storage();
+
+    match kind {
+      StorageKind::Direct => {
+        lines.push(format!(
+          "data modify storage {} set {}",
+          StorageLocation::from_zoglin_resource(location.clone(), variable).to_string(),
+          code
+        ));
+      }
+      StorageKind::Indirect => {
+        lines.push(format!(
+          "execute store result storage {} int 1 run {}",
+          StorageLocation::from_zoglin_resource(location.clone(), variable).to_string(),
+          code
+        ));
+      }
+    }
 
     (lines, typ)
+  }
+
+  fn compile_plus(
+    &self,
+    binary_operation: &BinaryOperation,
+    location: &FunctionLocation,
+  ) -> (Vec<String>, ExpressionType) {
+    let mut code = Vec::new();
+    let (left_code, left_type) = self.compile_expression(&binary_operation.left, location);
+    code.extend(left_code);
+    let (right_code, right_type) = self.compile_expression(&binary_operation.right, location);
+    code.extend(right_code);
+
+    match (left_type, right_type) {
+      (ExpressionType::Void, _) | (_, ExpressionType::Void) => {
+        panic!("Cannot add type void to another value")
+      }
+      (ExpressionType::Integer(a), ExpressionType::Integer(b)) => {
+        (code, ExpressionType::Integer(a + b))
+      }
+      (left, right) => {
+        let left_scoreboard = self.state.borrow_mut().next_scoreboard();
+        let right_scoreboard = self.state.borrow_mut().next_scoreboard();
+        code.push(self.copy_to_scoreboard(left, &left_scoreboard));
+        code.push(self.copy_to_scoreboard(right, &right_scoreboard));
+        code.push(format!(
+          "scoreboard players operation {} += {}",
+          left_scoreboard.to_string(),
+          right_scoreboard.to_string()
+        ));
+        (code, ExpressionType::Scoreboard(left_scoreboard))
+      }
+    }
+  }
+
+  fn copy_to_scoreboard(&self, value: ExpressionType, scoreboard: &ScoreboardLocation) -> String {
+    let (code, kind) = value.to_score();
+    match kind {
+      ScoreKind::Direct(operation) => format!(
+        "scoreboard players {} {} {}",
+        operation,
+        scoreboard.to_string(),
+        code
+      ),
+      ScoreKind::Indirect => format!(
+        "execute store result score {} run {}",
+        scoreboard.to_string(),
+        code
+      ),
+    }
   }
 }

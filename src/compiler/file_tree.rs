@@ -261,3 +261,15 @@ impl StorageLocation {
     format!("{} {}", self.storage.to_string(), self.name)
   }
 }
+
+#[derive(Clone, Debug)]
+pub struct ScoreboardLocation {
+  pub scoreboard: Vec<String>,
+  pub name: String,
+}
+
+impl ScoreboardLocation {
+  pub fn to_string(&self) -> String {
+    format!("{} {}", self.name, self.scoreboard.join("."))
+  }
+}

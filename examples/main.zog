@@ -4,6 +4,10 @@ include "test"
 
 fn load() {
   scoreboard objectives add jump minecraft.custom:minecraft.jump
+  a = 10 + 20
+  b = a
+  c = a + b
+  d = a + b + c + 10
 }
 
 fn tick() {

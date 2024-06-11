@@ -1,11 +1,10 @@
 use std::{cell::RefCell, path::Path};
 
-use file_tree::FunctionLocation;
+use file_tree::{FunctionLocation, ScoreboardLocation, StorageLocation};
 use serde::Serialize;
 
 use crate::parser::ast::{
-  self, Command, Expression, File, FunctionCall, Statement, StaticExpr,
-  ZoglinResource,
+  self, Command, Expression, File, FunctionCall, Statement, StaticExpr, ZoglinResource,
 };
 
 use self::{
@@ -29,6 +28,7 @@ struct CompilerState {
   load_functions: Vec<String>,
   scopes: Vec<Scope>,
   current_scope: usize,
+  scoreboard_counter: usize,
 }
 
 #[derive(Serialize)]
@@ -39,13 +39,48 @@ struct FunctionTag<'a> {
 enum ExpressionType {
   Void,
   Integer(i32),
+  Storage(StorageLocation),
+  Scoreboard(ScoreboardLocation),
+}
+
+enum StorageKind {
+  Direct,
+  Indirect,
+}
+
+enum ScoreKind {
+  Direct(String),
+  Indirect,
 }
 
 impl ExpressionType {
-  fn to_storage(&self) -> String {
+  fn to_storage(&self) -> (String, StorageKind) {
     match self {
       ExpressionType::Void => panic!("Cannot assign void to a value"),
-      ExpressionType::Integer(i) => format!("value {}", *i),
+      ExpressionType::Integer(i) => (format!("value {}", *i), StorageKind::Direct),
+      ExpressionType::Storage(location) => (
+        format!("from storage {}", location.to_string()),
+        StorageKind::Direct,
+      ),
+      ExpressionType::Scoreboard(location) => (
+        format!("scoreboard players get {}", location.to_string()),
+        StorageKind::Indirect,
+      ),
+    }
+  }
+
+  fn to_score(&self) -> (String, ScoreKind) {
+    match self {
+      ExpressionType::Void => panic!("Cannot assign void to a value"),
+      ExpressionType::Integer(i) => (i.to_string(), ScoreKind::Direct("set".to_string())),
+      ExpressionType::Storage(location) => (
+        format!("data get storage {}", location.to_string()),
+        ScoreKind::Indirect,
+      ),
+      ExpressionType::Scoreboard(location) => (
+        format!("= {}", location.to_string()),
+        ScoreKind::Direct("operation".to_string()),
+      ),
     }
   }
 }
@@ -98,6 +133,18 @@ impl CompilerState {
   fn register_import(&mut self, scope: usize, name: String, location: ResourceLocation) {
     self.scopes[scope].imported_items.insert(name, location);
   }
+
+  fn next_scoreboard(&mut self) -> ScoreboardLocation {
+    let next_counter = self.scoreboard_counter;
+    self.scoreboard_counter += 1;
+    ScoreboardLocation {
+      scoreboard: vec!["zoglin", "internal", "vars"]
+        .into_iter()
+        .map(|s| s.to_string())
+        .collect(),
+      name: format!("$var_{}", next_counter),
+    }
+  }
 }
 
 impl Compiler {
@@ -109,6 +156,7 @@ impl Compiler {
         load_functions: Vec::new(),
         scopes: Vec::new(),
         current_scope: 0,
+        scoreboard_counter: 0,
       }),
     }
   }
@@ -228,11 +276,7 @@ impl Compiler {
     }
   }
 
-  fn compile_statement(
-    &self,
-    statement: &Statement,
-    location: &FunctionLocation,
-  ) -> Vec<String> {
+  fn compile_statement(&self, statement: &Statement, location: &FunctionLocation) -> Vec<String> {
     match statement {
       Statement::Command(command) => vec![self.compile_command(command, location)],
       Statement::Comment(comment) => vec![comment.clone()],
@@ -241,11 +285,14 @@ impl Compiler {
   }
 
   fn compile_function(&self, function: &ast::Function, location: &ResourceLocation) -> Function {
-    let fn_location = FunctionLocation{ module: location.clone(), name: function.name.clone() };
+    let fn_location = FunctionLocation {
+      module: location.clone(),
+      name: function.name.clone(),
+    };
     let commands = function
       .items
       .iter()
-      .flat_map(|statement| self.compile_statement(statement, &fn_location,))
+      .flat_map(|statement| self.compile_statement(statement, &fn_location))
       .collect();
 
     Function {
@@ -280,7 +327,13 @@ impl Compiler {
         ExpressionType::Void,
       ),
       Expression::Integer(integer) => (Vec::new(), ExpressionType::Integer(integer.clone())),
-      Expression::Variable(_) => todo!(),
+      Expression::Variable(variable) => (
+        Vec::new(),
+        ExpressionType::Storage(StorageLocation::from_zoglin_resource(
+          location.clone(),
+          variable,
+        )),
+      ),
       Expression::BinaryOperation(binary_operation) => {
         self.compile_binary_operation(binary_operation, location)
       }
