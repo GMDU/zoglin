@@ -1,8 +1,11 @@
-use crate::{error::raise_error, lexer::token::TokenKind};
 use crate::error::Result;
+use crate::{error::raise_error, lexer::token::TokenKind};
 
 use super::ast::BinaryOperation;
-use super::{ast::{Expression, Operator}, Parser};
+use super::{
+  ast::{Expression, Operator},
+  Parser,
+};
 
 impl Parser {
   fn match_operator(kind: TokenKind) -> Operator {
@@ -29,35 +32,35 @@ impl Parser {
       TokenKind::StarEquals => Operator::OperatorAssign(Box::new(Operator::Multiply)),
       TokenKind::ForwardSlashEquals => Operator::OperatorAssign(Box::new(Operator::Divide)),
       TokenKind::PercentEquals => Operator::OperatorAssign(Box::new(Operator::Modulo)),
-      _ => unreachable!("Invalid Operator")
+      _ => unreachable!("Invalid Operator"),
     }
   }
 
-  fn match_precedence(kind: TokenKind) -> u8 {
+  fn match_precedence(kind: TokenKind) -> (u8, u8) {
     match kind {
-      TokenKind::DoubleStar => 8,
-      TokenKind::ForwardSlash => 7,
-      TokenKind::Star => 7,
-      TokenKind::Percent => 7,
-      TokenKind::Plus => 6,
-      TokenKind::Minus => 6,
-      TokenKind::LeftShift => 5,
-      TokenKind::RightShift => 5,
-      TokenKind::LessThan => 4,
-      TokenKind::GreaterThan => 4,
-      TokenKind::LessThanEquals => 4,
-      TokenKind::GreaterThanEquals => 4,
-      TokenKind::DoubleEquals => 3,
-      TokenKind::BangEquals => 3,
-      TokenKind::DoubleAmpersand => 2,
-      TokenKind::DoublePipe => 2,
-      TokenKind::Equals => 1,
-      TokenKind::PlusEquals => 1,
-      TokenKind::MinusEquals => 1,
-      TokenKind::StarEquals => 1,
-      TokenKind::ForwardSlashEquals => 1,
-      TokenKind::PercentEquals => 1,
-      _ => 0
+      TokenKind::DoubleStar => (8, 7),
+      TokenKind::ForwardSlash |
+      TokenKind::Star |
+      TokenKind::Percent => (7, 7),
+      TokenKind::Plus |
+      TokenKind::Minus => (6, 6),
+      TokenKind::LeftShift|
+      TokenKind::RightShift => (5, 5),
+      TokenKind::LessThan |
+      TokenKind::GreaterThan |
+      TokenKind::LessThanEquals |
+      TokenKind::GreaterThanEquals => (4, 4),
+      TokenKind::DoubleEquals |
+      TokenKind::BangEquals => (3, 3),
+      TokenKind::DoubleAmpersand |
+      TokenKind::DoublePipe => (2, 2),
+      TokenKind::Equals |
+      TokenKind::PlusEquals |
+      TokenKind::MinusEquals |
+      TokenKind::StarEquals |
+      TokenKind::ForwardSlashEquals |
+      TokenKind::PercentEquals => (1, 0),
+      _ => (0, 0),
     }
   }
 
@@ -65,17 +68,22 @@ impl Parser {
     let function = match kind {
       TokenKind::Identifier | TokenKind::Colon => Parser::parse_identifier,
       TokenKind::Integer => Parser::parse_integer,
-      _ => return None
+      _ => return None,
     };
     Some(function)
   }
 
   pub fn parse_expression(&mut self, min_precedence: u8) -> Result<Expression> {
-    let function = Parser::lookup_prefix(self.current().kind).ok_or(raise_error(self.current().location, &format!("Expected expression, got {:?}.", self.current().kind)))?;
+    let function = Parser::lookup_prefix(self.current().kind).ok_or(raise_error(
+      self.current().location,
+      &format!("Expected expression, got {:?}.", self.current().kind),
+    ))?;
     let mut left = function(self)?;
     while let Some(function) = Parser::lookup_infix(self.current().kind) {
-      let precedence = Parser::match_precedence(self.current().kind);
-      if precedence <= min_precedence { break };
+      let precedence = Parser::match_precedence(self.current().kind).0;
+      if precedence <= min_precedence {
+        break;
+      };
       left = function(self, left)?;
     }
     Ok(left)
@@ -84,14 +92,12 @@ impl Parser {
   fn parse_binary_operation(&mut self, left: Expression) -> Result<Expression> {
     let operator = Parser::match_operator(self.current().kind);
     let precedence = Parser::match_precedence(self.consume().kind);
-    let right = self.parse_expression(precedence)?;
-    return Ok(Expression::BinaryOperation(
-      BinaryOperation{
-        operator,
-        left: Box::new(left),
-        right: Box::new(right)
-      }
-    ))
+    let right = self.parse_expression(precedence.1)?;
+    return Ok(Expression::BinaryOperation(BinaryOperation {
+      operator,
+      left: Box::new(left),
+      right: Box::new(right),
+    }));
   }
 
   fn lookup_infix(kind: TokenKind) -> Option<InfixFn> {
@@ -118,7 +124,7 @@ impl Parser {
       | TokenKind::StarEquals
       | TokenKind::ForwardSlashEquals
       | TokenKind::PercentEquals => Parser::parse_binary_operation,
-      _ => return None
+      _ => return None,
     };
     Some(function)
   }
