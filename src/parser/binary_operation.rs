@@ -39,27 +39,21 @@ impl Parser {
   fn match_precedence(kind: TokenKind) -> (u8, u8) {
     match kind {
       TokenKind::DoubleStar => (8, 7),
-      TokenKind::ForwardSlash |
-      TokenKind::Star |
-      TokenKind::Percent => (7, 7),
-      TokenKind::Plus |
-      TokenKind::Minus => (6, 6),
-      TokenKind::LeftShift|
-      TokenKind::RightShift => (5, 5),
-      TokenKind::LessThan |
-      TokenKind::GreaterThan |
-      TokenKind::LessThanEquals |
-      TokenKind::GreaterThanEquals => (4, 4),
-      TokenKind::DoubleEquals |
-      TokenKind::BangEquals => (3, 3),
-      TokenKind::DoubleAmpersand |
-      TokenKind::DoublePipe => (2, 2),
-      TokenKind::Equals |
-      TokenKind::PlusEquals |
-      TokenKind::MinusEquals |
-      TokenKind::StarEquals |
-      TokenKind::ForwardSlashEquals |
-      TokenKind::PercentEquals => (1, 0),
+      TokenKind::ForwardSlash | TokenKind::Star | TokenKind::Percent => (7, 7),
+      TokenKind::Plus | TokenKind::Minus => (6, 6),
+      TokenKind::LeftShift | TokenKind::RightShift => (5, 5),
+      TokenKind::LessThan
+      | TokenKind::GreaterThan
+      | TokenKind::LessThanEquals
+      | TokenKind::GreaterThanEquals => (4, 4),
+      TokenKind::DoubleEquals | TokenKind::BangEquals => (3, 3),
+      TokenKind::DoubleAmpersand | TokenKind::DoublePipe => (2, 2),
+      TokenKind::Equals
+      | TokenKind::PlusEquals
+      | TokenKind::MinusEquals
+      | TokenKind::StarEquals
+      | TokenKind::ForwardSlashEquals
+      | TokenKind::PercentEquals => (1, 0),
       _ => (0, 0),
     }
   }

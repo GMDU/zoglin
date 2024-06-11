@@ -2,7 +2,7 @@ use glob::glob;
 use serde::Serialize;
 use std::{fs, path::Path};
 
-use crate::parser::ast;
+use crate::parser::ast::{self, ZoglinResource};
 
 #[derive(Debug)]
 pub struct FileTree {
@@ -179,20 +179,29 @@ pub struct ResourceLocation {
   pub modules: Vec<String>,
 }
 
+// foo:bar = "foo"
+// foo/bar = None
+// :foo/bar = ""
+
 impl ResourceLocation {
   pub fn from_zoglin_resource(
     base_location: &ResourceLocation,
     resource: &ast::ZoglinResource,
   ) -> ResourceLocation {
-    let namespace = if let Some(namespace) = resource.namespace.clone() {
-      namespace
-    } else {
-      base_location.namespace.clone()
-    };
+    if let Some(mut namespace) = resource.namespace.clone() {
+      if namespace.is_empty() {
+        namespace = base_location.namespace.clone();
+      }
 
-    let mut modules = resource.modules.clone();
-    modules.push(resource.name.clone());
-    ResourceLocation { namespace, modules }
+      let mut modules = resource.modules.clone();
+      modules.push(resource.name.clone());
+      return ResourceLocation { namespace, modules };
+    }
+    let mut location = base_location.clone();
+
+    location.modules.extend(resource.modules.clone());
+    location.modules.push(resource.name.clone());
+    location
   }
 
   pub fn to_string(&self) -> String {
@@ -206,5 +215,49 @@ impl ResourceLocation {
     }
     prefix.push_str(suffix);
     prefix
+  }
+}
+
+#[derive(Clone, Debug)]
+pub struct FunctionLocation {
+  pub module: ResourceLocation,
+  pub name: String,
+}
+
+impl FunctionLocation {
+  pub fn flatten(self) -> ResourceLocation {
+    let mut result = self.module;
+    result.modules.push(self.name);
+    result
+  }
+}
+
+#[derive(Clone, Debug)]
+pub struct StorageLocation {
+  pub storage: ResourceLocation,
+  pub name: String,
+}
+
+impl StorageLocation {
+  pub fn from_zoglin_resource(
+    fn_loc: FunctionLocation,
+    resource: &ZoglinResource,
+  ) -> StorageLocation {
+    StorageLocation::from_resource_location(ResourceLocation::from_zoglin_resource(
+      &fn_loc.flatten(),
+      resource,
+    ))
+  }
+
+  fn from_resource_location(mut location: ResourceLocation) -> StorageLocation {
+    let name = location.modules.pop().unwrap();
+    StorageLocation {
+      storage: location,
+      name,
+    }
+  }
+
+  pub fn to_string(&self) -> String {
+    format!("{} {}", self.storage.to_string(), self.name)
   }
 }

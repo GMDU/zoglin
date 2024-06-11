@@ -1,9 +1,11 @@
 use std::{cell::RefCell, path::Path};
 
+use file_tree::FunctionLocation;
 use serde::Serialize;
 
 use crate::parser::ast::{
-  self, Command, Expression, File, FunctionCall, Statement, StaticExpr, ZoglinResource,
+  self, Command, Expression, File, FunctionCall, Statement, StaticExpr,
+  ZoglinResource,
 };
 
 use self::{
@@ -12,6 +14,7 @@ use self::{
   },
   scope::Scope,
 };
+mod binary_operation;
 mod file_tree;
 mod register;
 mod scope;
@@ -35,7 +38,16 @@ struct FunctionTag<'a> {
 
 enum ExpressionType {
   Void,
-  Integer(i32)
+  Integer(i32),
+}
+
+impl ExpressionType {
+  fn to_storage(&self) -> String {
+    match self {
+      ExpressionType::Void => panic!("Cannot assign void to a value"),
+      ExpressionType::Integer(i) => format!("value {}", *i),
+    }
+  }
 }
 
 impl CompilerState {
@@ -216,7 +228,11 @@ impl Compiler {
     }
   }
 
-  fn compile_statement(&self, statement: &Statement, location: &ResourceLocation) -> Vec<String> {
+  fn compile_statement(
+    &self,
+    statement: &Statement,
+    location: &FunctionLocation,
+  ) -> Vec<String> {
     match statement {
       Statement::Command(command) => vec![self.compile_command(command, location)],
       Statement::Comment(comment) => vec![comment.clone()],
@@ -225,10 +241,11 @@ impl Compiler {
   }
 
   fn compile_function(&self, function: &ast::Function, location: &ResourceLocation) -> Function {
+    let fn_location = FunctionLocation{ module: location.clone(), name: function.name.clone() };
     let commands = function
       .items
       .iter()
-      .flat_map(|statement| self.compile_statement(statement, &location))
+      .flat_map(|statement| self.compile_statement(statement, &fn_location,))
       .collect();
 
     Function {
@@ -237,14 +254,14 @@ impl Compiler {
     }
   }
 
-  fn compile_command(&self, command: &Command, location: &ResourceLocation) -> String {
+  fn compile_command(&self, command: &Command, location: &FunctionLocation) -> String {
     let mut result = String::new();
 
     for part in command.parts.iter() {
       match part {
         ast::CommandPart::Literal(lit) => result.push_str(&lit),
         ast::CommandPart::Expression(expr) => {
-          result.push_str(&self.compile_static_expr(expr, location))
+          result.push_str(&self.compile_static_expr(expr, &location.module))
         }
       }
     }
@@ -252,12 +269,21 @@ impl Compiler {
     result
   }
 
-  fn compile_expression(&self, expression: &Expression, location: &ResourceLocation) -> (Vec<String>, ExpressionType) {
+  fn compile_expression(
+    &self,
+    expression: &Expression,
+    location: &FunctionLocation,
+  ) -> (Vec<String>, ExpressionType) {
     match expression {
-      Expression::FunctionCall(function_call) => (vec![self.compile_function_call(function_call, location)], ExpressionType::Void),
+      Expression::FunctionCall(function_call) => (
+        vec![self.compile_function_call(function_call, &location.module)],
+        ExpressionType::Void,
+      ),
       Expression::Integer(integer) => (Vec::new(), ExpressionType::Integer(integer.clone())),
       Expression::Variable(_) => todo!(),
-      Expression::BinaryOperation(binary_operation) => todo!(),
+      Expression::BinaryOperation(binary_operation) => {
+        self.compile_binary_operation(binary_operation, location)
+      }
     }
   }
 
