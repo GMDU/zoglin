@@ -8,6 +8,8 @@ fn load() {
   b = a
   c = a + b
   d = a + b + c + 10
+  e = d - 10
+  f = a * b + c / d % e - a
 }
 
 fn tick() {

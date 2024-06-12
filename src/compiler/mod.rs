@@ -276,12 +276,14 @@ impl Compiler {
     }
   }
 
-  fn compile_statement(&self, statement: &Statement, location: &FunctionLocation) -> Vec<String> {
+  fn compile_statement(&self, statement: &Statement, location: &FunctionLocation, code: &mut Vec<String>) {
     match statement {
-      Statement::Command(command) => vec![self.compile_command(command, location)],
-      Statement::Comment(comment) => vec![comment.clone()],
-      Statement::Expression(expression) => self.compile_expression(expression, location).0,
-    }
+      Statement::Command(command) => code.push(self.compile_command(command, location)),
+      Statement::Comment(comment) => code.push(comment.clone()),
+      Statement::Expression(expression) => {
+        self.compile_expression(expression, location, code);
+      },
+    };
   }
 
   fn compile_function(&self, function: &ast::Function, location: &ResourceLocation) -> Function {
@@ -289,11 +291,11 @@ impl Compiler {
       module: location.clone(),
       name: function.name.clone(),
     };
-    let commands = function
-      .items
-      .iter()
-      .flat_map(|statement| self.compile_statement(statement, &fn_location))
-      .collect();
+
+    let mut commands = Vec::new();
+    for item in &function.items {
+      self.compile_statement(item, &fn_location, &mut commands);
+    }
 
     Function {
       name: function.name.clone(),
@@ -320,22 +322,21 @@ impl Compiler {
     &self,
     expression: &Expression,
     location: &FunctionLocation,
-  ) -> (Vec<String>, ExpressionType) {
+    code: &mut Vec<String>
+  ) -> ExpressionType {
     match expression {
-      Expression::FunctionCall(function_call) => (
-        vec![self.compile_function_call(function_call, &location.module)],
-        ExpressionType::Void,
-      ),
-      Expression::Integer(integer) => (Vec::new(), ExpressionType::Integer(integer.clone())),
-      Expression::Variable(variable) => (
-        Vec::new(),
-        ExpressionType::Storage(StorageLocation::from_zoglin_resource(
+      Expression::FunctionCall(function_call) => {
+        code.push(self.compile_function_call(function_call, &location.module));
+        ExpressionType::Void
+      },
+      Expression::Integer(integer) => ExpressionType::Integer(integer.clone()),
+      Expression::Variable(variable) => ExpressionType::Storage(StorageLocation::from_zoglin_resource(
           location.clone(),
           variable,
-        )),
+        ),
       ),
       Expression::BinaryOperation(binary_operation) => {
-        self.compile_binary_operation(binary_operation, location)
+        self.compile_binary_operation(binary_operation, location, code)
       }
     }
   }

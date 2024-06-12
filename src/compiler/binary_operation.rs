@@ -12,13 +12,14 @@ impl Compiler {
     &self,
     binary_operation: &BinaryOperation,
     location: &FunctionLocation,
-  ) -> (Vec<String>, ExpressionType) {
+    code: &mut Vec<String>
+  ) -> ExpressionType {
     match binary_operation.operator {
-      Operator::Plus => self.compile_plus(binary_operation, location),
-      Operator::Minus => todo!(),
-      Operator::Divide => todo!(),
-      Operator::Multiply => todo!(),
-      Operator::Modulo => todo!(),
+      Operator::Plus => self.compile_plus(binary_operation, location, code),
+      Operator::Minus => self.compile_minus(binary_operation, location, code),
+      Operator::Divide => self.compile_divide(binary_operation, location, code),
+      Operator::Multiply => self.compile_multiply(binary_operation, location, code),
+      Operator::Modulo => self.compile_modulo(binary_operation, location, code),
       Operator::Power => todo!(),
       Operator::LeftShift => todo!(),
       Operator::RightShift => todo!(),
@@ -30,7 +31,7 @@ impl Compiler {
       Operator::NotEqual => todo!(),
       Operator::LogicalAnd => todo!(),
       Operator::LogicalOr => todo!(),
-      Operator::Assign => self.compile_assignment(binary_operation, location),
+      Operator::Assign => self.compile_assignment(binary_operation, location, code),
       Operator::OperatorAssign(_) => todo!(),
     }
   }
@@ -39,66 +40,148 @@ impl Compiler {
     &self,
     binary_operation: &BinaryOperation,
     location: &FunctionLocation,
-  ) -> (Vec<String>, ExpressionType) {
+    code: &mut Vec<String>
+  ) -> ExpressionType {
     let Expression::Variable(variable) = binary_operation.left.borrow() else {
-      panic!("Can only assign to variables")
+      panic!("Can only assign to variables.")
     };
 
-    let (mut lines, typ) = self.compile_expression(&binary_operation.right, location);
+    let typ = self.compile_expression(&binary_operation.right, location, code);
 
-    let (code, kind) = typ.to_storage();
+    let (command, kind) = typ.to_storage();
 
     match kind {
       StorageKind::Direct => {
-        lines.push(format!(
+        code.push(format!(
           "data modify storage {} set {}",
           StorageLocation::from_zoglin_resource(location.clone(), variable).to_string(),
-          code
+          command
         ));
       }
       StorageKind::Indirect => {
-        lines.push(format!(
+        code.push(format!(
           "execute store result storage {} int 1 run {}",
           StorageLocation::from_zoglin_resource(location.clone(), variable).to_string(),
-          code
+          command
         ));
       }
     }
 
-    (lines, typ)
+    typ
   }
 
   fn compile_plus(
     &self,
     binary_operation: &BinaryOperation,
     location: &FunctionLocation,
-  ) -> (Vec<String>, ExpressionType) {
-    let mut code = Vec::new();
-    let (left_code, left_type) = self.compile_expression(&binary_operation.left, location);
-    code.extend(left_code);
-    let (right_code, right_type) = self.compile_expression(&binary_operation.right, location);
-    code.extend(right_code);
+    code: &mut Vec<String>
+  ) -> ExpressionType {
+    let left = self.compile_expression(&binary_operation.left, location, code);
+    let right = self.compile_expression(&binary_operation.right, location, code);
 
-    match (left_type, right_type) {
+    match (left, right) {
       (ExpressionType::Void, _) | (_, ExpressionType::Void) => {
-        panic!("Cannot add type void to another value")
+        panic!("Cannot add type void to another value.")
       }
-      (ExpressionType::Integer(a), ExpressionType::Integer(b)) => {
-        (code, ExpressionType::Integer(a + b))
-      }
+      (ExpressionType::Integer(a), ExpressionType::Integer(b)) => ExpressionType::Integer(a + b),
       (left, right) => {
-        let left_scoreboard = self.state.borrow_mut().next_scoreboard();
-        let right_scoreboard = self.state.borrow_mut().next_scoreboard();
-        code.push(self.copy_to_scoreboard(left, &left_scoreboard));
-        code.push(self.copy_to_scoreboard(right, &right_scoreboard));
-        code.push(format!(
-          "scoreboard players operation {} += {}",
-          left_scoreboard.to_string(),
-          right_scoreboard.to_string()
-        ));
-        (code, ExpressionType::Scoreboard(left_scoreboard))
+        self.compile_basic_operator(left, right, '+', code)
       }
     }
+  }
+
+  fn compile_minus(
+    &self,
+    binary_operation: &BinaryOperation,
+    location: &FunctionLocation,
+    code: &mut Vec<String>
+  ) -> ExpressionType {
+    let left = self.compile_expression(&binary_operation.left, location, code);
+    let right = self.compile_expression(&binary_operation.right, location, code);
+
+    match (left, right) {
+      (ExpressionType::Void, _) | (_, ExpressionType::Void) => {
+        panic!("Cannot perform subtraction with void.")
+      }
+      (ExpressionType::Integer(a), ExpressionType::Integer(b)) => ExpressionType::Integer(a - b),
+      (left, right) => {
+        self.compile_basic_operator(left, right, '-', code)
+      }
+    }
+  }
+
+  fn compile_multiply(
+    &self,
+    binary_operation: &BinaryOperation,
+    location: &FunctionLocation,
+    code: &mut Vec<String>
+  ) -> ExpressionType {
+    let left = self.compile_expression(&binary_operation.left, location, code);
+    let right = self.compile_expression(&binary_operation.right, location, code);
+
+    match (left, right) {
+      (ExpressionType::Void, _) | (_, ExpressionType::Void) => {
+        panic!("Cannot perform multiplication with void.")
+      }
+      (ExpressionType::Integer(a), ExpressionType::Integer(b)) => ExpressionType::Integer(a * b),
+      (left, right) => {
+        self.compile_basic_operator(left, right, '*', code)
+      }
+    }
+  }
+
+  fn compile_divide(
+    &self,
+    binary_operation: &BinaryOperation,
+    location: &FunctionLocation,
+    code: &mut Vec<String>
+  ) -> ExpressionType {
+    let left = self.compile_expression(&binary_operation.left, location, code);
+    let right = self.compile_expression(&binary_operation.right, location, code);
+
+    match (left, right) {
+      (ExpressionType::Void, _) | (_, ExpressionType::Void) => {
+        panic!("Cannot perform division with void.")
+      }
+      (ExpressionType::Integer(a), ExpressionType::Integer(b)) => ExpressionType::Integer(a / b),
+      (left, right) => {
+        self.compile_basic_operator(left, right, '/', code)
+      }
+    }
+  }
+
+  fn compile_modulo(
+    &self,
+    binary_operation: &BinaryOperation,
+    location: &FunctionLocation,
+    code: &mut Vec<String>
+  ) -> ExpressionType {
+    let left = self.compile_expression(&binary_operation.left, location, code);
+    let right = self.compile_expression(&binary_operation.right, location, code);
+
+    match (left, right) {
+      (ExpressionType::Void, _) | (_, ExpressionType::Void) => {
+        panic!("Cannot perform modulo with void.")
+      }
+      (ExpressionType::Integer(a), ExpressionType::Integer(b)) => ExpressionType::Integer(a % b),
+      (left, right) => {
+        self.compile_basic_operator(left, right, '%', code)
+      }
+    }
+  }
+
+  fn compile_basic_operator(&self, left: ExpressionType, right: ExpressionType, operator: char, code: &mut Vec<String>) -> ExpressionType {
+    let left_scoreboard = self.state.borrow_mut().next_scoreboard();
+    let right_scoreboard: ScoreboardLocation = self.state.borrow_mut().next_scoreboard();
+    code.push(self.copy_to_scoreboard(left, &left_scoreboard));
+    code.push(self.copy_to_scoreboard(right, &right_scoreboard));
+    code.push(format!(
+      "scoreboard players operation {} {}= {}",
+      left_scoreboard.to_string(),
+      operator,
+      right_scoreboard.to_string()
+    ));
+    ExpressionType::Scoreboard(left_scoreboard)
   }
 
   fn copy_to_scoreboard(&self, value: ExpressionType, scoreboard: &ScoreboardLocation) -> String {
