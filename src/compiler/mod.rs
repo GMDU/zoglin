@@ -41,6 +41,7 @@ enum ExpressionType {
   Integer(i32),
   Storage(StorageLocation),
   Scoreboard(ScoreboardLocation),
+  Boolean(bool),
 }
 
 enum StorageKind {
@@ -58,6 +59,7 @@ impl ExpressionType {
     match self {
       ExpressionType::Void => panic!("Cannot assign void to a value"),
       ExpressionType::Integer(i) => (format!("value {}", *i), StorageKind::Direct),
+      ExpressionType::Boolean(b) => (format!("value {}", *b), StorageKind::Direct),
       ExpressionType::Storage(location) => (
         format!("from storage {}", location.to_string()),
         StorageKind::Direct,
@@ -73,6 +75,7 @@ impl ExpressionType {
     match self {
       ExpressionType::Void => panic!("Cannot assign void to a value"),
       ExpressionType::Integer(i) => (i.to_string(), ScoreKind::Direct("set".to_string())),
+      ExpressionType::Boolean(b) => (if *b { "1" } else { "0" }.to_string(), ScoreKind::Direct("set".to_string())),
       ExpressionType::Storage(location) => (
         format!("data get storage {}", location.to_string()),
         ScoreKind::Indirect,
