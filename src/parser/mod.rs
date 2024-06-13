@@ -1,4 +1,4 @@
-use ast::{Command, CommandPart, StaticExpr};
+use ast::{Command, CommandPart, ElseStatement, StaticExpr};
 
 use self::ast::{
   Expression, File, Function, FunctionCall, Import, Item, Module, Namespace, Resource,
@@ -222,6 +222,16 @@ impl Parser {
     })
   }
 
+  fn parse_block(&mut self) -> Result<Vec<Statement>> {
+    self.expect(TokenKind::LeftBrace)?;
+    let mut items = Vec::new();
+    while self.current().kind != TokenKind::RightBrace {
+      items.push(self.parse_statement()?);
+    }
+    self.expect(TokenKind::RightBrace)?;
+    Ok(items)
+  }
+
   fn parse_resource_path(&mut self) -> Result<String> {
     if self.current().kind == TokenKind::Dot {
       return Ok(self.consume().value);
@@ -243,12 +253,7 @@ impl Parser {
     self.expect(TokenKind::LeftParen)?;
     self.expect(TokenKind::RightParen)?;
 
-    self.expect(TokenKind::LeftBrace)?;
-    let mut items = Vec::new();
-    while self.current().kind != TokenKind::RightBrace {
-      items.push(self.parse_statement()?);
-    }
-    self.expect(TokenKind::RightBrace)?;
+    let items = self.parse_block()?;
 
     Ok(Function { name, items })
   }
@@ -364,13 +369,22 @@ impl Parser {
   fn parse_if_statement(&mut self) -> Result<IfStatement> {
     self.consume();
     let condition = self.parse_expression(0)?;
-    self.expect(TokenKind::LeftBrace)?;
-    let mut block = Vec::new();
-    while self.current().kind != TokenKind::RightBrace {
-      block.push(self.parse_statement()?);
-    }
-    self.consume();
+    let block = self.parse_block()?;
 
-    Ok(IfStatement{condition, block})
+    let mut child = None;
+
+    if self.current().kind == TokenKind::ElseKeyword {
+      self.consume();
+
+      if self.current().kind == TokenKind::IfKeyword {
+        let if_statement = self.parse_if_statement()?;
+        child = Some(ElseStatement::IfStatement(Box::new(if_statement)));
+      } else {
+        let block = self.parse_block()?;
+        child = Some(ElseStatement::Block(block))
+      }
+    }
+
+    Ok(IfStatement{condition, block, child})
   }
 }

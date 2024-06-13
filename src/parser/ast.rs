@@ -130,4 +130,11 @@ pub enum Operator {
 pub struct IfStatement {
   pub condition: Expression,
   pub block: Vec<Statement>,
+  pub child: Option<ElseStatement>
+}
+
+#[derive(Debug)]
+pub enum ElseStatement {
+  IfStatement(Box<IfStatement>),
+  Block(Vec<Statement>)
 }

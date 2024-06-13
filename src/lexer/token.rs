@@ -22,6 +22,7 @@ pub enum TokenKind {
   ImportKeyword,
   AsKeyword,
   IfKeyword,
+  ElseKeyword,
   CommandBegin,
   CommandString,
   CommandEnd,

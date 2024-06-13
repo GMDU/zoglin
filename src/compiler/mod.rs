@@ -4,7 +4,7 @@ use file_tree::{FunctionLocation, ScoreboardLocation, StorageLocation};
 use serde::Serialize;
 
 use crate::parser::ast::{
-  self, Command, Expression, File, FunctionCall, Statement, StaticExpr, ZoglinResource, IfStatement,
+  self, Command, ElseStatement, Expression, File, FunctionCall, IfStatement, Statement, StaticExpr, ZoglinResource
 };
 
 use self::{
@@ -449,7 +449,29 @@ impl Compiler {
 
     code.push(self.copy_to_scoreboard(condition, &condition_scoreboard));
     code.push(format!("execute unless score {} matches 0 run function {}", condition_scoreboard.to_string(), function.to_string()));
-    
-    self.compile_function(function, &if_statement.block)
+
+    if if_statement.child.is_some() {
+      let mut statements = Vec::new();
+      self.compile_else_statement(if_statement.child.as_ref().unwrap(), &mut statements, location);
+
+      let if_function = self.state.borrow_mut().next_function("if", location.module.namespace.clone());
+      self.state.borrow_mut().register_item(if_function.module, Item::Function(Function {
+        name: if_function.name,
+        commands: statements
+      }));
+    } else {
+      self.compile_function(function, &if_statement.block)
+    }
+  }
+
+  fn compile_else_statement(&self, else_statement: &ElseStatement, statements: &mut Vec<String>, location: &FunctionLocation) {
+    match else_statement {
+      ElseStatement::IfStatement(_) => todo!(),
+      ElseStatement::Block(block) => {
+        for item in block {
+          self.compile_statement(item, &location, statements);
+        }
+      },
+    }
   }
 }
