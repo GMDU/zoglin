@@ -1,15 +1,15 @@
-use std::{cell::RefCell, path::Path};
+use std::{cell::RefCell, collections::HashMap, mem::replace, path::Path};
 
 use file_tree::{FunctionLocation, ScoreboardLocation, StorageLocation};
 use serde::Serialize;
 
 use crate::parser::ast::{
-  self, Command, Expression, File, FunctionCall, Statement, StaticExpr, ZoglinResource,
+  self, Command, Expression, File, FunctionCall, Statement, StaticExpr, ZoglinResource, IfStatement,
 };
 
 use self::{
   file_tree::{
-    FileResource, FileTree, Function, Item, Module, Namespace, ResourceLocation, TextResource,
+    FileResource, FileTree, Function, Item, Namespace, ResourceLocation, TextResource,
   },
   scope::Scope,
 };
@@ -28,7 +28,8 @@ struct CompilerState {
   load_functions: Vec<String>,
   scopes: Vec<Scope>,
   current_scope: usize,
-  scoreboard_counter: usize,
+  counters: HashMap<String, usize>,
+  namespaces: HashMap<String, Namespace>
 }
 
 #[derive(Serialize)]
@@ -133,19 +134,50 @@ impl CompilerState {
     None
   }
 
+  fn get_location(&mut self, location: ResourceLocation) -> &mut Vec<Item> {
+    if !self.namespaces.contains_key(&location.namespace) {
+      self.namespaces.insert(location.namespace.clone(), Namespace {
+        name: location.namespace.clone(),
+        items: Vec::new()
+      });
+    }
+
+    let namespace = self.namespaces.get_mut(&location.namespace).unwrap();
+    namespace.get_module(location.modules)
+  }
+
   fn register_import(&mut self, scope: usize, name: String, location: ResourceLocation) {
     self.scopes[scope].imported_items.insert(name, location);
   }
 
+  fn register_item(&mut self, location: ResourceLocation, item: Item) {
+    self.get_location(location).push(item);
+  }
+
+  fn next_counter(&mut self, counter_name: &str) -> usize {
+    if let Some(counter) = self.counters.get_mut(counter_name) {
+      *counter += 1;
+      return *counter
+    };
+
+    self.counters.insert(counter_name.to_string(), 0);
+    0
+  }
+
   fn next_scoreboard(&mut self) -> ScoreboardLocation {
-    let next_counter = self.scoreboard_counter;
-    self.scoreboard_counter += 1;
     ScoreboardLocation {
       scoreboard: vec!["zoglin", "internal", "vars"]
         .into_iter()
         .map(|s| s.to_string())
         .collect(),
-      name: format!("$var_{}", next_counter),
+      name: format!("$var_{}", self.next_counter("scoreboard")),
+    }
+  }
+
+  fn next_function(&mut self, function_type: &str, namespace: String) -> FunctionLocation {
+    FunctionLocation {
+      module: ResourceLocation { namespace: "zoglin".to_string(), modules: vec!["generated".to_string(), namespace, function_type.to_string()] },
+      name: format!("fn_{}", self.next_counter(&format!("function:{}", function_type)))
     }
   }
 }
@@ -159,7 +191,8 @@ impl Compiler {
         load_functions: Vec::new(),
         scopes: Vec::new(),
         current_scope: 0,
-        scoreboard_counter: 0,
+        counters: HashMap::new(),
+        namespaces: HashMap::new()
       }),
     }
   }
@@ -171,110 +204,105 @@ impl Compiler {
   }
 
   fn compile_tree(&self) -> FileTree {
-    let mut namespaces = Vec::new();
-
     for namespace in self.ast.items.iter() {
-      namespaces.push(self.compile_namespace(namespace));
+      self.compile_namespace(namespace);
     }
 
-    let state = self.state.borrow();
-    if state.load_functions.len() > 0 || state.tick_functions.len() > 0 {
-      let mut mc_namespace = Namespace {
-        name: "minecraft".to_string(),
-        items: Vec::new(),
-      };
+    let mut state = self.state.borrow_mut();
 
+    if state.load_functions.len() > 0 || state.tick_functions.len() > 0 {
       let tick_json = FunctionTag {
         values: &state.tick_functions,
       };
+
       let load_json = FunctionTag {
         values: &state.load_functions,
       };
+
       let tick_text = serde_json::to_string_pretty(&tick_json).unwrap();
       let load_text = serde_json::to_string_pretty(&load_json).unwrap();
 
-      mc_namespace.items.push(Item::TextResource(TextResource {
+      let tick = Item::TextResource(TextResource {
         name: "tick".to_string(),
         kind: "tags/function".to_string(),
         is_asset: false,
         text: tick_text,
-      }));
-      mc_namespace.items.push(Item::TextResource(TextResource {
+      });
+
+      let load = Item::TextResource(TextResource {
         name: "load".to_string(),
         kind: "tags/function".to_string(),
         is_asset: false,
         text: load_text,
-      }));
+      });
 
-      namespaces.push(mc_namespace);
+      let location = ResourceLocation {
+        namespace: "minecraft".to_string(),
+        modules: Vec::new()
+      };
+
+      state.register_item(location.clone(), tick);
+      state.register_item(location, load);
     }
 
-    FileTree { namespaces }
+    let namespaces = replace(&mut state.namespaces, HashMap::new());
+    FileTree { namespaces: namespaces.into_values().collect() }
   }
 
-  fn compile_namespace(&self, namespace: &ast::Namespace) -> Namespace {
+  fn compile_namespace(&self, namespace: &ast::Namespace) {
     self.state.borrow_mut().enter_scope(&namespace.name);
-    let mut items = Vec::new();
 
     for item in namespace.items.iter() {
       let mut resource = ResourceLocation {
         namespace: namespace.name.clone(),
         modules: Vec::new(),
       };
-      items.push(self.compile_item(item, &mut resource));
+      self.compile_item(item, &mut resource);
     }
 
     self.state.borrow_mut().exit_scope();
-
-    Namespace {
-      name: namespace.name.clone(),
-      items,
-    }
   }
 
-  fn compile_item(&self, item: &ast::Item, location: &mut ResourceLocation) -> Item {
+  fn compile_item(&self, item: &ast::Item, location: &mut ResourceLocation) {
     match item {
-      ast::Item::Module(module) => Item::Module(self.compile_module(module, location)),
-      ast::Item::Import(_) => Item::Ignored,
-      ast::Item::Function(function) => Item::Function(self.compile_function(function, location)),
+      ast::Item::Module(module) => self.compile_module(module, location),
+      ast::Item::Import(_) => {},
+      ast::Item::Function(function) => self.compile_ast_function(function, location),
       ast::Item::Resource(resource) => self.compile_resource(resource, location),
     }
   }
 
-  fn compile_module(&self, module: &ast::Module, location: &mut ResourceLocation) -> Module {
+  fn compile_module(&self, module: &ast::Module, location: &mut ResourceLocation) {
     self.state.borrow_mut().enter_scope(&module.name);
 
     location.modules.push(module.name.clone());
-    let mut items = Vec::new();
 
     for item in module.items.iter() {
-      items.push(self.compile_item(item, location));
+      self.compile_item(item, location);
     }
 
     self.state.borrow_mut().exit_scope();
-    Module {
-      name: module.name.clone(),
-      items,
-    }
   }
 
-  fn compile_resource(&self, resource: &ast::Resource, _location: &ResourceLocation) -> Item {
+  fn compile_resource(&self, resource: &ast::Resource, location: &ResourceLocation) {
     match &resource.content {
       ast::ResourceContent::Text(name, text) => {
-        return Item::TextResource(TextResource {
+        let resource = TextResource {
           kind: resource.kind.clone(),
           name: name.clone(),
           is_asset: resource.is_asset,
           text: text.clone(),
-        })
+        };
+        self.state.borrow_mut().register_item(location.clone(), Item::TextResource(resource))
       }
       ast::ResourceContent::File(path, file) => {
         let file_path = Path::new(file).parent().unwrap();
-        return Item::FileResource(FileResource {
+        let resource = FileResource {
           kind: resource.kind.clone(),
           is_asset: resource.is_asset,
           path: file_path.join(path).to_str().unwrap().to_string(),
-        });
+        };
+        self.state.borrow_mut().register_item(location.clone(), Item::FileResource(resource))
       }
     }
   }
@@ -286,24 +314,31 @@ impl Compiler {
       Statement::Expression(expression) => {
         self.compile_expression(expression, location, code);
       },
+      Statement::IfStatement(if_statement) => self.compile_if_statement(code, if_statement, location),
     };
   }
 
-  fn compile_function(&self, function: &ast::Function, location: &ResourceLocation) -> Function {
+  fn compile_ast_function(&self, function: &ast::Function, location: &ResourceLocation) {
     let fn_location = FunctionLocation {
       module: location.clone(),
       name: function.name.clone(),
     };
 
+    self.compile_function(fn_location, &function.items);
+  }
+
+  fn compile_function(&self, location: FunctionLocation, block: &Vec<Statement>) {
     let mut commands = Vec::new();
-    for item in &function.items {
-      self.compile_statement(item, &fn_location, &mut commands);
+    for item in block {
+      self.compile_statement(item, &location, &mut commands);
     }
 
-    Function {
-      name: function.name.clone(),
-      commands,
-    }
+    let function = Function {
+      name: location.name,
+      commands
+    };
+
+    self.state.borrow_mut().register_item(location.module, Item::Function(function));
   }
 
   fn compile_command(&self, command: &Command, location: &FunctionLocation) -> String {
@@ -405,5 +440,16 @@ impl Compiler {
     result.modules.push(resource.name.clone());
 
     result
+  }
+  
+  fn compile_if_statement(&self, code: &mut Vec<String>, if_statement: &IfStatement, location: &FunctionLocation) {
+    let condition = self.compile_expression(&if_statement.condition, location, code);
+    let condition_scoreboard = self.state.borrow_mut().next_scoreboard();
+    let function = self.state.borrow_mut().next_function("if", location.module.namespace.clone());
+
+    code.push(self.copy_to_scoreboard(condition, &condition_scoreboard));
+    code.push(format!("execute unless score {} matches 0 run function {}", condition_scoreboard.to_string(), function.to_string()));
+    
+    self.compile_function(function, &if_statement.block)
   }
 }

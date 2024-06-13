@@ -278,7 +278,7 @@ impl Compiler {
     ExpressionType::Scoreboard(left_scoreboard)
   }
 
-  fn copy_to_scoreboard(&self, value: ExpressionType, scoreboard: &ScoreboardLocation) -> String {
+  pub(super) fn copy_to_scoreboard(&self, value: ExpressionType, scoreboard: &ScoreboardLocation) -> String {
     let (code, kind) = value.to_score();
     match kind {
       ScoreKind::Direct(operation) => format!(

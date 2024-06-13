@@ -2,7 +2,7 @@ use ast::{Command, CommandPart, StaticExpr};
 
 use self::ast::{
   Expression, File, Function, FunctionCall, Import, Item, Module, Namespace, Resource,
-  ResourceContent, Statement, ZoglinResource,
+  ResourceContent, Statement, ZoglinResource, IfStatement
 };
 use crate::{
   error::{raise_error, Result},
@@ -260,6 +260,7 @@ impl Parser {
         let comment = self.consume_including(&[TokenKind::Comment]).value;
         Statement::Comment(comment)
       }
+      TokenKind::IfKeyword => Statement::IfStatement(self.parse_if_statement()?),
       _ => Statement::Expression(self.parse_expression(0)?),
     })
   }
@@ -358,5 +359,18 @@ impl Parser {
       }
     }
     Ok(resource)
+  }
+  
+  fn parse_if_statement(&mut self) -> Result<IfStatement> {
+    self.consume();
+    let condition = self.parse_expression(0)?;
+    self.expect(TokenKind::LeftBrace)?;
+    let mut block = Vec::new();
+    while self.current().kind != TokenKind::RightBrace {
+      block.push(self.parse_statement()?);
+    }
+    self.consume();
+
+    Ok(IfStatement{condition, block})
   }
 }

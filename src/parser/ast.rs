@@ -53,6 +53,7 @@ pub enum Statement {
   Command(Command),
   Comment(String),
   Expression(Expression),
+  IfStatement(IfStatement),
 }
 
 #[derive(Debug)]
@@ -123,4 +124,10 @@ pub enum Operator {
   LogicalOr,
   Assign,
   OperatorAssign(Box<Operator>)
+}
+
+#[derive(Debug)]
+pub struct IfStatement {
+  pub condition: Expression,
+  pub block: Vec<Statement>,
 }

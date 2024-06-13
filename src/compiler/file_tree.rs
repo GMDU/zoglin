@@ -60,11 +60,34 @@ impl Namespace {
       );
     }
   }
+
+  pub fn get_module(&mut self, mut path: Vec<String>) -> &mut Vec<Item> {
+    if path.is_empty() {
+      return &mut self.items;
+    }
+
+    let first = path.remove(0);
+
+    if let Some(index) = self.items.iter().position(|item|
+      match item {
+        Item::Module(module) if module.name == first => true,
+        _ => false,
+      }) {
+        let Item::Module(module) = &mut self.items[index] else {
+          unreachable!();
+        };
+        return module.get_module(path)
+      };
+
+    self.items.push(Item::Module(Module { name: first, items: Vec::new() }));
+    let Item::Module(module) = self.items.last_mut().unwrap() else { unreachable!(); };
+
+    module.get_module(path)
+  }
 }
 
 #[derive(Debug)]
 pub enum Item {
-  Ignored,
   Module(Module),
   Function(Function),
   TextResource(TextResource),
@@ -74,7 +97,6 @@ pub enum Item {
 impl Item {
   fn generate(&self, root_path: &str, local_path: &ResourceLocation) {
     match self {
-      Item::Ignored => {}
       Item::Module(module) => module.generate(root_path, local_path),
       Item::Function(function) => function.generate(root_path, local_path),
       Item::TextResource(resource) => resource.generate(root_path, local_path),
@@ -96,6 +118,30 @@ impl Module {
     for item in self.items.iter() {
       item.generate(root_path, &mut local_path);
     }
+  }
+
+  fn get_module(&mut self, mut path: Vec<String>) -> &mut Vec<Item> {
+    if path.is_empty() {
+      return &mut self.items;
+    }
+    
+    let first = path.remove(0);
+
+    if let Some(index) = self.items.iter().position(|item|
+      match item {
+        Item::Module(module) if module.name == first => true,
+        _ => false,
+      }) {
+        let Item::Module(module) = &mut self.items[index] else {
+          unreachable!();
+        };
+        return module.get_module(path)
+      };
+
+    self.items.push(Item::Module(Module { name: first, items: Vec::new() }));
+    let Item::Module(module) = self.items.last_mut().unwrap() else { unreachable!(); };
+    
+    module.get_module(path)
   }
 }
 
@@ -229,6 +275,10 @@ impl FunctionLocation {
     let mut result = self.module;
     result.modules.push(self.name);
     result
+  }
+
+  pub fn to_string(&self) -> String {
+    self.module.join(&self.name)
   }
 }
 
