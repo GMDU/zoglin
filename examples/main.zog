@@ -4,6 +4,7 @@ namespace diamond
 fn foo() {
   a = 10
   b = 20
+  c = a + b * 20
 
   if a < b {
     say Yipeee!

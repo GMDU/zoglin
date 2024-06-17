@@ -3,8 +3,9 @@ use std::borrow::Borrow;
 use crate::parser::ast::{BinaryOperation, Expression, Operator};
 
 use super::{
+  expression::{Condition, ExpressionType, ScoreKind, StorageKind},
   file_tree::{FunctionLocation, ScoreboardLocation, StorageLocation},
-  Compiler, ExpressionType, ScoreKind, StorageKind,
+  Compiler,
 };
 
 impl Compiler {
@@ -12,7 +13,7 @@ impl Compiler {
     &self,
     binary_operation: &BinaryOperation,
     location: &FunctionLocation,
-    code: &mut Vec<String>
+    code: &mut Vec<String>,
   ) -> ExpressionType {
     match binary_operation.operator {
       Operator::Plus => self.compile_plus(binary_operation, location, code),
@@ -26,7 +27,9 @@ impl Compiler {
       Operator::LessThan => self.complile_less_than(code, binary_operation, location),
       Operator::GreaterThan => self.complile_greater_than(code, binary_operation, location),
       Operator::LessThanEquals => self.complile_less_than_equals(code, binary_operation, location),
-      Operator::GreaterThanEquals => self.complile_greater_than_equals(code, binary_operation, location),
+      Operator::GreaterThanEquals => {
+        self.complile_greater_than_equals(code, binary_operation, location)
+      }
       Operator::Equal => todo!(),
       Operator::NotEqual => todo!(),
       Operator::LogicalAnd => todo!(),
@@ -40,7 +43,7 @@ impl Compiler {
     &self,
     binary_operation: &BinaryOperation,
     location: &FunctionLocation,
-    code: &mut Vec<String>
+    code: &mut Vec<String>,
   ) -> ExpressionType {
     let Expression::Variable(variable) = binary_operation.left.borrow() else {
       panic!("Can only assign to variables.")
@@ -74,7 +77,7 @@ impl Compiler {
     &self,
     binary_operation: &BinaryOperation,
     location: &FunctionLocation,
-    code: &mut Vec<String>
+    code: &mut Vec<String>,
   ) -> ExpressionType {
     let left = self.compile_expression(&binary_operation.left, location, code);
     let right = self.compile_expression(&binary_operation.right, location, code);
@@ -87,9 +90,7 @@ impl Compiler {
         panic!("Cannot perform plus with boolean.")
       }
       (ExpressionType::Integer(a), ExpressionType::Integer(b)) => ExpressionType::Integer(a + b),
-      (left, right) => {
-        self.compile_basic_operator(left, right, '+', code)
-      }
+      (left, right) => self.compile_basic_operator(left, right, '+', code),
     }
   }
 
@@ -97,7 +98,7 @@ impl Compiler {
     &self,
     binary_operation: &BinaryOperation,
     location: &FunctionLocation,
-    code: &mut Vec<String>
+    code: &mut Vec<String>,
   ) -> ExpressionType {
     let left = self.compile_expression(&binary_operation.left, location, code);
     let right = self.compile_expression(&binary_operation.right, location, code);
@@ -110,9 +111,7 @@ impl Compiler {
         panic!("Cannot perform subtraction with boolean.")
       }
       (ExpressionType::Integer(a), ExpressionType::Integer(b)) => ExpressionType::Integer(a - b),
-      (left, right) => {
-        self.compile_basic_operator(left, right, '-', code)
-      }
+      (left, right) => self.compile_basic_operator(left, right, '-', code),
     }
   }
 
@@ -120,7 +119,7 @@ impl Compiler {
     &self,
     binary_operation: &BinaryOperation,
     location: &FunctionLocation,
-    code: &mut Vec<String>
+    code: &mut Vec<String>,
   ) -> ExpressionType {
     let left = self.compile_expression(&binary_operation.left, location, code);
     let right = self.compile_expression(&binary_operation.right, location, code);
@@ -133,9 +132,7 @@ impl Compiler {
         panic!("Cannot perform multiplication with boolean.")
       }
       (ExpressionType::Integer(a), ExpressionType::Integer(b)) => ExpressionType::Integer(a * b),
-      (left, right) => {
-        self.compile_basic_operator(left, right, '*', code)
-      }
+      (left, right) => self.compile_basic_operator(left, right, '*', code),
     }
   }
 
@@ -143,7 +140,7 @@ impl Compiler {
     &self,
     binary_operation: &BinaryOperation,
     location: &FunctionLocation,
-    code: &mut Vec<String>
+    code: &mut Vec<String>,
   ) -> ExpressionType {
     let left = self.compile_expression(&binary_operation.left, location, code);
     let right = self.compile_expression(&binary_operation.right, location, code);
@@ -156,9 +153,7 @@ impl Compiler {
         panic!("Cannot perform division with boolean.")
       }
       (ExpressionType::Integer(a), ExpressionType::Integer(b)) => ExpressionType::Integer(a / b),
-      (left, right) => {
-        self.compile_basic_operator(left, right, '/', code)
-      }
+      (left, right) => self.compile_basic_operator(left, right, '/', code),
     }
   }
 
@@ -166,7 +161,7 @@ impl Compiler {
     &self,
     binary_operation: &BinaryOperation,
     location: &FunctionLocation,
-    code: &mut Vec<String>
+    code: &mut Vec<String>,
   ) -> ExpressionType {
     let left = self.compile_expression(&binary_operation.left, location, code);
     let right = self.compile_expression(&binary_operation.right, location, code);
@@ -179,13 +174,16 @@ impl Compiler {
         panic!("Cannot perform modulo with boolean.")
       }
       (ExpressionType::Integer(a), ExpressionType::Integer(b)) => ExpressionType::Integer(a % b),
-      (left, right) => {
-        self.compile_basic_operator(left, right, '%', code)
-      }
+      (left, right) => self.compile_basic_operator(left, right, '%', code),
     }
   }
 
-  fn complile_less_than(&self, code: &mut Vec<String>, binary_operation: &BinaryOperation, location: &FunctionLocation) -> ExpressionType {
+  fn complile_less_than(
+    &self,
+    code: &mut Vec<String>,
+    binary_operation: &BinaryOperation,
+    location: &FunctionLocation,
+  ) -> ExpressionType {
     let left = self.compile_expression(&binary_operation.left, location, code);
     let right = self.compile_expression(&binary_operation.right, location, code);
 
@@ -197,11 +195,16 @@ impl Compiler {
         panic!("Cannot compare with boolean.")
       }
       (ExpressionType::Integer(a), ExpressionType::Integer(b)) => ExpressionType::Boolean(a < b),
-      (left, right) => self.compile_comparison_operator(code, left, right, "<")
+      (left, right) => self.compile_comparison_operator(code, left, right, "<"),
     }
   }
 
-  fn complile_greater_than(&self, code: &mut Vec<String>, binary_operation: &BinaryOperation, location: &FunctionLocation) -> ExpressionType {
+  fn complile_greater_than(
+    &self,
+    code: &mut Vec<String>,
+    binary_operation: &BinaryOperation,
+    location: &FunctionLocation,
+  ) -> ExpressionType {
     let left = self.compile_expression(&binary_operation.left, location, code);
     let right = self.compile_expression(&binary_operation.right, location, code);
 
@@ -213,11 +216,16 @@ impl Compiler {
         panic!("Cannot compare with boolean.")
       }
       (ExpressionType::Integer(a), ExpressionType::Integer(b)) => ExpressionType::Boolean(a > b),
-      (left, right) => self.compile_comparison_operator(code, left, right, ">")
+      (left, right) => self.compile_comparison_operator(code, left, right, ">"),
     }
   }
 
-  fn complile_less_than_equals(&self, code: &mut Vec<String>, binary_operation: &BinaryOperation, location: &FunctionLocation) -> ExpressionType {
+  fn complile_less_than_equals(
+    &self,
+    code: &mut Vec<String>,
+    binary_operation: &BinaryOperation,
+    location: &FunctionLocation,
+  ) -> ExpressionType {
     let left = self.compile_expression(&binary_operation.left, location, code);
     let right = self.compile_expression(&binary_operation.right, location, code);
 
@@ -229,11 +237,16 @@ impl Compiler {
         panic!("Cannot compare with boolean.")
       }
       (ExpressionType::Integer(a), ExpressionType::Integer(b)) => ExpressionType::Boolean(a <= b),
-      (left, right) => self.compile_comparison_operator(code, left, right, "<=")
+      (left, right) => self.compile_comparison_operator(code, left, right, "<="),
     }
   }
 
-  fn complile_greater_than_equals(&self, code: &mut Vec<String>, binary_operation: &BinaryOperation, location: &FunctionLocation) -> ExpressionType {
+  fn complile_greater_than_equals(
+    &self,
+    code: &mut Vec<String>,
+    binary_operation: &BinaryOperation,
+    location: &FunctionLocation,
+  ) -> ExpressionType {
     let left = self.compile_expression(&binary_operation.left, location, code);
     let right = self.compile_expression(&binary_operation.right, location, code);
 
@@ -245,15 +258,19 @@ impl Compiler {
         panic!("Cannot compare with boolean.")
       }
       (ExpressionType::Integer(a), ExpressionType::Integer(b)) => ExpressionType::Boolean(a >= b),
-      (left, right) => self.compile_comparison_operator(code, left, right, ">=")
+      (left, right) => self.compile_comparison_operator(code, left, right, ">="),
     }
   }
 
-  fn compile_basic_operator(&self, left: ExpressionType, right: ExpressionType, operator: char, code: &mut Vec<String>) -> ExpressionType {
-    let left_scoreboard = self.state.borrow_mut().next_scoreboard();
-    let right_scoreboard: ScoreboardLocation = self.state.borrow_mut().next_scoreboard();
-    code.push(self.copy_to_scoreboard(left, &left_scoreboard));
-    code.push(self.copy_to_scoreboard(right, &right_scoreboard));
+  fn compile_basic_operator(
+    &self,
+    left: ExpressionType,
+    right: ExpressionType,
+    operator: char,
+    code: &mut Vec<String>,
+  ) -> ExpressionType {
+    let left_scoreboard = self.copy_to_scoreboard(code, left);
+    let right_scoreboard = self.move_to_scoreboard(code, right);
     code.push(format!(
       "scoreboard players operation {} {}= {}",
       left_scoreboard.to_string(),
@@ -263,35 +280,71 @@ impl Compiler {
     ExpressionType::Scoreboard(left_scoreboard)
   }
 
-  fn compile_comparison_operator(&self, code: &mut Vec<String>, left: ExpressionType, right: ExpressionType, operator: &str) -> ExpressionType {
-    let left_scoreboard = self.state.borrow_mut().next_scoreboard();
-    let right_scoreboard: ScoreboardLocation = self.state.borrow_mut().next_scoreboard();
-    code.push(self.copy_to_scoreboard(left, &left_scoreboard));
-    code.push(self.copy_to_scoreboard(right, &right_scoreboard));
-    code.push(format!(
-      "execute store result score {} if score {} {} {}",
-      left_scoreboard.to_string(),
-      left_scoreboard.to_string(),
+  fn compile_comparison_operator(
+    &self,
+    code: &mut Vec<String>,
+    left: ExpressionType,
+    right: ExpressionType,
+    operator: &str,
+  ) -> ExpressionType {
+    let left_scoreboard = self.move_to_scoreboard(code, left);
+    let right_scoreboard = self.move_to_scoreboard(code, right);
+    ExpressionType::Condition(Condition::from_operator(
       operator,
-      right_scoreboard.to_string()
-    ));
-    ExpressionType::Scoreboard(left_scoreboard)
+      left_scoreboard,
+      right_scoreboard,
+    ))
   }
 
-  pub(super) fn copy_to_scoreboard(&self, value: ExpressionType, scoreboard: &ScoreboardLocation) -> String {
-    let (code, kind) = value.to_score();
+  pub(super) fn copy_to_scoreboard(
+    &self,
+    code: &mut Vec<String>,
+    value: ExpressionType,
+  ) -> ScoreboardLocation {
+    let scoreboard = self.state.borrow_mut().next_scoreboard();
+    let (conversion_code, kind) = value.to_score();
     match kind {
-      ScoreKind::Direct(operation) => format!(
+      ScoreKind::Direct(operation) => code.push(format!(
         "scoreboard players {} {} {}",
         operation,
         scoreboard.to_string(),
-        code
-      ),
-      ScoreKind::Indirect => format!(
+        conversion_code
+      )),
+      ScoreKind::Indirect => code.push(format!(
         "execute store result score {} run {}",
         scoreboard.to_string(),
-        code
-      ),
+        conversion_code
+      )),
     }
+
+    scoreboard
+  }
+
+  pub(super) fn move_to_scoreboard(
+    &self,
+    code: &mut Vec<String>,
+    value: ExpressionType,
+  ) -> ScoreboardLocation {
+    if let ExpressionType::Scoreboard(scoreboard) = value {
+      return scoreboard;
+    }
+
+    let scoreboard = self.state.borrow_mut().next_scoreboard();
+    let (conversion_code, kind) = value.to_score();
+    match kind {
+      ScoreKind::Direct(operation) => code.push(format!(
+        "scoreboard players {} {} {}",
+        operation,
+        scoreboard.to_string(),
+        conversion_code
+      )),
+      ScoreKind::Indirect => code.push(format!(
+        "execute store result score {} run {}",
+        scoreboard.to_string(),
+        conversion_code
+      )),
+    }
+
+    scoreboard
   }
 }

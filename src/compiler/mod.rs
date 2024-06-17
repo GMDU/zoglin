@@ -1,5 +1,6 @@
 use std::{cell::RefCell, collections::HashMap, mem::replace, path::Path};
 
+use expression::{ConditionKind, ExpressionType};
 use file_tree::{FunctionLocation, ScoreboardLocation, StorageLocation};
 use serde::Serialize;
 
@@ -13,6 +14,7 @@ use self::{
   scope::Scope,
 };
 mod binary_operation;
+mod expression;
 mod file_tree;
 mod register;
 mod scope;
@@ -34,61 +36,6 @@ struct CompilerState {
 #[derive(Serialize)]
 struct FunctionTag<'a> {
   values: &'a [String],
-}
-
-enum ExpressionType {
-  Void,
-  Integer(i32),
-  Storage(StorageLocation),
-  Scoreboard(ScoreboardLocation),
-  Boolean(bool),
-}
-
-enum StorageKind {
-  Direct,
-  Indirect,
-}
-
-enum ScoreKind {
-  Direct(String),
-  Indirect,
-}
-
-impl ExpressionType {
-  fn to_storage(&self) -> (String, StorageKind) {
-    match self {
-      ExpressionType::Void => panic!("Cannot assign void to a value"),
-      ExpressionType::Integer(i) => (format!("value {}", *i), StorageKind::Direct),
-      ExpressionType::Boolean(b) => (format!("value {}", *b), StorageKind::Direct),
-      ExpressionType::Storage(location) => (
-        format!("from storage {}", location.to_string()),
-        StorageKind::Direct,
-      ),
-      ExpressionType::Scoreboard(location) => (
-        format!("scoreboard players get {}", location.to_string()),
-        StorageKind::Indirect,
-      ),
-    }
-  }
-
-  fn to_score(&self) -> (String, ScoreKind) {
-    match self {
-      ExpressionType::Void => panic!("Cannot assign void to a value"),
-      ExpressionType::Integer(i) => (i.to_string(), ScoreKind::Direct("set".to_string())),
-      ExpressionType::Boolean(b) => (
-        if *b { "1" } else { "0" }.to_string(),
-        ScoreKind::Direct("set".to_string()),
-      ),
-      ExpressionType::Storage(location) => (
-        format!("data get storage {}", location.to_string()),
-        ScoreKind::Indirect,
-      ),
-      ExpressionType::Scoreboard(location) => (
-        format!("= {}", location.to_string()),
-        ScoreKind::Direct("operation".to_string()),
-      ),
-    }
-  }
 }
 
 impl CompilerState {
@@ -501,16 +448,28 @@ impl Compiler {
     }
 
     let condition = self.compile_expression(&if_statement.condition, location, code);
-    let condition_scoreboard = self.state.borrow_mut().next_scoreboard();
+
+    let check_code = match condition.to_condition() {
+      ConditionKind::Known(false) => {
+        return;
+      }
+      ConditionKind::Known(true) => {
+        for item in if_statement.block.iter() {
+          self.compile_statement(item, &location, code);
+        }
+        return;
+      }
+      ConditionKind::Check(check_code) => check_code,
+    };
+
     let function = self
       .state
       .borrow_mut()
       .next_function("if", location.module.namespace.clone());
 
-    code.push(self.copy_to_scoreboard(condition, &condition_scoreboard));
     code.push(format!(
-      "execute unless score {score} matches 0 {run_str} function {function}",
-      score = condition_scoreboard.to_string(),
+      "execute {condition} {run_str} function {function}",
+      condition = check_code,
       run_str = if is_child { "run return run" } else { "run" },
       function = function.to_string()
     ));
