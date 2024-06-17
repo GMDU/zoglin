@@ -90,6 +90,15 @@ impl Compiler {
         panic!("Cannot perform plus with boolean.")
       }
       (ExpressionType::Integer(a), ExpressionType::Integer(b)) => ExpressionType::Integer(a + b),
+      (ExpressionType::Integer(i), other) | (other, ExpressionType::Integer(i)) => {
+        let scoreboard = self.copy_to_scoreboard(code, other);
+        code.push(format!(
+          "scoreboard players add {} {}",
+          scoreboard.to_string(),
+          i,
+        ));
+        ExpressionType::Scoreboard(scoreboard)
+      }
       (left, right) => self.compile_basic_operator(left, right, '+', code),
     }
   }
@@ -111,6 +120,15 @@ impl Compiler {
         panic!("Cannot perform subtraction with boolean.")
       }
       (ExpressionType::Integer(a), ExpressionType::Integer(b)) => ExpressionType::Integer(a - b),
+      (other, ExpressionType::Integer(i)) => {
+        let scoreboard = self.copy_to_scoreboard(code, other);
+        code.push(format!(
+          "scoreboard players remove {} {}",
+          scoreboard.to_string(),
+          i,
+        ));
+        ExpressionType::Scoreboard(scoreboard)
+      }
       (left, right) => self.compile_basic_operator(left, right, '-', code),
     }
   }
@@ -195,6 +213,12 @@ impl Compiler {
         panic!("Cannot compare with boolean.")
       }
       (ExpressionType::Integer(a), ExpressionType::Integer(b)) => ExpressionType::Boolean(a < b),
+      (ExpressionType::Integer(i), other) => {
+        self.compile_match_comparison(code, other, format!("{}..", i + 1))
+      }
+      (other, ExpressionType::Integer(i)) => {
+        self.compile_match_comparison(code, other, format!("..{}", i - 1))
+      }
       (left, right) => self.compile_comparison_operator(code, left, right, "<"),
     }
   }
@@ -216,6 +240,12 @@ impl Compiler {
         panic!("Cannot compare with boolean.")
       }
       (ExpressionType::Integer(a), ExpressionType::Integer(b)) => ExpressionType::Boolean(a > b),
+      (ExpressionType::Integer(i), other) => {
+        self.compile_match_comparison(code, other, format!("..{}", i - 1))
+      }
+      (other, ExpressionType::Integer(i)) => {
+        self.compile_match_comparison(code, other, format!("{}..", i + 1))
+      }
       (left, right) => self.compile_comparison_operator(code, left, right, ">"),
     }
   }
@@ -237,6 +267,12 @@ impl Compiler {
         panic!("Cannot compare with boolean.")
       }
       (ExpressionType::Integer(a), ExpressionType::Integer(b)) => ExpressionType::Boolean(a <= b),
+      (ExpressionType::Integer(i), other) => {
+        self.compile_match_comparison(code, other, format!("{}..", i))
+      }
+      (other, ExpressionType::Integer(i)) => {
+        self.compile_match_comparison(code, other, format!("..{}", i))
+      }
       (left, right) => self.compile_comparison_operator(code, left, right, "<="),
     }
   }
@@ -258,6 +294,12 @@ impl Compiler {
         panic!("Cannot compare with boolean.")
       }
       (ExpressionType::Integer(a), ExpressionType::Integer(b)) => ExpressionType::Boolean(a >= b),
+      (ExpressionType::Integer(i), other) => {
+        self.compile_match_comparison(code, other, format!("..{}", i))
+      }
+      (other, ExpressionType::Integer(i)) => {
+        self.compile_match_comparison(code, other, format!("{}..", i))
+      }
       (left, right) => self.compile_comparison_operator(code, left, right, ">="),
     }
   }
@@ -294,6 +336,16 @@ impl Compiler {
       left_scoreboard,
       right_scoreboard,
     ))
+  }
+
+  fn compile_match_comparison(
+    &self,
+    code: &mut Vec<String>,
+    value: ExpressionType,
+    range: String,
+  ) -> ExpressionType {
+    let scoreboard = self.move_to_scoreboard(code, value);
+    ExpressionType::Condition(Condition::Match(scoreboard, range))
   }
 
   pub(super) fn copy_to_scoreboard(

@@ -4,7 +4,7 @@ namespace diamond
 fn foo() {
   a = 10
   b = 20
-  c = a + b * 20
+  c = a + 20
 
   if a < b {
     say Yipeee!
@@ -12,9 +12,9 @@ fn foo() {
     say ruh roh
   }
 
-  if a > b {
+  if a < 20 {
     say blah
-  } else if a >= b {
+  } else if a >= 10 {
     say blah2
   } else {
     time set day

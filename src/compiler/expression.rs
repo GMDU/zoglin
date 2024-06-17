@@ -14,6 +14,7 @@ pub(super) enum Condition {
   LessEq(ScoreboardLocation, ScoreboardLocation),
   Greater(ScoreboardLocation, ScoreboardLocation),
   GreaterEq(ScoreboardLocation, ScoreboardLocation),
+  Match(ScoreboardLocation, String),
 }
 
 impl Condition {
@@ -28,6 +29,12 @@ impl Condition {
       }
       Condition::GreaterEq(a, b) => {
         format!("if score {a} >= {b}", a = a.to_string(), b = b.to_string())
+      }
+      Condition::Match(score, range) => {
+        format!(
+          "if score {score} matches {range}",
+          score = score.to_string()
+        )
       }
     }
   }
