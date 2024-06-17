@@ -4,13 +4,12 @@ use file_tree::{FunctionLocation, ScoreboardLocation, StorageLocation};
 use serde::Serialize;
 
 use crate::parser::ast::{
-  self, Command, ElseStatement, Expression, File, FunctionCall, IfStatement, Statement, StaticExpr, ZoglinResource
+  self, Command, ElseStatement, Expression, File, FunctionCall, IfStatement, Statement, StaticExpr,
+  ZoglinResource,
 };
 
 use self::{
-  file_tree::{
-    FileResource, FileTree, Function, Item, Namespace, ResourceLocation, TextResource,
-  },
+  file_tree::{FileResource, FileTree, Function, Item, Namespace, ResourceLocation, TextResource},
   scope::Scope,
 };
 mod binary_operation;
@@ -29,7 +28,7 @@ struct CompilerState {
   scopes: Vec<Scope>,
   current_scope: usize,
   counters: HashMap<String, usize>,
-  namespaces: HashMap<String, Namespace>
+  namespaces: HashMap<String, Namespace>,
 }
 
 #[derive(Serialize)]
@@ -76,7 +75,10 @@ impl ExpressionType {
     match self {
       ExpressionType::Void => panic!("Cannot assign void to a value"),
       ExpressionType::Integer(i) => (i.to_string(), ScoreKind::Direct("set".to_string())),
-      ExpressionType::Boolean(b) => (if *b { "1" } else { "0" }.to_string(), ScoreKind::Direct("set".to_string())),
+      ExpressionType::Boolean(b) => (
+        if *b { "1" } else { "0" }.to_string(),
+        ScoreKind::Direct("set".to_string()),
+      ),
       ExpressionType::Storage(location) => (
         format!("data get storage {}", location.to_string()),
         ScoreKind::Indirect,
@@ -136,10 +138,13 @@ impl CompilerState {
 
   fn get_location(&mut self, location: ResourceLocation) -> &mut Vec<Item> {
     if !self.namespaces.contains_key(&location.namespace) {
-      self.namespaces.insert(location.namespace.clone(), Namespace {
-        name: location.namespace.clone(),
-        items: Vec::new()
-      });
+      self.namespaces.insert(
+        location.namespace.clone(),
+        Namespace {
+          name: location.namespace.clone(),
+          items: Vec::new(),
+        },
+      );
     }
 
     let namespace = self.namespaces.get_mut(&location.namespace).unwrap();
@@ -157,7 +162,7 @@ impl CompilerState {
   fn next_counter(&mut self, counter_name: &str) -> usize {
     if let Some(counter) = self.counters.get_mut(counter_name) {
       *counter += 1;
-      return *counter
+      return *counter;
     };
 
     self.counters.insert(counter_name.to_string(), 0);
@@ -176,8 +181,18 @@ impl CompilerState {
 
   fn next_function(&mut self, function_type: &str, namespace: String) -> FunctionLocation {
     FunctionLocation {
-      module: ResourceLocation { namespace: "zoglin".to_string(), modules: vec!["generated".to_string(), namespace, function_type.to_string()] },
-      name: format!("fn_{}", self.next_counter(&format!("function:{}", function_type)))
+      module: ResourceLocation {
+        namespace: "zoglin".to_string(),
+        modules: vec![
+          "generated".to_string(),
+          namespace,
+          function_type.to_string(),
+        ],
+      },
+      name: format!(
+        "fn_{}",
+        self.next_counter(&format!("function:{}", function_type))
+      ),
     }
   }
 }
@@ -192,7 +207,7 @@ impl Compiler {
         scopes: Vec::new(),
         current_scope: 0,
         counters: HashMap::new(),
-        namespaces: HashMap::new()
+        namespaces: HashMap::new(),
       }),
     }
   }
@@ -238,7 +253,7 @@ impl Compiler {
 
       let location = ResourceLocation {
         namespace: "minecraft".to_string(),
-        modules: Vec::new()
+        modules: Vec::new(),
       };
 
       state.register_item(location.clone(), tick);
@@ -246,7 +261,9 @@ impl Compiler {
     }
 
     let namespaces = replace(&mut state.namespaces, HashMap::new());
-    FileTree { namespaces: namespaces.into_values().collect() }
+    FileTree {
+      namespaces: namespaces.into_values().collect(),
+    }
   }
 
   fn compile_namespace(&self, namespace: &ast::Namespace) {
@@ -266,7 +283,7 @@ impl Compiler {
   fn compile_item(&self, item: &ast::Item, location: &mut ResourceLocation) {
     match item {
       ast::Item::Module(module) => self.compile_module(module, location),
-      ast::Item::Import(_) => {},
+      ast::Item::Import(_) => {}
       ast::Item::Function(function) => self.compile_ast_function(function, location),
       ast::Item::Resource(resource) => self.compile_resource(resource, location),
     }
@@ -293,7 +310,10 @@ impl Compiler {
           is_asset: resource.is_asset,
           text: text.clone(),
         };
-        self.state.borrow_mut().register_item(location.clone(), Item::TextResource(resource))
+        self
+          .state
+          .borrow_mut()
+          .register_item(location.clone(), Item::TextResource(resource))
       }
       ast::ResourceContent::File(path, file) => {
         let file_path = Path::new(file).parent().unwrap();
@@ -302,19 +322,29 @@ impl Compiler {
           is_asset: resource.is_asset,
           path: file_path.join(path).to_str().unwrap().to_string(),
         };
-        self.state.borrow_mut().register_item(location.clone(), Item::FileResource(resource))
+        self
+          .state
+          .borrow_mut()
+          .register_item(location.clone(), Item::FileResource(resource))
       }
     }
   }
 
-  fn compile_statement(&self, statement: &Statement, location: &FunctionLocation, code: &mut Vec<String>) {
+  fn compile_statement(
+    &self,
+    statement: &Statement,
+    location: &FunctionLocation,
+    code: &mut Vec<String>,
+  ) {
     match statement {
       Statement::Command(command) => code.push(self.compile_command(command, location)),
       Statement::Comment(comment) => code.push(comment.clone()),
       Statement::Expression(expression) => {
         self.compile_expression(expression, location, code);
-      },
-      Statement::IfStatement(if_statement) => self.compile_if_statement(code, if_statement, location),
+      }
+      Statement::IfStatement(if_statement) => {
+        self.compile_if_statement(code, if_statement, location, false)
+      }
     };
   }
 
@@ -335,10 +365,13 @@ impl Compiler {
 
     let function = Function {
       name: location.name,
-      commands
+      commands,
     };
 
-    self.state.borrow_mut().register_item(location.module, Item::Function(function));
+    self
+      .state
+      .borrow_mut()
+      .register_item(location.module, Item::Function(function));
   }
 
   fn compile_command(&self, command: &Command, location: &FunctionLocation) -> String {
@@ -360,18 +393,16 @@ impl Compiler {
     &self,
     expression: &Expression,
     location: &FunctionLocation,
-    code: &mut Vec<String>
+    code: &mut Vec<String>,
   ) -> ExpressionType {
     match expression {
       Expression::FunctionCall(function_call) => {
         code.push(self.compile_function_call(function_call, &location.module));
         ExpressionType::Void
-      },
+      }
       Expression::Integer(integer) => ExpressionType::Integer(integer.clone()),
-      Expression::Variable(variable) => ExpressionType::Storage(StorageLocation::from_zoglin_resource(
-          location.clone(),
-          variable,
-        ),
+      Expression::Variable(variable) => ExpressionType::Storage(
+        StorageLocation::from_zoglin_resource(location.clone(), variable),
       ),
       Expression::BinaryOperation(binary_operation) => {
         self.compile_binary_operation(binary_operation, location, code)
@@ -441,37 +472,71 @@ impl Compiler {
 
     result
   }
-  
-  fn compile_if_statement(&self, code: &mut Vec<String>, if_statement: &IfStatement, location: &FunctionLocation) {
+
+  fn compile_if_statement(
+    &self,
+    code: &mut Vec<String>,
+    if_statement: &IfStatement,
+    location: &FunctionLocation,
+    is_child: bool,
+  ) {
+    if if_statement.child.is_some() && !is_child {
+      let if_function = self
+        .state
+        .borrow_mut()
+        .next_function("if", location.module.namespace.clone());
+      code.push(format!("function {}", if_function.to_string()));
+      let mut function_code = Vec::new();
+
+      self.compile_if_else_chain(&mut function_code, if_statement, location);
+      self.state.borrow_mut().register_item(
+        if_function.module,
+        Item::Function(Function {
+          name: if_function.name,
+          commands: function_code,
+        }),
+      );
+
+      return;
+    }
+
     let condition = self.compile_expression(&if_statement.condition, location, code);
     let condition_scoreboard = self.state.borrow_mut().next_scoreboard();
-    let function = self.state.borrow_mut().next_function("if", location.module.namespace.clone());
+    let function = self
+      .state
+      .borrow_mut()
+      .next_function("if", location.module.namespace.clone());
 
     code.push(self.copy_to_scoreboard(condition, &condition_scoreboard));
-    code.push(format!("execute unless score {} matches 0 run function {}", condition_scoreboard.to_string(), function.to_string()));
+    code.push(format!(
+      "execute unless score {score} matches 0 {run_str} function {function}",
+      score = condition_scoreboard.to_string(),
+      run_str = if is_child { "run return run" } else { "run" },
+      function = function.to_string()
+    ));
 
-    if if_statement.child.is_some() {
-      let mut statements = Vec::new();
-      self.compile_else_statement(if_statement.child.as_ref().unwrap(), &mut statements, location);
-
-      let if_function = self.state.borrow_mut().next_function("if", location.module.namespace.clone());
-      self.state.borrow_mut().register_item(if_function.module, Item::Function(Function {
-        name: if_function.name,
-        commands: statements
-      }));
-    } else {
-      self.compile_function(function, &if_statement.block)
-    }
+    self.compile_function(function, &if_statement.block)
   }
 
-  fn compile_else_statement(&self, else_statement: &ElseStatement, statements: &mut Vec<String>, location: &FunctionLocation) {
-    match else_statement {
-      ElseStatement::IfStatement(_) => todo!(),
-      ElseStatement::Block(block) => {
-        for item in block {
-          self.compile_statement(item, &location, statements);
+  fn compile_if_else_chain(
+    &self,
+    code: &mut Vec<String>,
+    if_statement: &IfStatement,
+    location: &FunctionLocation,
+  ) {
+    self.compile_if_statement(code, if_statement, location, true);
+    match if_statement.child.as_ref() {
+      Some(ElseStatement::IfStatement(if_stmt)) => {
+        self.compile_if_else_chain(code, &if_stmt, location)
+      }
+
+      Some(ElseStatement::Block(block)) => {
+        for item in block.iter() {
+          self.compile_statement(item, &location, code);
         }
-      },
+      }
+
+      None => {}
     }
   }
 }
