@@ -347,7 +347,12 @@ impl Compiler {
         code.push(self.compile_function_call(function_call, &location.module));
         ExpressionType::Void
       }
-      Expression::Integer(integer) => ExpressionType::Integer(integer.clone()),
+      Expression::Byte(b) => ExpressionType::Byte(*b),
+      Expression::Short(s) => ExpressionType::Short(*s),
+      Expression::Integer(i) => ExpressionType::Integer(*i),
+      Expression::Long(l) => ExpressionType::Long(*l),
+      Expression::Float(f) => ExpressionType::Float(*f),
+      Expression::Double(d) => ExpressionType::Double(*d),
       Expression::Variable(variable) => ExpressionType::Storage(
         StorageLocation::from_zoglin_resource(location.clone(), variable),
       ),

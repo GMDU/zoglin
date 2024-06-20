@@ -79,7 +79,12 @@ pub enum StaticExpr {
 #[derive(Debug)]
 pub enum Expression {
   FunctionCall(FunctionCall),
+  Byte(i8),
+  Short(i16),
   Integer(i32),
+  Long(i64),
+  Float(f32),
+  Double(f64),
   Variable(ZoglinResource),
   BinaryOperation(BinaryOperation),
 }
@@ -102,7 +107,6 @@ pub struct BinaryOperation {
   pub right: Box<Expression>,
   pub operator: Operator,
 }
-
 
 #[derive(Debug, Clone)]
 pub enum Operator {

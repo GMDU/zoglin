@@ -852,3 +852,18 @@ Example:
 &myproc = -> { say "My proc has run!" }
 func_with_callback(->(&result) { tellraw @a "#{&result}" })
 ```
+
+Byte, Short, Int, Long, Float, Double
+Byte Array, Int Array, Long Array
+Boolean
+String
+Array
+Compound
+
+Byte, Short, Int, Long, Float, Double,
+LeftSquare, RightSquare,
+Semicolon, Comma,
+
+[*; a, b, c]
+
+*array[0]

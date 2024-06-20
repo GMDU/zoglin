@@ -1,5 +1,5 @@
-use error::Location;
 use crate::error;
+use error::Location;
 
 #[derive(Debug, Clone)]
 
@@ -37,9 +37,16 @@ pub enum TokenKind {
   ForwardSlash,
   Colon,
   Dot,
+  Semicolon,
+  Comma,
+  Byte,
+  Short,
+  Long,
   Integer,
-  JSON,
+  Float,
+  Double,
   String,
+  JSON,
   Plus,
   Minus,
   Star,
@@ -61,5 +68,5 @@ pub enum TokenKind {
   MinusEquals,
   StarEquals,
   ForwardSlashEquals,
-  PercentEquals,
+  PercentEquals
 }

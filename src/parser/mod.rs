@@ -1,17 +1,17 @@
 use ast::{Command, CommandPart, ElseStatement, StaticExpr};
 
 use self::ast::{
-  Expression, File, Function, FunctionCall, Import, Item, Module, Namespace, Resource,
-  ResourceContent, Statement, ZoglinResource, IfStatement
+  Expression, File, Function, FunctionCall, IfStatement, Import, Item, Module, Namespace, Resource,
+  ResourceContent, Statement, ZoglinResource,
 };
 use crate::{
-  error::{raise_error, Result},
+  error::{raise_error, raise_warning, Result},
   lexer::token::{Token, TokenKind},
 };
 
 pub mod ast;
-mod json;
 mod binary_operation;
+mod json;
 
 pub struct Parser {
   tokens: Vec<Token>,
@@ -286,15 +286,79 @@ impl Parser {
     Ok(Command { parts })
   }
 
-  fn parse_integer(&mut self) -> Result<Expression> {
-    let value = self.consume().value.parse().unwrap();
-    Ok(Expression::Integer(value))
+  fn parse_number(&mut self) -> Result<Expression> {
+    let current = self.consume();
+
+    Ok(match current.kind {
+      TokenKind::Byte => {
+        let value = current.value.parse().map_err(|_| {
+          raise_error(
+            current.location,
+            &format!("Value {} is too large for a byte", current.value),
+          )
+        })?;
+        Expression::Byte(value)
+      }
+      TokenKind::Short => {
+        let value = current.value.parse().map_err(|_| {
+          raise_error(
+            current.location,
+            &format!("Value {} is too large for a short", current.value),
+          )
+        })?;
+        Expression::Short(value)
+      }
+      TokenKind::Integer => match current.value.parse() {
+        Ok(value) => Expression::Integer(value),
+        Err(_) => {
+          let value = current.value.parse().map_err(|_| {
+            raise_error(
+              current.location.clone(),
+              &format!("Value {} is too large for a int", current.value),
+            )
+          })?;
+
+          raise_warning(current.location, &format!("Value {} is too large for an int, automatically converting to a long. If this is intentional, suffix it with 'l'.", current.value));
+          Expression::Long(value)
+        }
+      },
+      TokenKind::Long => {
+        let value = current.value.parse().map_err(|_| {
+          raise_error(
+            current.location,
+            &format!("Value {} is too large for a long", current.value),
+          )
+        })?;
+        Expression::Long(value)
+      }
+      TokenKind::Float => {
+        let value = current.value.parse().map_err(|_| {
+          raise_error(
+            current.location,
+            &format!("Value {} is too large for a float", current.value),
+          )
+        })?;
+        Expression::Float(value)
+      }
+      TokenKind::Double => {
+        let value = current.value.parse().map_err(|_| {
+          raise_error(
+            current.location,
+            &format!("Value {} is too large for a double", current.value),
+          )
+        })?;
+        Expression::Double(value)
+      }
+      _ => unreachable!(),
+    })
   }
 
   fn parse_identifier(&mut self) -> Result<Expression> {
     let resource = self.parse_zoglin_resource()?;
     if self.current().kind == TokenKind::LeftParen {
-      Ok(Expression::FunctionCall(self.parse_function_call(resource)?))
+      Ok(Expression::FunctionCall(
+        self.parse_function_call(resource)?,
+      ))
     } else {
       Ok(Expression::Variable(resource))
     }
@@ -365,7 +429,7 @@ impl Parser {
     }
     Ok(resource)
   }
-  
+
   fn parse_if_statement(&mut self) -> Result<IfStatement> {
     self.consume();
     let condition = self.parse_expression(0)?;
@@ -385,6 +449,10 @@ impl Parser {
       }
     }
 
-    Ok(IfStatement{condition, block, child})
+    Ok(IfStatement {
+      condition,
+      block,
+      child,
+    })
   }
 }

@@ -30,6 +30,8 @@ static OPERATOR_REGISTRY: &[(&str, TokenKind)] = &[
   ("/", TokenKind::ForwardSlash),
   (":", TokenKind::Colon),
   (".", TokenKind::Dot),
+  (";", TokenKind::Semicolon),
+  (",", TokenKind::Comma),
   ("+", TokenKind::Plus),
   ("-", TokenKind::Minus),
   ("*", TokenKind::Star),
@@ -162,10 +164,7 @@ impl Lexer {
     } else if let Some(punctuation) = self.parse_punctuation() {
       kind = punctuation;
     } else if self.current().is_digit(10) {
-      kind = TokenKind::Integer;
-      while self.current().is_digit(10) {
-        self.consume();
-      }
+      (kind, value) = self.parse_number();
     } else if self.current() == '"' || self.current() == '\'' {
       kind = TokenKind::String;
       value = self.tokenise_string();
@@ -333,6 +332,60 @@ impl Lexer {
     string
   }
 
+  fn parse_number(&mut self) -> (TokenKind, String) {
+    let mut kind = TokenKind::Integer;
+    let mut str_value = String::new();
+
+    while self.current().is_digit(10) {
+      str_value.push(self.consume());
+    }
+
+    match self.current() {
+      'b' | 'B' => {
+        self.consume();
+        kind = TokenKind::Byte
+      }
+      's' | 'S' => {
+        self.consume();
+        kind = TokenKind::Short
+      }
+      'l' | 'L' => {
+        self.consume();
+        kind = TokenKind::Long
+      }
+      'f' | 'F' => {
+        self.consume();
+        kind = TokenKind::Float;
+      }
+      'd' | 'D' => {
+        self.consume();
+        kind = TokenKind::Double
+      }
+      '.' => {
+        str_value.push(self.consume());
+        kind = TokenKind::Double;
+
+        while self.current().is_digit(10) {
+          str_value.push(self.consume());
+        }
+        match self.current() {
+          'f' | 'F' => {
+            self.consume();
+            kind = TokenKind::Float
+          }
+          'd' | 'D' => {
+            self.consume();
+          }
+          _ => {}
+        }
+      }
+
+      _ => {}
+    }
+
+    (kind, str_value)
+  }
+
   fn parse_include(&mut self) -> Result<Vec<Token>> {
     let token = self.next_token()?;
 
@@ -356,9 +409,16 @@ impl Lexer {
         Ok(path) => {
           let path_str = path.to_str().unwrap();
           let path_string = path_str.to_string();
-          if let Some(index) = self.include_chain.iter().position(|file| &path_string == file) {
+          if let Some(index) = self
+            .include_chain
+            .iter()
+            .position(|file| &path_string == file)
+          {
             if index != (self.include_chain.len() - 1) {
-              raise_warning(token.location.clone(), "Circular dependency detected, not including file.");
+              raise_warning(
+                token.location.clone(),
+                "Circular dependency detected, not including file.",
+              );
             }
             continue;
           }

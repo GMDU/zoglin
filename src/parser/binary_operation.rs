@@ -59,9 +59,10 @@ impl Parser {
   }
 
   fn lookup_prefix(kind: TokenKind) -> Option<fn(&mut Parser) -> Result<Expression>> {
+    use TokenKind::*;
     let function = match kind {
-      TokenKind::Identifier | TokenKind::Colon => Parser::parse_identifier,
-      TokenKind::Integer => Parser::parse_integer,
+      Identifier | Colon => Parser::parse_identifier,
+      Byte | Short | Integer | Long | Float | Double => Parser::parse_number,
       _ => return None,
     };
     Some(function)

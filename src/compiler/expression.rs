@@ -2,7 +2,12 @@ use super::file_tree::{ScoreboardLocation, StorageLocation};
 
 pub(super) enum ExpressionType {
   Void,
+  Byte(i8),
+  Short(i16),
   Integer(i32),
+  Long(i64),
+  Float(f32),
+  Double(f64),
   Storage(StorageLocation),
   Scoreboard(ScoreboardLocation),
   Boolean(bool),
@@ -73,7 +78,12 @@ impl ExpressionType {
   pub(super) fn to_storage(&self) -> (String, StorageKind) {
     match self {
       ExpressionType::Void => panic!("Cannot assign void to a value"),
+      ExpressionType::Byte(b) => (format!("value {}b", *b), StorageKind::Direct),
+      ExpressionType::Short(s) => (format!("value {}s", *s), StorageKind::Direct),
       ExpressionType::Integer(i) => (format!("value {}", *i), StorageKind::Direct),
+      ExpressionType::Long(l) => (format!("value {}l", *l), StorageKind::Direct),
+      ExpressionType::Float(f) => (format!("value {}f", *f), StorageKind::Direct),
+      ExpressionType::Double(d) => (format!("value {}d", *d), StorageKind::Direct),
       ExpressionType::Boolean(b) => (format!("value {}", *b), StorageKind::Direct),
       ExpressionType::Storage(location) => (
         format!("from storage {}", location.to_string()),
@@ -93,7 +103,12 @@ impl ExpressionType {
   pub(super) fn to_score(&self) -> (String, ScoreKind) {
     match self {
       ExpressionType::Void => panic!("Cannot assign void to a value"),
+      ExpressionType::Byte(b) => (b.to_string(), ScoreKind::Direct("set".to_string())),
+      ExpressionType::Short(s) => (s.to_string(), ScoreKind::Direct("set".to_string())),
       ExpressionType::Integer(i) => (i.to_string(), ScoreKind::Direct("set".to_string())),
+      ExpressionType::Long(l) => ((*l as i32).to_string(), ScoreKind::Direct("set".to_string())),
+      ExpressionType::Float(f) => ((f.floor() as i32).to_string(), ScoreKind::Direct("set".to_string())),
+      ExpressionType::Double(d) => ((d.floor() as i32).to_string(), ScoreKind::Direct("set".to_string())),
       ExpressionType::Boolean(b) => (
         if *b { "1" } else { "0" }.to_string(),
         ScoreKind::Direct("set".to_string()),
@@ -116,7 +131,12 @@ impl ExpressionType {
   pub(super) fn to_condition(&self) -> ConditionKind {
     match self {
       ExpressionType::Void => panic!("Cannot check void"),
+      ExpressionType::Byte(b) => ConditionKind::Known(*b != 0),
+      ExpressionType::Short(s) => ConditionKind::Known(*s != 0),
       ExpressionType::Integer(i) => ConditionKind::Known(*i != 0),
+      ExpressionType::Long(l) => ConditionKind::Known(*l != 0),
+      ExpressionType::Float(f) => ConditionKind::Known(*f != 0.0),
+      ExpressionType::Double(d) => ConditionKind::Known(*d != 0.0),
       ExpressionType::Boolean(b) => ConditionKind::Known(*b),
       ExpressionType::Condition(condition) => ConditionKind::Check(condition.to_string()),
       ExpressionType::Scoreboard(scoreboard) => {

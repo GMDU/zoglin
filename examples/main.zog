@@ -1,22 +1,26 @@
 namespace diamond
 # include "setup"
 
+# fn foo() {
+#   a = 10
+#   b = 20
+#   c = a + 20
+
+#   if a < b {
+#     say Yipeee!
+#   } else {
+#     say ruh roh
+#   }
+
+#   if a < 20 {
+#     say blah
+#   } else if a >= 10 {
+#     say blah2
+#   } else {
+#     time set day
+#   }
+# }
+
 fn foo() {
-  a = 10
-  b = 20
-  c = a + 20
-
-  if a < b {
-    say Yipeee!
-  } else {
-    say ruh roh
-  }
-
-  if a < 20 {
-    say blah
-  } else if a >= 10 {
-    say blah2
-  } else {
-    time set day
-  }
+  a = 1.5 + 2.8f / 10l - 4b * 3s + 12d
 }
