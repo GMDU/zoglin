@@ -127,18 +127,18 @@ pub enum Operator {
   LogicalAnd,
   LogicalOr,
   Assign,
-  OperatorAssign(Box<Operator>)
+  OperatorAssign(Box<Operator>),
 }
 
 #[derive(Debug)]
 pub struct IfStatement {
   pub condition: Expression,
   pub block: Vec<Statement>,
-  pub child: Option<ElseStatement>
+  pub child: Option<ElseStatement>,
 }
 
 #[derive(Debug)]
 pub enum ElseStatement {
   IfStatement(Box<IfStatement>),
-  Block(Vec<Statement>)
+  Block(Vec<Statement>),
 }

@@ -68,19 +68,23 @@ impl Namespace {
 
     let first = path.remove(0);
 
-    if let Some(index) = self.items.iter().position(|item|
-      match item {
-        Item::Module(module) if module.name == first => true,
-        _ => false,
-      }) {
-        let Item::Module(module) = &mut self.items[index] else {
-          unreachable!();
-        };
-        return module.get_module(path)
+    if let Some(index) = self.items.iter().position(|item| match item {
+      Item::Module(module) if module.name == first => true,
+      _ => false,
+    }) {
+      let Item::Module(module) = &mut self.items[index] else {
+        unreachable!();
       };
+      return module.get_module(path);
+    };
 
-    self.items.push(Item::Module(Module { name: first, items: Vec::new() }));
-    let Item::Module(module) = self.items.last_mut().unwrap() else { unreachable!(); };
+    self.items.push(Item::Module(Module {
+      name: first,
+      items: Vec::new(),
+    }));
+    let Item::Module(module) = self.items.last_mut().unwrap() else {
+      unreachable!();
+    };
 
     module.get_module(path)
   }
@@ -124,23 +128,27 @@ impl Module {
     if path.is_empty() {
       return &mut self.items;
     }
-    
+
     let first = path.remove(0);
 
-    if let Some(index) = self.items.iter().position(|item|
-      match item {
-        Item::Module(module) if module.name == first => true,
-        _ => false,
-      }) {
-        let Item::Module(module) = &mut self.items[index] else {
-          unreachable!();
-        };
-        return module.get_module(path)
+    if let Some(index) = self.items.iter().position(|item| match item {
+      Item::Module(module) if module.name == first => true,
+      _ => false,
+    }) {
+      let Item::Module(module) = &mut self.items[index] else {
+        unreachable!();
       };
+      return module.get_module(path);
+    };
 
-    self.items.push(Item::Module(Module { name: first, items: Vec::new() }));
-    let Item::Module(module) = self.items.last_mut().unwrap() else { unreachable!(); };
-    
+    self.items.push(Item::Module(Module {
+      name: first,
+      items: Vec::new(),
+    }));
+    let Item::Module(module) = self.items.last_mut().unwrap() else {
+      unreachable!();
+    };
+
     module.get_module(path)
   }
 }

@@ -27,7 +27,10 @@ impl Error {
 pub type Result<T> = std::result::Result<T, Error>;
 
 pub fn raise_error(location: Location, message: &str) -> Error {
-  Error{ location: location, message: message.to_string() }
+  Error {
+    location: location,
+    message: message.to_string(),
+  }
 }
 
 pub fn raise_warning(location: Location, message: &str) {

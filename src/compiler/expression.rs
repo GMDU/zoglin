@@ -106,9 +106,18 @@ impl ExpressionType {
       ExpressionType::Byte(b) => (b.to_string(), ScoreKind::Direct("set".to_string())),
       ExpressionType::Short(s) => (s.to_string(), ScoreKind::Direct("set".to_string())),
       ExpressionType::Integer(i) => (i.to_string(), ScoreKind::Direct("set".to_string())),
-      ExpressionType::Long(l) => ((*l as i32).to_string(), ScoreKind::Direct("set".to_string())),
-      ExpressionType::Float(f) => ((f.floor() as i32).to_string(), ScoreKind::Direct("set".to_string())),
-      ExpressionType::Double(d) => ((d.floor() as i32).to_string(), ScoreKind::Direct("set".to_string())),
+      ExpressionType::Long(l) => (
+        (*l as i32).to_string(),
+        ScoreKind::Direct("set".to_string()),
+      ),
+      ExpressionType::Float(f) => (
+        (f.floor() as i32).to_string(),
+        ScoreKind::Direct("set".to_string()),
+      ),
+      ExpressionType::Double(d) => (
+        (d.floor() as i32).to_string(),
+        ScoreKind::Direct("set".to_string()),
+      ),
       ExpressionType::Boolean(b) => (
         if *b { "1" } else { "0" }.to_string(),
         ScoreKind::Direct("set".to_string()),
@@ -144,5 +153,17 @@ impl ExpressionType {
       }
       ExpressionType::Storage(_) => todo!(),
     }
+  }
+
+  pub(super) fn numeric_value(&self) -> Option<i32> {
+    Some(match self {
+      ExpressionType::Byte(b) => *b as i32,
+      ExpressionType::Short(s) => *s as i32,
+      ExpressionType::Integer(i) => *i,
+      ExpressionType::Long(l) => *l as i32,
+      ExpressionType::Float(f) => f.floor() as i32,
+      ExpressionType::Double(d) => d.floor() as i32,
+      _ => return None,
+    })
   }
 }

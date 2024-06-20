@@ -89,13 +89,15 @@ impl Compiler {
       (ExpressionType::Boolean(_), _) | (_, ExpressionType::Boolean(_)) => {
         panic!("Cannot perform plus with boolean.")
       }
-      (ExpressionType::Integer(a), ExpressionType::Integer(b)) => ExpressionType::Integer(a + b),
-      (ExpressionType::Integer(i), other) | (other, ExpressionType::Integer(i)) => {
+      (left, right) if left.numeric_value().is_some() && right.numeric_value().is_some() => {
+        ExpressionType::Integer(left.numeric_value().unwrap() + right.numeric_value().unwrap())
+      }
+      (num, other) | (other, num) if num.numeric_value().is_some() => {
         let scoreboard = self.copy_to_scoreboard(code, other);
         code.push(format!(
           "scoreboard players add {} {}",
           scoreboard.to_string(),
-          i,
+          num.numeric_value().unwrap(),
         ));
         ExpressionType::Scoreboard(scoreboard)
       }
@@ -119,13 +121,15 @@ impl Compiler {
       (ExpressionType::Boolean(_), _) | (_, ExpressionType::Boolean(_)) => {
         panic!("Cannot perform subtraction with boolean.")
       }
-      (ExpressionType::Integer(a), ExpressionType::Integer(b)) => ExpressionType::Integer(a - b),
-      (other, ExpressionType::Integer(i)) => {
+      (left, right) if left.numeric_value().is_some() && right.numeric_value().is_some() => {
+        ExpressionType::Integer(left.numeric_value().unwrap() - right.numeric_value().unwrap())
+      }
+      (other, num) if num.numeric_value().is_some() => {
         let scoreboard = self.copy_to_scoreboard(code, other);
         code.push(format!(
           "scoreboard players remove {} {}",
           scoreboard.to_string(),
-          i,
+          num.numeric_value().unwrap(),
         ));
         ExpressionType::Scoreboard(scoreboard)
       }
@@ -149,7 +153,9 @@ impl Compiler {
       (ExpressionType::Boolean(_), _) | (_, ExpressionType::Boolean(_)) => {
         panic!("Cannot perform multiplication with boolean.")
       }
-      (ExpressionType::Integer(a), ExpressionType::Integer(b)) => ExpressionType::Integer(a * b),
+      (left, right) if left.numeric_value().is_some() && right.numeric_value().is_some() => {
+        ExpressionType::Integer(left.numeric_value().unwrap() * right.numeric_value().unwrap())
+      }
       (left, right) => self.compile_basic_operator(left, right, '*', code),
     }
   }
@@ -170,7 +176,9 @@ impl Compiler {
       (ExpressionType::Boolean(_), _) | (_, ExpressionType::Boolean(_)) => {
         panic!("Cannot perform division with boolean.")
       }
-      (ExpressionType::Integer(a), ExpressionType::Integer(b)) => ExpressionType::Integer(a / b),
+      (left, right) if left.numeric_value().is_some() && right.numeric_value().is_some() => {
+        ExpressionType::Integer(left.numeric_value().unwrap() / right.numeric_value().unwrap())
+      }
       (left, right) => self.compile_basic_operator(left, right, '/', code),
     }
   }
@@ -191,7 +199,9 @@ impl Compiler {
       (ExpressionType::Boolean(_), _) | (_, ExpressionType::Boolean(_)) => {
         panic!("Cannot perform modulo with boolean.")
       }
-      (ExpressionType::Integer(a), ExpressionType::Integer(b)) => ExpressionType::Integer(a % b),
+      (left, right) if left.numeric_value().is_some() && right.numeric_value().is_some() => {
+        ExpressionType::Integer(left.numeric_value().unwrap() % right.numeric_value().unwrap())
+      }
       (left, right) => self.compile_basic_operator(left, right, '%', code),
     }
   }
@@ -212,13 +222,19 @@ impl Compiler {
       (ExpressionType::Boolean(_), _) | (_, ExpressionType::Boolean(_)) => {
         panic!("Cannot compare with boolean.")
       }
-      (ExpressionType::Integer(a), ExpressionType::Integer(b)) => ExpressionType::Boolean(a < b),
-      (ExpressionType::Integer(i), other) => {
-        self.compile_match_comparison(code, other, format!("{}..", i + 1))
+      (left, right) if left.numeric_value().is_some() && right.numeric_value().is_some() => {
+        ExpressionType::Boolean(left.numeric_value().unwrap() < right.numeric_value().unwrap())
       }
-      (other, ExpressionType::Integer(i)) => {
-        self.compile_match_comparison(code, other, format!("..{}", i - 1))
-      }
+      (num, other) if num.numeric_value().is_some() => self.compile_match_comparison(
+        code,
+        other,
+        format!("{}..", num.numeric_value().unwrap() + 1),
+      ),
+      (other, num) if num.numeric_value().is_some() => self.compile_match_comparison(
+        code,
+        other,
+        format!("..{}", num.numeric_value().unwrap() - 1),
+      ),
       (left, right) => self.compile_comparison_operator(code, left, right, "<"),
     }
   }
@@ -239,13 +255,19 @@ impl Compiler {
       (ExpressionType::Boolean(_), _) | (_, ExpressionType::Boolean(_)) => {
         panic!("Cannot compare with boolean.")
       }
-      (ExpressionType::Integer(a), ExpressionType::Integer(b)) => ExpressionType::Boolean(a > b),
-      (ExpressionType::Integer(i), other) => {
-        self.compile_match_comparison(code, other, format!("..{}", i - 1))
+      (left, right) if left.numeric_value().is_some() && right.numeric_value().is_some() => {
+        ExpressionType::Boolean(left.numeric_value().unwrap() > right.numeric_value().unwrap())
       }
-      (other, ExpressionType::Integer(i)) => {
-        self.compile_match_comparison(code, other, format!("{}..", i + 1))
-      }
+      (num, other) if num.numeric_value().is_some() => self.compile_match_comparison(
+        code,
+        other,
+        format!("..{}", num.numeric_value().unwrap() - 1),
+      ),
+      (other, num) if num.numeric_value().is_some() => self.compile_match_comparison(
+        code,
+        other,
+        format!("{}..", num.numeric_value().unwrap() + 1),
+      ),
       (left, right) => self.compile_comparison_operator(code, left, right, ">"),
     }
   }
@@ -266,12 +288,14 @@ impl Compiler {
       (ExpressionType::Boolean(_), _) | (_, ExpressionType::Boolean(_)) => {
         panic!("Cannot compare with boolean.")
       }
-      (ExpressionType::Integer(a), ExpressionType::Integer(b)) => ExpressionType::Boolean(a <= b),
-      (ExpressionType::Integer(i), other) => {
-        self.compile_match_comparison(code, other, format!("{}..", i))
+      (left, right) if left.numeric_value().is_some() && right.numeric_value().is_some() => {
+        ExpressionType::Boolean(left.numeric_value().unwrap() <= right.numeric_value().unwrap())
       }
-      (other, ExpressionType::Integer(i)) => {
-        self.compile_match_comparison(code, other, format!("..{}", i))
+      (num, other) if num.numeric_value().is_some() => {
+        self.compile_match_comparison(code, other, format!("{}..", num.numeric_value().unwrap()))
+      }
+      (other, num) if num.numeric_value().is_some() => {
+        self.compile_match_comparison(code, other, format!("..{}", num.numeric_value().unwrap()))
       }
       (left, right) => self.compile_comparison_operator(code, left, right, "<="),
     }
@@ -293,12 +317,14 @@ impl Compiler {
       (ExpressionType::Boolean(_), _) | (_, ExpressionType::Boolean(_)) => {
         panic!("Cannot compare with boolean.")
       }
-      (ExpressionType::Integer(a), ExpressionType::Integer(b)) => ExpressionType::Boolean(a >= b),
-      (ExpressionType::Integer(i), other) => {
-        self.compile_match_comparison(code, other, format!("..{}", i))
+      (left, right) if left.numeric_value().is_some() && right.numeric_value().is_some() => {
+        ExpressionType::Boolean(left.numeric_value().unwrap() >= right.numeric_value().unwrap())
       }
-      (other, ExpressionType::Integer(i)) => {
-        self.compile_match_comparison(code, other, format!("{}..", i))
+      (num, other) if num.numeric_value().is_some() => {
+        self.compile_match_comparison(code, other, format!("..{}", num.numeric_value().unwrap()))
+      }
+      (other, num) if num.numeric_value().is_some() => {
+        self.compile_match_comparison(code, other, format!("{}..", num.numeric_value().unwrap()))
       }
       (left, right) => self.compile_comparison_operator(code, left, right, ">="),
     }

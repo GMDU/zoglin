@@ -68,5 +68,5 @@ pub enum TokenKind {
   MinusEquals,
   StarEquals,
   ForwardSlashEquals,
-  PercentEquals
+  PercentEquals,
 }
