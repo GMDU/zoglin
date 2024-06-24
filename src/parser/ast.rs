@@ -79,12 +79,15 @@ pub enum StaticExpr {
 #[derive(Debug)]
 pub enum Expression {
   FunctionCall(FunctionCall),
+  Boolean(bool),
   Byte(i8),
   Short(i16),
   Integer(i32),
   Long(i64),
   Float(f32),
   Double(f64),
+  String(String),
+  Array(Vec<Expression>),
   Variable(ZoglinResource),
   BinaryOperation(BinaryOperation),
 }

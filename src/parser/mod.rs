@@ -353,6 +353,34 @@ impl Parser {
     })
   }
 
+  fn parse_boolean(&mut self) -> Result<Expression> {
+    let token = self.consume();
+    Ok(Expression::Boolean(token.kind == TokenKind::TrueKeyword))
+  }
+
+  fn parse_string(&mut self) -> Result<Expression> {
+    let token = self.consume();
+    Ok(Expression::String(token.value))
+  }
+
+  fn parse_array(&mut self) -> Result<Expression> {
+    self.expect(TokenKind::LeftSquare)?;
+    let mut expressions = Vec::new();
+    while !self.eof() && self.current().kind != TokenKind::LeftSquare {
+      let expression = self.parse_expression(0)?;
+      expressions.push(expression);
+
+      if self.current().kind == TokenKind::Comma {
+        self.consume();
+      } else {
+        break;
+      }
+    }
+    self.expect(TokenKind::RightSquare)?;
+
+    Ok(Expression::Array(expressions))
+  }
+
   fn parse_identifier(&mut self) -> Result<Expression> {
     let resource = self.parse_zoglin_resource()?;
     if self.current().kind == TokenKind::LeftParen {

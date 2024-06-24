@@ -1,4 +1,4 @@
-use super::file_tree::{ScoreboardLocation, StorageLocation};
+use super::{file_tree::{ScoreboardLocation, StorageLocation}, CompilerState};
 
 pub(super) enum ExpressionType {
   Void,
@@ -11,6 +11,8 @@ pub(super) enum ExpressionType {
   Storage(StorageLocation),
   Scoreboard(ScoreboardLocation),
   Boolean(bool),
+  String(String),
+  Array(Vec<ExpressionType>),
   Condition(Condition),
 }
 
@@ -75,7 +77,7 @@ pub(super) enum ConditionKind {
 }
 
 impl ExpressionType {
-  pub(super) fn to_storage(&self) -> (String, StorageKind) {
+  pub(super) fn to_storage(&self, state: &mut CompilerState, code: &mut Vec<String>) -> (String, StorageKind) {
     match self {
       ExpressionType::Void => panic!("Cannot assign void to a value"),
       ExpressionType::Byte(b) => (format!("value {}b", *b), StorageKind::Direct),
@@ -85,6 +87,28 @@ impl ExpressionType {
       ExpressionType::Float(f) => (format!("value {}f", *f), StorageKind::Direct),
       ExpressionType::Double(d) => (format!("value {}d", *d), StorageKind::Direct),
       ExpressionType::Boolean(b) => (format!("value {}", *b), StorageKind::Direct),
+      ExpressionType::String(s) => (
+        format!("value \"{}\"", s.escape_default().to_string()),
+        StorageKind::Direct,
+      ),
+      ExpressionType::Array(a) => {
+        let storage = state.next_storage().to_string();
+        code.push(format!("data modify storage {storage} set value []"));
+        for element in a {
+          match element.to_storage(state, code) {
+              (expr_code, StorageKind::Direct) => {
+                code.push(format!("data modify storage {storage} append {expr_code}"));
+              }
+              (expr_code, StorageKind::Indirect) => {
+                let temp_storage =  state.next_storage().to_string();
+                // TODO: Make type known
+                code.push(format!("execute store result storage {temp_storage} int 1 run {expr_code}"));
+                code.push(format!("data modify storage {storage} append from storage {temp_storage}"));
+              }
+          }
+        }
+        (format!("from storage {storage}"), StorageKind::Direct)
+      }
       ExpressionType::Storage(location) => (
         format!("from storage {}", location.to_string()),
         StorageKind::Direct,
@@ -122,6 +146,8 @@ impl ExpressionType {
         if *b { "1" } else { "0" }.to_string(),
         ScoreKind::Direct("set".to_string()),
       ),
+      ExpressionType::String(_) => panic!("Cannot assign string to a scoreboard variable"),
+      ExpressionType::Array(_) => panic!("Cannot assign array to a scoreboard variable"),
       ExpressionType::Storage(location) => (
         format!("data get storage {}", location.to_string()),
         ScoreKind::Indirect,
@@ -147,6 +173,8 @@ impl ExpressionType {
       ExpressionType::Float(f) => ConditionKind::Known(*f != 0.0),
       ExpressionType::Double(d) => ConditionKind::Known(*d != 0.0),
       ExpressionType::Boolean(b) => ConditionKind::Known(*b),
+      ExpressionType::String(_) => panic!("Cannot use string as a condition"),
+      ExpressionType::Array(_) => panic!("Cannot use array as a condition"),
       ExpressionType::Condition(condition) => ConditionKind::Check(condition.to_string()),
       ExpressionType::Scoreboard(scoreboard) => {
         ConditionKind::Check(format!("unless score {} matches 0", scoreboard.to_string()))
@@ -166,4 +194,37 @@ impl ExpressionType {
       _ => return None,
     })
   }
+}
+
+pub fn verify_types(types: &[ExpressionType]) -> bool {
+  let mut single_type = &ExpressionType::Void;
+  for typ in types {
+    match (typ, single_type) {
+      (ExpressionType::Void, _) => panic!("Cannot use void as a value"),
+      (ExpressionType::Storage(_), ExpressionType::Void) => {}
+      (ExpressionType::Scoreboard(_), ExpressionType::Void) => {
+        single_type = &ExpressionType::Integer(0)
+      }
+      (ExpressionType::Condition(_), ExpressionType::Void) => {
+        single_type = &ExpressionType::Byte(0)
+      }
+      (ExpressionType::Boolean(_), ExpressionType::Void) => single_type = &ExpressionType::Byte(0),
+      (_, ExpressionType::Void) => single_type = typ,
+      (ExpressionType::Byte(_), ExpressionType::Byte(_)) => {}
+      (ExpressionType::Short(_), ExpressionType::Short(_)) => {}
+      (ExpressionType::Integer(_), ExpressionType::Integer(_)) => {}
+      (ExpressionType::Long(_), ExpressionType::Long(_)) => {}
+      (ExpressionType::Float(_), ExpressionType::Float(_)) => {}
+      (ExpressionType::Double(_), ExpressionType::Double(_)) => {}
+      (ExpressionType::Storage(_), _) => {}
+      (ExpressionType::Scoreboard(_), ExpressionType::Integer(_)) => {}
+      (ExpressionType::Boolean(_), ExpressionType::Byte(_)) => {}
+      (ExpressionType::String(_), ExpressionType::String(_)) => {}
+      (ExpressionType::Array(_), ExpressionType::Array(_)) => {}
+      (ExpressionType::Condition(_), ExpressionType::Byte(_)) => {}
+      _ => return false,
+    }
+  }
+
+  true
 }

@@ -24,11 +24,11 @@ impl Compiler {
       Operator::Power => todo!(),
       Operator::LeftShift => todo!(),
       Operator::RightShift => todo!(),
-      Operator::LessThan => self.complile_less_than(code, binary_operation, location),
-      Operator::GreaterThan => self.complile_greater_than(code, binary_operation, location),
-      Operator::LessThanEquals => self.complile_less_than_equals(code, binary_operation, location),
+      Operator::LessThan => self.compile_less_than(code, binary_operation, location),
+      Operator::GreaterThan => self.compile_greater_than(code, binary_operation, location),
+      Operator::LessThanEquals => self.compile_less_than_equals(code, binary_operation, location),
       Operator::GreaterThanEquals => {
-        self.complile_greater_than_equals(code, binary_operation, location)
+        self.compile_greater_than_equals(code, binary_operation, location)
       }
       Operator::Equal => todo!(),
       Operator::NotEqual => todo!(),
@@ -51,7 +51,7 @@ impl Compiler {
 
     let typ = self.compile_expression(&binary_operation.right, location, code);
 
-    let (command, kind) = typ.to_storage();
+    let (command, kind) = typ.to_storage(&mut self.state.borrow_mut(), code);
 
     match kind {
       StorageKind::Direct => {
@@ -89,6 +89,9 @@ impl Compiler {
       (ExpressionType::Boolean(_), _) | (_, ExpressionType::Boolean(_)) => {
         panic!("Cannot perform plus with boolean.")
       }
+      (ExpressionType::String(_), _) | (_, ExpressionType::String(_)) => {
+        panic!("Cannot perform plus with string.")
+      }
       (left, right) if left.numeric_value().is_some() && right.numeric_value().is_some() => {
         ExpressionType::Integer(left.numeric_value().unwrap() + right.numeric_value().unwrap())
       }
@@ -120,6 +123,9 @@ impl Compiler {
       }
       (ExpressionType::Boolean(_), _) | (_, ExpressionType::Boolean(_)) => {
         panic!("Cannot perform subtraction with boolean.")
+      }
+      (ExpressionType::String(_), _) | (_, ExpressionType::String(_)) => {
+        panic!("Cannot perform subtraction with string.")
       }
       (left, right) if left.numeric_value().is_some() && right.numeric_value().is_some() => {
         ExpressionType::Integer(left.numeric_value().unwrap() - right.numeric_value().unwrap())
@@ -153,6 +159,9 @@ impl Compiler {
       (ExpressionType::Boolean(_), _) | (_, ExpressionType::Boolean(_)) => {
         panic!("Cannot perform multiplication with boolean.")
       }
+      (ExpressionType::String(_), _) | (_, ExpressionType::String(_)) => {
+        panic!("Cannot perform multiplication with string.")
+      }
       (left, right) if left.numeric_value().is_some() && right.numeric_value().is_some() => {
         ExpressionType::Integer(left.numeric_value().unwrap() * right.numeric_value().unwrap())
       }
@@ -175,6 +184,9 @@ impl Compiler {
       }
       (ExpressionType::Boolean(_), _) | (_, ExpressionType::Boolean(_)) => {
         panic!("Cannot perform division with boolean.")
+      }
+      (ExpressionType::String(_), _) | (_, ExpressionType::String(_)) => {
+        panic!("Cannot perform division with string.")
       }
       (left, right) if left.numeric_value().is_some() && right.numeric_value().is_some() => {
         ExpressionType::Integer(left.numeric_value().unwrap() / right.numeric_value().unwrap())
@@ -199,6 +211,9 @@ impl Compiler {
       (ExpressionType::Boolean(_), _) | (_, ExpressionType::Boolean(_)) => {
         panic!("Cannot perform modulo with boolean.")
       }
+      (ExpressionType::String(_), _) | (_, ExpressionType::String(_)) => {
+        panic!("Cannot perform modulo with string.")
+      }
       (left, right) if left.numeric_value().is_some() && right.numeric_value().is_some() => {
         ExpressionType::Integer(left.numeric_value().unwrap() % right.numeric_value().unwrap())
       }
@@ -206,7 +221,7 @@ impl Compiler {
     }
   }
 
-  fn complile_less_than(
+  fn compile_less_than(
     &self,
     code: &mut Vec<String>,
     binary_operation: &BinaryOperation,
@@ -221,6 +236,9 @@ impl Compiler {
       }
       (ExpressionType::Boolean(_), _) | (_, ExpressionType::Boolean(_)) => {
         panic!("Cannot compare with boolean.")
+      }
+      (ExpressionType::String(_), _) | (_, ExpressionType::String(_)) => {
+        panic!("Cannot compare with string.")
       }
       (left, right) if left.numeric_value().is_some() && right.numeric_value().is_some() => {
         ExpressionType::Boolean(left.numeric_value().unwrap() < right.numeric_value().unwrap())
@@ -239,7 +257,7 @@ impl Compiler {
     }
   }
 
-  fn complile_greater_than(
+  fn compile_greater_than(
     &self,
     code: &mut Vec<String>,
     binary_operation: &BinaryOperation,
@@ -254,6 +272,9 @@ impl Compiler {
       }
       (ExpressionType::Boolean(_), _) | (_, ExpressionType::Boolean(_)) => {
         panic!("Cannot compare with boolean.")
+      }
+      (ExpressionType::String(_), _) | (_, ExpressionType::String(_)) => {
+        panic!("Cannot compare with string.")
       }
       (left, right) if left.numeric_value().is_some() && right.numeric_value().is_some() => {
         ExpressionType::Boolean(left.numeric_value().unwrap() > right.numeric_value().unwrap())
@@ -272,7 +293,7 @@ impl Compiler {
     }
   }
 
-  fn complile_less_than_equals(
+  fn compile_less_than_equals(
     &self,
     code: &mut Vec<String>,
     binary_operation: &BinaryOperation,
@@ -284,6 +305,9 @@ impl Compiler {
     match (left, right) {
       (ExpressionType::Void, _) | (_, ExpressionType::Void) => {
         panic!("Cannot compare with void.")
+      }
+      (ExpressionType::String(_), _) | (_, ExpressionType::String(_)) => {
+        panic!("Cannot compare with string.")
       }
       (ExpressionType::Boolean(_), _) | (_, ExpressionType::Boolean(_)) => {
         panic!("Cannot compare with boolean.")
@@ -301,7 +325,7 @@ impl Compiler {
     }
   }
 
-  fn complile_greater_than_equals(
+  fn compile_greater_than_equals(
     &self,
     code: &mut Vec<String>,
     binary_operation: &BinaryOperation,
@@ -316,6 +340,9 @@ impl Compiler {
       }
       (ExpressionType::Boolean(_), _) | (_, ExpressionType::Boolean(_)) => {
         panic!("Cannot compare with boolean.")
+      }
+      (ExpressionType::String(_), _) | (_, ExpressionType::String(_)) => {
+        panic!("Cannot compare with string.")
       }
       (left, right) if left.numeric_value().is_some() && right.numeric_value().is_some() => {
         ExpressionType::Boolean(left.numeric_value().unwrap() >= right.numeric_value().unwrap())

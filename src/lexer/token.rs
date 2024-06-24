@@ -27,6 +27,8 @@ pub enum TokenKind {
   CommandString,
   CommandEnd,
   Comment,
+  TrueKeyword,
+  FalseKeyword,
   Identifier,
   LeftBrace,
   RightBrace,

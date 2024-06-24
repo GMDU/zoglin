@@ -22,5 +22,10 @@ namespace diamond
 # }
 
 fn foo() {
-  a = 1.5 + 2.8f / 10l - 4b * 3s + 12d
+  # a = 1.5 + 2.8f / 10l - 4b * 3s + 12d
+  # a = "Hello, world!"
+  # b = true
+  # b = false
+  # c = 1 + 2 * 3
+  arr = [1, 2, 3 + 4, 9 * 21]
 }

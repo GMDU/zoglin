@@ -61,11 +61,22 @@ impl Parser {
   fn lookup_prefix(kind: TokenKind) -> Option<fn(&mut Parser) -> Result<Expression>> {
     use TokenKind::*;
     let function = match kind {
+      TrueKeyword | FalseKeyword => Parser::parse_boolean,
       Identifier | Colon => Parser::parse_identifier,
       Byte | Short | Integer | Long | Float | Double => Parser::parse_number,
+      String => Parser::parse_string,
+      LeftParen => Parser::parse_bracketed_expression,
+      LeftSquare => Parser::parse_array,
       _ => return None,
     };
     Some(function)
+  }
+
+  pub fn parse_bracketed_expression(&mut self) -> Result<Expression> {
+    self.expect(TokenKind::LeftParen)?;
+    let expression = self.parse_expression(0)?;
+    self.expect(TokenKind::RightParen)?;
+    Ok(expression)
   }
 
   pub fn parse_expression(&mut self, min_precedence: u8) -> Result<Expression> {

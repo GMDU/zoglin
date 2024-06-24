@@ -1,6 +1,6 @@
 use std::{cell::RefCell, collections::HashMap, mem::replace, path::Path};
 
-use expression::{ConditionKind, ExpressionType};
+use expression::{verify_types, ConditionKind, ExpressionType};
 use file_tree::{FunctionLocation, ScoreboardLocation, StorageLocation};
 use serde::Serialize;
 
@@ -123,6 +123,16 @@ impl CompilerState {
         .map(|s| s.to_string())
         .collect(),
       name: format!("$var_{}", self.next_counter("scoreboard")),
+    }
+  }
+  
+  fn next_storage(&mut self) -> StorageLocation {
+    StorageLocation {
+      storage: ResourceLocation {
+        namespace: "zoglin".to_string(),
+        modules: vec!["internal".to_string(), "vars".to_string()]
+      },
+      name: format!("var_{}", self.next_counter("storage")),
     }
   }
 
@@ -353,6 +363,9 @@ impl Compiler {
       Expression::Long(l) => ExpressionType::Long(*l),
       Expression::Float(f) => ExpressionType::Float(*f),
       Expression::Double(d) => ExpressionType::Double(*d),
+      Expression::Boolean(b) => ExpressionType::Boolean(*b),
+      Expression::String(s) => ExpressionType::String(s.clone()),
+      Expression::Array(a) => self.compile_array(code, a, location),
       Expression::Variable(variable) => ExpressionType::Storage(
         StorageLocation::from_zoglin_resource(location.clone(), variable),
       ),
@@ -360,6 +373,20 @@ impl Compiler {
         self.compile_binary_operation(binary_operation, location, code)
       }
     }
+  }
+
+  fn compile_array(&self, code: &mut Vec<String>, expressions: &[Expression], location: &FunctionLocation) -> ExpressionType {
+    let mut types = Vec::new();
+
+    for expr in expressions {
+      types.push(self.compile_expression(expr, location, code));
+    }
+
+    if !verify_types(&types) {
+      panic!("Arrays can only contain values of the same type");
+    }
+
+    ExpressionType::Array(types)
   }
 
   fn compile_static_expr(&self, expr: &StaticExpr, location: &ResourceLocation) -> String {

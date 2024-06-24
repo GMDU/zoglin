@@ -854,14 +854,14 @@ func_with_callback(->(&result) { tellraw @a "#{&result}" })
 ```
 
 Byte, Short, Int, Long, Float, Double
-Byte Array, Int Array, Long Array
 Boolean
 String
+Byte Array, Int Array, Long Array
 Array
 Compound
 
 Byte, Short, Int, Long, Float, Double,
-LeftSquare, RightSquare,
+LeftSquare, RightSquare, TrueKeyword, FalseKeyword
 Semicolon, Comma,
 
 [*; a, b, c]
