@@ -1,4 +1,9 @@
-use super::{file_tree::{ScoreboardLocation, StorageLocation}, CompilerState};
+use crate::parser::ast::ArrayType;
+
+use super::{
+  file_tree::{ScoreboardLocation, StorageLocation},
+  CompilerState,
+};
 
 pub(super) enum ExpressionType {
   Void,
@@ -13,6 +18,9 @@ pub(super) enum ExpressionType {
   Boolean(bool),
   String(String),
   Array(Vec<ExpressionType>),
+  ByteArray(Vec<ExpressionType>),
+  IntArray(Vec<ExpressionType>),
+  LongArray(Vec<ExpressionType>),
   Condition(Condition),
 }
 
@@ -77,7 +85,11 @@ pub(super) enum ConditionKind {
 }
 
 impl ExpressionType {
-  pub(super) fn to_storage(&self, state: &mut CompilerState, code: &mut Vec<String>) -> (String, StorageKind) {
+  pub(super) fn to_storage(
+    &self,
+    state: &mut CompilerState,
+    code: &mut Vec<String>,
+  ) -> (String, StorageKind) {
     match self {
       ExpressionType::Void => panic!("Cannot assign void to a value"),
       ExpressionType::Byte(b) => (format!("value {}b", *b), StorageKind::Direct),
@@ -91,24 +103,10 @@ impl ExpressionType {
         format!("value \"{}\"", s.escape_default().to_string()),
         StorageKind::Direct,
       ),
-      ExpressionType::Array(a) => {
-        let storage = state.next_storage().to_string();
-        code.push(format!("data modify storage {storage} set value []"));
-        for element in a {
-          match element.to_storage(state, code) {
-              (expr_code, StorageKind::Direct) => {
-                code.push(format!("data modify storage {storage} append {expr_code}"));
-              }
-              (expr_code, StorageKind::Indirect) => {
-                let temp_storage =  state.next_storage().to_string();
-                // TODO: Make type known
-                code.push(format!("execute store result storage {temp_storage} int 1 run {expr_code}"));
-                code.push(format!("data modify storage {storage} append from storage {temp_storage}"));
-              }
-          }
-        }
-        (format!("from storage {storage}"), StorageKind::Direct)
-      }
+      ExpressionType::Array(a) => array_to_storage(&a, "", state, code),
+      ExpressionType::ByteArray(a) => array_to_storage(&a, "B;", state, code),
+      ExpressionType::IntArray(a) => array_to_storage(&a, "I;", state, code),
+      ExpressionType::LongArray(a) => array_to_storage(&a, "L;", state, code),
       ExpressionType::Storage(location) => (
         format!("from storage {}", location.to_string()),
         StorageKind::Direct,
@@ -147,7 +145,10 @@ impl ExpressionType {
         ScoreKind::Direct("set".to_string()),
       ),
       ExpressionType::String(_) => panic!("Cannot assign string to a scoreboard variable"),
-      ExpressionType::Array(_) => panic!("Cannot assign array to a scoreboard variable"),
+      ExpressionType::Array(_)
+      | ExpressionType::ByteArray(_)
+      | ExpressionType::IntArray(_)
+      | ExpressionType::LongArray(_) => panic!("Cannot assign array to a scoreboard variable"),
       ExpressionType::Storage(location) => (
         format!("data get storage {}", location.to_string()),
         ScoreKind::Indirect,
@@ -174,7 +175,10 @@ impl ExpressionType {
       ExpressionType::Double(d) => ConditionKind::Known(*d != 0.0),
       ExpressionType::Boolean(b) => ConditionKind::Known(*b),
       ExpressionType::String(_) => panic!("Cannot use string as a condition"),
-      ExpressionType::Array(_) => panic!("Cannot use array as a condition"),
+      ExpressionType::Array(_)
+      | ExpressionType::ByteArray(_)
+      | ExpressionType::IntArray(_)
+      | ExpressionType::LongArray(_) => panic!("Cannot use array as a condition"),
       ExpressionType::Condition(condition) => ConditionKind::Check(condition.to_string()),
       ExpressionType::Scoreboard(scoreboard) => {
         ConditionKind::Check(format!("unless score {} matches 0", scoreboard.to_string()))
@@ -196,8 +200,44 @@ impl ExpressionType {
   }
 }
 
-pub fn verify_types(types: &[ExpressionType]) -> bool {
-  let mut single_type = &ExpressionType::Void;
+fn array_to_storage(
+  elements: &[ExpressionType],
+  prefix: &str,
+  state: &mut CompilerState,
+  code: &mut Vec<String>,
+) -> (String, StorageKind) {
+  let storage = state.next_storage().to_string();
+  code.push(format!(
+    "data modify storage {storage} set value [{prefix}]"
+  ));
+  for element in elements {
+    match element.to_storage(state, code) {
+      (expr_code, StorageKind::Direct) => {
+        code.push(format!("data modify storage {storage} append {expr_code}"));
+      }
+      (expr_code, StorageKind::Indirect) => {
+        let temp_storage = state.next_storage().to_string();
+        // TODO: Make type known
+        code.push(format!(
+          "execute store result storage {temp_storage} int 1 run {expr_code}"
+        ));
+        code.push(format!(
+          "data modify storage {storage} append from storage {temp_storage}"
+        ));
+      }
+    }
+  }
+  (format!("from storage {storage}"), StorageKind::Direct)
+}
+
+pub fn verify_types(types: &[ExpressionType], typ: ArrayType) -> bool {
+  let mut single_type = match typ {
+    ArrayType::Any => &ExpressionType::Void,
+    ArrayType::Byte => &ExpressionType::Byte(0),
+    ArrayType::Int => &ExpressionType::Integer(0),
+    ArrayType::Long => &ExpressionType::Long(0),
+  };
+
   for typ in types {
     match (typ, single_type) {
       (ExpressionType::Void, _) => panic!("Cannot use void as a value"),

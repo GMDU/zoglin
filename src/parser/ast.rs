@@ -87,9 +87,17 @@ pub enum Expression {
   Float(f32),
   Double(f64),
   String(String),
-  Array(Vec<Expression>),
+  Array(ArrayType, Vec<Expression>),
   Variable(ZoglinResource),
   BinaryOperation(BinaryOperation),
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum ArrayType {
+  Any,
+  Byte,
+  Int,
+  Long
 }
 
 #[derive(Debug)]

@@ -1,4 +1,4 @@
-use ast::{Command, CommandPart, ElseStatement, StaticExpr};
+use ast::{ArrayType, Command, CommandPart, ElseStatement, StaticExpr};
 
 use self::ast::{
   Expression, File, Function, FunctionCall, IfStatement, Import, Item, Module, Namespace, Resource,
@@ -55,7 +55,10 @@ impl Parser {
   }
 
   fn current(&self) -> Token {
-    let mut offset = 0;
+    self.peek(0)
+  }
+
+  fn peek(&self, mut offset: usize) -> Token {
     while self.should_skip(offset, &[]) {
       offset += 1;
     }
@@ -365,6 +368,30 @@ impl Parser {
 
   fn parse_array(&mut self) -> Result<Expression> {
     self.expect(TokenKind::LeftSquare)?;
+
+    let array_type = if self.peek(1).kind == TokenKind::Semicolon
+      && self.current().kind == TokenKind::Identifier
+    {
+      let array_type = match self.current().value.as_str() {
+        "B" | "b" => ArrayType::Byte,
+        "I" | "i" => ArrayType::Int,
+        "L" | "l" => ArrayType::Long,
+        _ => {
+          return Err(raise_error(
+            self.current().location,
+            &format!("\"{}\" is not a valid array type", self.current().value),
+          ))
+        }
+      };
+
+      self.consume();
+      self.consume();
+
+      array_type
+    } else {
+      ArrayType::Any
+    };
+
     let mut expressions = Vec::new();
     while !self.eof() && self.current().kind != TokenKind::LeftSquare {
       let expression = self.parse_expression(0)?;
@@ -378,7 +405,7 @@ impl Parser {
     }
     self.expect(TokenKind::RightSquare)?;
 
-    Ok(Expression::Array(expressions))
+    Ok(Expression::Array(array_type, expressions))
   }
 
   fn parse_identifier(&mut self) -> Result<Expression> {

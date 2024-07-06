@@ -5,8 +5,8 @@ use file_tree::{FunctionLocation, ScoreboardLocation, StorageLocation};
 use serde::Serialize;
 
 use crate::parser::ast::{
-  self, Command, ElseStatement, Expression, File, FunctionCall, IfStatement, Statement, StaticExpr,
-  ZoglinResource,
+  self, ArrayType, Command, ElseStatement, Expression, File, FunctionCall, IfStatement, Statement,
+  StaticExpr, ZoglinResource,
 };
 
 use self::{
@@ -125,12 +125,12 @@ impl CompilerState {
       name: format!("$var_{}", self.next_counter("scoreboard")),
     }
   }
-  
+
   fn next_storage(&mut self) -> StorageLocation {
     StorageLocation {
       storage: ResourceLocation {
         namespace: "zoglin".to_string(),
-        modules: vec!["internal".to_string(), "vars".to_string()]
+        modules: vec!["internal".to_string(), "vars".to_string()],
       },
       name: format!("var_{}", self.next_counter("storage")),
     }
@@ -365,7 +365,7 @@ impl Compiler {
       Expression::Double(d) => ExpressionType::Double(*d),
       Expression::Boolean(b) => ExpressionType::Boolean(*b),
       Expression::String(s) => ExpressionType::String(s.clone()),
-      Expression::Array(a) => self.compile_array(code, a, location),
+      Expression::Array(typ, a) => self.compile_array(code, *typ, a, location),
       Expression::Variable(variable) => ExpressionType::Storage(
         StorageLocation::from_zoglin_resource(location.clone(), variable),
       ),
@@ -375,18 +375,34 @@ impl Compiler {
     }
   }
 
-  fn compile_array(&self, code: &mut Vec<String>, expressions: &[Expression], location: &FunctionLocation) -> ExpressionType {
+  fn compile_array(
+    &self,
+    code: &mut Vec<String>,
+    typ: ArrayType,
+    expressions: &[Expression],
+    location: &FunctionLocation,
+  ) -> ExpressionType {
     let mut types = Vec::new();
 
     for expr in expressions {
       types.push(self.compile_expression(expr, location, code));
     }
 
-    if !verify_types(&types) {
-      panic!("Arrays can only contain values of the same type");
+    if !verify_types(&types, typ) {
+      match typ {
+        ArrayType::Any => panic!("Arrays can only contain values of the same type"),
+        ArrayType::Byte => panic!("Byte arrays can only byte values"),
+        ArrayType::Int => panic!("Int arrays can only integer values"),
+        ArrayType::Long => panic!("Long arrays can only long values"),
+      }
     }
 
-    ExpressionType::Array(types)
+    match typ {
+        ArrayType::Any => ExpressionType::Array(types),
+        ArrayType::Byte => ExpressionType::ByteArray(types),
+        ArrayType::Int => ExpressionType::IntArray(types),
+        ArrayType::Long => ExpressionType::LongArray(types),
+    }
   }
 
   fn compile_static_expr(&self, expr: &StaticExpr, location: &ResourceLocation) -> String {
