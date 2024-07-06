@@ -6,7 +6,7 @@ use crate::parser::ast::ArrayType;
 
 use super::{
   file_tree::{ScoreboardLocation, StorageLocation},
-  CompilerState,
+  Compiler,
 };
 
 pub(super) enum ExpressionType {
@@ -92,7 +92,7 @@ pub(super) enum ConditionKind {
 impl ExpressionType {
   pub(super) fn to_storage(
     &self,
-    state: &mut CompilerState,
+    state: &mut Compiler,
     code: &mut Vec<String>,
   ) -> (String, StorageKind) {
     match self {
@@ -238,7 +238,7 @@ impl ExpressionType {
 fn array_to_storage(
   elements: &[ExpressionType],
   prefix: &str,
-  state: &mut CompilerState,
+  state: &mut Compiler,
   code: &mut Vec<String>,
 ) -> (String, StorageKind) {
   let storage = state.next_storage().to_string();

@@ -89,8 +89,7 @@ fn build(file: &String, output: &String, debug_mode: &str) -> (HashSet<String>, 
     return (lexer.dependent_files, Ok(()));
   }
 
-  let compiler = Compiler::new(ast);
-  compiler.compile(output);
+  Compiler::compile(ast, output);
   println!(
     "Built in {}ms",
     SystemTime::now().duration_since(start).unwrap().as_millis()

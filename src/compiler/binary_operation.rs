@@ -10,8 +10,8 @@ use super::{
 
 impl Compiler {
   pub(super) fn compile_binary_operation(
-    &self,
-    binary_operation: &BinaryOperation,
+    &mut self,
+    binary_operation: BinaryOperation,
     location: &FunctionLocation,
     code: &mut Vec<String>,
   ) -> ExpressionType {
@@ -40,8 +40,8 @@ impl Compiler {
   }
 
   fn compile_assignment(
-    &self,
-    binary_operation: &BinaryOperation,
+    &mut self,
+    binary_operation: BinaryOperation,
     location: &FunctionLocation,
     code: &mut Vec<String>,
   ) -> ExpressionType {
@@ -49,9 +49,9 @@ impl Compiler {
       panic!("Can only assign to variables.")
     };
 
-    let typ = self.compile_expression(&binary_operation.right, location, code);
+    let typ = self.compile_expression(*binary_operation.right, location, code);
 
-    let (command, kind) = typ.to_storage(&mut self.state.borrow_mut(), code);
+    let (command, kind) = typ.to_storage(self, code);
 
     match kind {
       StorageKind::Direct => {
@@ -74,13 +74,13 @@ impl Compiler {
   }
 
   fn compile_plus(
-    &self,
-    binary_operation: &BinaryOperation,
+    &mut self,
+    binary_operation: BinaryOperation,
     location: &FunctionLocation,
     code: &mut Vec<String>,
   ) -> ExpressionType {
-    let left = self.compile_expression(&binary_operation.left, location, code);
-    let right = self.compile_expression(&binary_operation.right, location, code);
+    let left = self.compile_expression(*binary_operation.left, location, code);
+    let right = self.compile_expression(*binary_operation.right, location, code);
 
     match (left, right) {
       (ExpressionType::Void, _) | (_, ExpressionType::Void) => {
@@ -109,13 +109,13 @@ impl Compiler {
   }
 
   fn compile_minus(
-    &self,
-    binary_operation: &BinaryOperation,
+    &mut self,
+    binary_operation: BinaryOperation,
     location: &FunctionLocation,
     code: &mut Vec<String>,
   ) -> ExpressionType {
-    let left = self.compile_expression(&binary_operation.left, location, code);
-    let right = self.compile_expression(&binary_operation.right, location, code);
+    let left = self.compile_expression(*binary_operation.left, location, code);
+    let right = self.compile_expression(*binary_operation.right, location, code);
 
     match (left, right) {
       (ExpressionType::Void, _) | (_, ExpressionType::Void) => {
@@ -144,13 +144,13 @@ impl Compiler {
   }
 
   fn compile_multiply(
-    &self,
-    binary_operation: &BinaryOperation,
+    &mut self,
+    binary_operation: BinaryOperation,
     location: &FunctionLocation,
     code: &mut Vec<String>,
   ) -> ExpressionType {
-    let left = self.compile_expression(&binary_operation.left, location, code);
-    let right = self.compile_expression(&binary_operation.right, location, code);
+    let left = self.compile_expression(*binary_operation.left, location, code);
+    let right = self.compile_expression(*binary_operation.right, location, code);
 
     match (left, right) {
       (ExpressionType::Void, _) | (_, ExpressionType::Void) => {
@@ -170,13 +170,13 @@ impl Compiler {
   }
 
   fn compile_divide(
-    &self,
-    binary_operation: &BinaryOperation,
+    &mut self,
+    binary_operation: BinaryOperation,
     location: &FunctionLocation,
     code: &mut Vec<String>,
   ) -> ExpressionType {
-    let left = self.compile_expression(&binary_operation.left, location, code);
-    let right = self.compile_expression(&binary_operation.right, location, code);
+    let left = self.compile_expression(*binary_operation.left, location, code);
+    let right = self.compile_expression(*binary_operation.right, location, code);
 
     match (left, right) {
       (ExpressionType::Void, _) | (_, ExpressionType::Void) => {
@@ -196,13 +196,13 @@ impl Compiler {
   }
 
   fn compile_modulo(
-    &self,
-    binary_operation: &BinaryOperation,
+    &mut self,
+    binary_operation: BinaryOperation,
     location: &FunctionLocation,
     code: &mut Vec<String>,
   ) -> ExpressionType {
-    let left = self.compile_expression(&binary_operation.left, location, code);
-    let right = self.compile_expression(&binary_operation.right, location, code);
+    let left = self.compile_expression(*binary_operation.left, location, code);
+    let right = self.compile_expression(*binary_operation.right, location, code);
 
     match (left, right) {
       (ExpressionType::Void, _) | (_, ExpressionType::Void) => {
@@ -222,13 +222,13 @@ impl Compiler {
   }
 
   fn compile_less_than(
-    &self,
+    &mut self,
     code: &mut Vec<String>,
-    binary_operation: &BinaryOperation,
+    binary_operation: BinaryOperation,
     location: &FunctionLocation,
   ) -> ExpressionType {
-    let left = self.compile_expression(&binary_operation.left, location, code);
-    let right = self.compile_expression(&binary_operation.right, location, code);
+    let left = self.compile_expression(*binary_operation.left, location, code);
+    let right = self.compile_expression(*binary_operation.right, location, code);
 
     match (left, right) {
       (ExpressionType::Void, _) | (_, ExpressionType::Void) => {
@@ -258,13 +258,13 @@ impl Compiler {
   }
 
   fn compile_greater_than(
-    &self,
+    &mut self,
     code: &mut Vec<String>,
-    binary_operation: &BinaryOperation,
+    binary_operation: BinaryOperation,
     location: &FunctionLocation,
   ) -> ExpressionType {
-    let left = self.compile_expression(&binary_operation.left, location, code);
-    let right = self.compile_expression(&binary_operation.right, location, code);
+    let left = self.compile_expression(*binary_operation.left, location, code);
+    let right = self.compile_expression(*binary_operation.right, location, code);
 
     match (left, right) {
       (ExpressionType::Void, _) | (_, ExpressionType::Void) => {
@@ -294,13 +294,13 @@ impl Compiler {
   }
 
   fn compile_less_than_equals(
-    &self,
+    &mut self,
     code: &mut Vec<String>,
-    binary_operation: &BinaryOperation,
+    binary_operation: BinaryOperation,
     location: &FunctionLocation,
   ) -> ExpressionType {
-    let left = self.compile_expression(&binary_operation.left, location, code);
-    let right = self.compile_expression(&binary_operation.right, location, code);
+    let left = self.compile_expression(*binary_operation.left, location, code);
+    let right = self.compile_expression(*binary_operation.right, location, code);
 
     match (left, right) {
       (ExpressionType::Void, _) | (_, ExpressionType::Void) => {
@@ -326,13 +326,13 @@ impl Compiler {
   }
 
   fn compile_greater_than_equals(
-    &self,
+    &mut self,
     code: &mut Vec<String>,
-    binary_operation: &BinaryOperation,
+    binary_operation: BinaryOperation,
     location: &FunctionLocation,
   ) -> ExpressionType {
-    let left = self.compile_expression(&binary_operation.left, location, code);
-    let right = self.compile_expression(&binary_operation.right, location, code);
+    let left = self.compile_expression(*binary_operation.left, location, code);
+    let right = self.compile_expression(*binary_operation.right, location, code);
 
     match (left, right) {
       (ExpressionType::Void, _) | (_, ExpressionType::Void) => {
@@ -358,7 +358,7 @@ impl Compiler {
   }
 
   fn compile_basic_operator(
-    &self,
+    &mut self,
     left: ExpressionType,
     right: ExpressionType,
     operator: char,
@@ -376,7 +376,7 @@ impl Compiler {
   }
 
   fn compile_comparison_operator(
-    &self,
+    &mut self,
     code: &mut Vec<String>,
     left: ExpressionType,
     right: ExpressionType,
@@ -392,7 +392,7 @@ impl Compiler {
   }
 
   fn compile_match_comparison(
-    &self,
+    &mut self,
     code: &mut Vec<String>,
     value: ExpressionType,
     range: String,
@@ -402,11 +402,11 @@ impl Compiler {
   }
 
   pub(super) fn copy_to_scoreboard(
-    &self,
+    &mut self,
     code: &mut Vec<String>,
     value: ExpressionType,
   ) -> ScoreboardLocation {
-    let scoreboard = self.state.borrow_mut().next_scoreboard();
+    let scoreboard = self.next_scoreboard();
     let (conversion_code, kind) = value.to_score();
     match kind {
       ScoreKind::Direct(operation) => code.push(format!(
@@ -426,7 +426,7 @@ impl Compiler {
   }
 
   pub(super) fn move_to_scoreboard(
-    &self,
+    &mut self,
     code: &mut Vec<String>,
     value: ExpressionType,
   ) -> ScoreboardLocation {
@@ -434,7 +434,7 @@ impl Compiler {
       return scoreboard;
     }
 
-    let scoreboard = self.state.borrow_mut().next_scoreboard();
+    let scoreboard = self.next_scoreboard();
     let (conversion_code, kind) = value.to_score();
     match kind {
       ScoreKind::Direct(operation) => code.push(format!(
