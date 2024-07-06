@@ -1,4 +1,4 @@
-use ast::{ArrayType, Command, CommandPart, ElseStatement, StaticExpr};
+use ast::{ArrayType, Command, CommandPart, ElseStatement, KeyValue, StaticExpr};
 
 use self::ast::{
   Expression, File, Function, FunctionCall, IfStatement, Import, Item, Module, Namespace, Resource,
@@ -297,7 +297,7 @@ impl Parser {
         let value = current.value.parse().map_err(|_| {
           raise_error(
             current.location,
-            &format!("Value {} is too large for a byte", current.value),
+            &format!("Value {} is too large for a byte.", current.value),
           )
         })?;
         Expression::Byte(value)
@@ -306,7 +306,7 @@ impl Parser {
         let value = current.value.parse().map_err(|_| {
           raise_error(
             current.location,
-            &format!("Value {} is too large for a short", current.value),
+            &format!("Value {} is too large for a short.", current.value),
           )
         })?;
         Expression::Short(value)
@@ -317,7 +317,7 @@ impl Parser {
           let value = current.value.parse().map_err(|_| {
             raise_error(
               current.location.clone(),
-              &format!("Value {} is too large for a int", current.value),
+              &format!("Value {} is too large for a int.", current.value),
             )
           })?;
 
@@ -338,7 +338,7 @@ impl Parser {
         let value = current.value.parse().map_err(|_| {
           raise_error(
             current.location,
-            &format!("Value {} is too large for a float", current.value),
+            &format!("Value {} is too large for a float.", current.value),
           )
         })?;
         Expression::Float(value)
@@ -347,7 +347,7 @@ impl Parser {
         let value = current.value.parse().map_err(|_| {
           raise_error(
             current.location,
-            &format!("Value {} is too large for a double", current.value),
+            &format!("Value {} is too large for a double.", current.value),
           )
         })?;
         Expression::Double(value)
@@ -379,7 +379,7 @@ impl Parser {
         _ => {
           return Err(raise_error(
             self.current().location,
-            &format!("\"{}\" is not a valid array type", self.current().value),
+            &format!("\"{}\" is not a valid array type.", self.current().value),
           ))
         }
       };
@@ -408,6 +408,35 @@ impl Parser {
     Ok(Expression::Array(array_type, expressions))
   }
 
+  fn parse_compound(&mut self) -> Result<Expression> {
+    self.expect(TokenKind::LeftBrace)?;
+    let mut key_values = Vec::new();
+
+    while !self.eof() && self.current().kind != TokenKind::LeftBrace {
+      if self.current().kind != TokenKind::Identifier && self.current().kind != TokenKind::String {
+        return Err(raise_error(
+          self.current().location,
+          "Expected compound key.",
+        ));
+      }
+
+      let key = self.consume().value;
+      self.expect(TokenKind::Colon)?;
+      let value = self.parse_expression(0)?;
+      key_values.push(KeyValue { key, value });
+
+      if self.current().kind == TokenKind::Comma {
+        self.consume();
+      } else {
+        break;
+      }
+    }
+
+    self.expect(TokenKind::RightBrace)?;
+
+    Ok(Expression::Compound(key_values))
+  }
+
   fn parse_identifier(&mut self) -> Result<Expression> {
     let resource = self.parse_zoglin_resource()?;
     if self.current().kind == TokenKind::LeftParen {
@@ -429,7 +458,7 @@ impl Parser {
       if is_fn {
         return Err(raise_error(
           self.current().location,
-          "`fn` keyword not required when calling a function",
+          "`fn` keyword not required when calling a function.",
         ));
       }
       self.consume();

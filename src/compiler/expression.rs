@@ -1,3 +1,7 @@
+use std::collections::HashMap;
+
+use regex::Regex;
+
 use crate::parser::ast::ArrayType;
 
 use super::{
@@ -21,6 +25,7 @@ pub(super) enum ExpressionType {
   ByteArray(Vec<ExpressionType>),
   IntArray(Vec<ExpressionType>),
   LongArray(Vec<ExpressionType>),
+  Compound(HashMap<String, ExpressionType>),
   Condition(Condition),
 }
 
@@ -107,6 +112,33 @@ impl ExpressionType {
       ExpressionType::ByteArray(a) => array_to_storage(&a, "B;", state, code),
       ExpressionType::IntArray(a) => array_to_storage(&a, "I;", state, code),
       ExpressionType::LongArray(a) => array_to_storage(&a, "L;", state, code),
+      // TODO: optimise this, like a lot
+      ExpressionType::Compound(types) => {
+        let storage = state.next_storage().to_string();
+        code.push(format!("data modify storage {storage} set value {{}}"));
+        for (key, value) in types {
+          let unescaped_regex = Regex::new("^[A-Za-z_]\\w*$").unwrap();
+          let key = if unescaped_regex.is_match(&key) {
+            key
+          } else {
+            // TODO: Escape other stuff too (like `\`)
+            &format!("\"{}\"", key.replace("\"", "\\\""))
+          };
+          match value.to_storage(state, code) {
+            (expr_code, StorageKind::Direct) => {
+              code.push(format!(
+                "data modify storage {storage}.{key} set {expr_code}"
+              ));
+            }
+            (expr_code, StorageKind::Indirect) => {
+              code.push(format!(
+                "execute store result storage {storage}.{key} int 1 run {expr_code}"
+              ));
+            }
+          }
+        }
+        (format!("from storage {storage}"), StorageKind::Direct)
+      }
       ExpressionType::Storage(location) => (
         format!("from storage {}", location.to_string()),
         StorageKind::Direct,
@@ -149,6 +181,7 @@ impl ExpressionType {
       | ExpressionType::ByteArray(_)
       | ExpressionType::IntArray(_)
       | ExpressionType::LongArray(_) => panic!("Cannot assign array to a scoreboard variable"),
+      ExpressionType::Compound(_) => panic!("Cannot assign compound to a scoreboard variable"),
       ExpressionType::Storage(location) => (
         format!("data get storage {}", location.to_string()),
         ScoreKind::Indirect,
@@ -179,6 +212,7 @@ impl ExpressionType {
       | ExpressionType::ByteArray(_)
       | ExpressionType::IntArray(_)
       | ExpressionType::LongArray(_) => panic!("Cannot use array as a condition"),
+      ExpressionType::Compound(_) => panic!("Cannot use compound as a condition"),
       ExpressionType::Condition(condition) => ConditionKind::Check(condition.to_string()),
       ExpressionType::Scoreboard(scoreboard) => {
         ConditionKind::Check(format!("unless score {} matches 0", scoreboard.to_string()))
@@ -200,6 +234,7 @@ impl ExpressionType {
   }
 }
 
+// TODO: optimise this, like a lot
 fn array_to_storage(
   elements: &[ExpressionType],
   prefix: &str,

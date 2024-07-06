@@ -88,8 +88,15 @@ pub enum Expression {
   Double(f64),
   String(String),
   Array(ArrayType, Vec<Expression>),
+  Compound(Vec<KeyValue>),
   Variable(ZoglinResource),
   BinaryOperation(BinaryOperation),
+}
+
+#[derive(Debug)]
+pub struct KeyValue {
+  pub key: String,
+  pub value: Expression,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -97,7 +104,7 @@ pub enum ArrayType {
   Any,
   Byte,
   Int,
-  Long
+  Long,
 }
 
 #[derive(Debug)]

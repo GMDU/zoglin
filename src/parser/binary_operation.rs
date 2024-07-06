@@ -67,6 +67,7 @@ impl Parser {
       String => Parser::parse_string,
       LeftParen => Parser::parse_bracketed_expression,
       LeftSquare => Parser::parse_array,
+      LeftBrace => Parser::parse_compound,
       _ => return None,
     };
     Some(function)

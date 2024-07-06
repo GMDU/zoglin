@@ -28,4 +28,6 @@ fn foo() {
   # b = false
   # c = 1 + 2 * 3
   arr = [I; 1, 2, 3 + 4, 9 * 21]
+
+  obj = {a: 1, b: "foo", hello: "world", "number": 1 + 2 * 3, 'Hello! My name is e@234598e!9023& and I like "cats\'': 10 / 5}
 }

@@ -5,8 +5,8 @@ use file_tree::{FunctionLocation, ScoreboardLocation, StorageLocation};
 use serde::Serialize;
 
 use crate::parser::ast::{
-  self, ArrayType, Command, ElseStatement, Expression, File, FunctionCall, IfStatement, Statement,
-  StaticExpr, ZoglinResource,
+  self, ArrayType, Command, ElseStatement, Expression, File, FunctionCall, IfStatement, KeyValue,
+  Statement, StaticExpr, ZoglinResource,
 };
 
 use self::{
@@ -366,6 +366,7 @@ impl Compiler {
       Expression::Boolean(b) => ExpressionType::Boolean(*b),
       Expression::String(s) => ExpressionType::String(s.clone()),
       Expression::Array(typ, a) => self.compile_array(code, *typ, a, location),
+      Expression::Compound(key_values) => self.compile_compound(code, key_values, location),
       Expression::Variable(variable) => ExpressionType::Storage(
         StorageLocation::from_zoglin_resource(location.clone(), variable),
       ),
@@ -398,11 +399,28 @@ impl Compiler {
     }
 
     match typ {
-        ArrayType::Any => ExpressionType::Array(types),
-        ArrayType::Byte => ExpressionType::ByteArray(types),
-        ArrayType::Int => ExpressionType::IntArray(types),
-        ArrayType::Long => ExpressionType::LongArray(types),
+      ArrayType::Any => ExpressionType::Array(types),
+      ArrayType::Byte => ExpressionType::ByteArray(types),
+      ArrayType::Int => ExpressionType::IntArray(types),
+      ArrayType::Long => ExpressionType::LongArray(types),
     }
+  }
+
+  fn compile_compound(
+    &self,
+    code: &mut Vec<String>,
+    key_values: &[KeyValue],
+    location: &FunctionLocation,
+  ) -> ExpressionType {
+    let mut types = HashMap::new();
+
+    for KeyValue { key, value } in key_values {
+      if types.insert(key.clone(), self.compile_expression(value, location, code)).is_some() {
+        panic!("Duplicate keys not allowed");
+      }
+    }
+
+    ExpressionType::Compound(types)
   }
 
   fn compile_static_expr(&self, expr: &StaticExpr, location: &ResourceLocation) -> String {
