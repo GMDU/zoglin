@@ -217,34 +217,35 @@ impl Compiler {
   fn compile_namespace(&mut self, namespace: ast::Namespace) -> Result<()> {
     self.enter_scope(&namespace.name);
 
+    let resource: ResourceLocation = ResourceLocation {
+      namespace: namespace.name,
+      modules: Vec::new(),
+    };
+
     for item in namespace.items {
-      let mut resource = ResourceLocation {
-        namespace: namespace.name.clone(),
-        modules: Vec::new(),
-      };
-      self.compile_item(item, &mut resource)?;
+      self.compile_item(item, &resource)?;
     }
 
     self.exit_scope();
     Ok(())
   }
 
-  fn compile_item(&mut self, item: ast::Item, location: &mut ResourceLocation) -> Result<()> {
+  fn compile_item(&mut self, item: ast::Item, location: &ResourceLocation) -> Result<()> {
     match item {
-      ast::Item::Module(module) => self.compile_module(module, location),
+      ast::Item::Module(module) => self.compile_module(module, location.clone()),
       ast::Item::Import(_) => Ok(()),
       ast::Item::Function(function) => self.compile_ast_function(function, location),
       ast::Item::Resource(resource) => self.compile_resource(resource, location),
     }
   }
 
-  fn compile_module(&mut self, module: ast::Module, location: &mut ResourceLocation) -> Result<()> {
+  fn compile_module(&mut self, module: ast::Module, mut location: ResourceLocation) -> Result<()> {
     self.enter_scope(&module.name);
 
     location.modules.push(module.name);
 
     for item in module.items {
-      self.compile_item(item, location)?;
+      self.compile_item(item, &location)?;
     }
 
     self.exit_scope();
