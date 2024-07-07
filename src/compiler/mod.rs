@@ -44,7 +44,7 @@ impl Compiler {
   }
 
   fn enter_scope(&mut self, name: &String) {
-    self.current_scope = *self.scopes[self.current_scope].children.get(name).unwrap();
+    self.current_scope = self.scopes[self.current_scope].get_child(name).unwrap();
   }
 
   fn exit_scope(&mut self) {
