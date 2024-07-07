@@ -9,7 +9,7 @@ pub struct Token {
   pub location: Location,
 }
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Debug, Clone, Copy)]
 pub enum TokenKind {
   EndOfFile,
   EndOfInclude,

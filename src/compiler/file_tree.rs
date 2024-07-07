@@ -233,10 +233,6 @@ pub struct ResourceLocation {
   pub modules: Vec<String>,
 }
 
-// foo:bar = "foo"
-// foo/bar = None
-// :foo/bar = ""
-
 impl ResourceLocation {
   pub fn from_zoglin_resource(
     base_location: &ResourceLocation,

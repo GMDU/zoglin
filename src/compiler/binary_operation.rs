@@ -1,9 +1,11 @@
 use std::borrow::Borrow;
 
-use crate::parser::ast::{BinaryOperation, Expression, Operator};
+use crate::parser::ast::{self, BinaryOperation, Operator};
+
+use crate::error::{raise_error, Location, Result};
 
 use super::{
-  expression::{Condition, ExpressionType, ScoreKind, StorageKind},
+  expression::{Condition, Expression, ScoreKind, StorageKind},
   file_tree::{FunctionLocation, ScoreboardLocation, StorageLocation},
   Compiler,
 };
@@ -14,7 +16,7 @@ impl Compiler {
     binary_operation: BinaryOperation,
     location: &FunctionLocation,
     code: &mut Vec<String>,
-  ) -> ExpressionType {
+  ) -> Result<Expression> {
     match binary_operation.operator {
       Operator::Plus => self.compile_plus(binary_operation, location, code),
       Operator::Minus => self.compile_minus(binary_operation, location, code),
@@ -44,14 +46,17 @@ impl Compiler {
     binary_operation: BinaryOperation,
     location: &FunctionLocation,
     code: &mut Vec<String>,
-  ) -> ExpressionType {
-    let Expression::Variable(variable) = binary_operation.left.borrow() else {
-      panic!("Can only assign to variables.")
+  ) -> Result<Expression> {
+    let ast::Expression::Variable(variable) = binary_operation.left.borrow() else {
+      return Err(raise_error(
+        binary_operation.left.location(),
+        "Can only assign to variables.",
+      ));
     };
 
-    let typ = self.compile_expression(*binary_operation.right, location, code);
+    let typ = self.compile_expression(*binary_operation.right, location, code)?;
 
-    let (command, kind) = typ.to_storage(self, code);
+    let (command, kind) = typ.to_storage(self, code)?;
 
     match kind {
       StorageKind::Direct => {
@@ -70,7 +75,7 @@ impl Compiler {
       }
     }
 
-    typ
+    Ok(typ)
   }
 
   fn compile_plus(
@@ -78,33 +83,42 @@ impl Compiler {
     binary_operation: BinaryOperation,
     location: &FunctionLocation,
     code: &mut Vec<String>,
-  ) -> ExpressionType {
-    let left = self.compile_expression(*binary_operation.left, location, code);
-    let right = self.compile_expression(*binary_operation.right, location, code);
+  ) -> Result<Expression> {
+    let left = self.compile_expression(*binary_operation.left, location, code)?;
+    let right = self.compile_expression(*binary_operation.right, location, code)?;
 
     match (left, right) {
-      (ExpressionType::Void, _) | (_, ExpressionType::Void) => {
-        panic!("Cannot add type void to another value.")
+      (Expression::Void(location), _) | (_, Expression::Void(location)) => Err(raise_error(
+        location,
+        "Cannot add type void to another value.",
+      )),
+      (Expression::Boolean(_, location), _) | (_, Expression::Boolean(_, location)) => {
+        Err(raise_error(location, "Cannot perform plus with boolean."))
       }
-      (ExpressionType::Boolean(_), _) | (_, ExpressionType::Boolean(_)) => {
-        panic!("Cannot perform plus with boolean.")
-      }
-      (ExpressionType::String(_), _) | (_, ExpressionType::String(_)) => {
-        panic!("Cannot perform plus with string.")
+      (Expression::String(_, location), _) | (_, Expression::String(_, location)) => {
+        Err(raise_error(location, "Cannot perform plus with string."))
       }
       (left, right) if left.numeric_value().is_some() && right.numeric_value().is_some() => {
-        ExpressionType::Integer(left.numeric_value().unwrap() + right.numeric_value().unwrap())
+        Ok(Expression::Integer(
+          left.numeric_value().unwrap() + right.numeric_value().unwrap(),
+          binary_operation.location,
+        ))
       }
       (num, other) | (other, num) if num.numeric_value().is_some() => {
-        let scoreboard = self.copy_to_scoreboard(code, other);
+        let scoreboard = self.copy_to_scoreboard(code, other)?;
         code.push(format!(
           "scoreboard players add {} {}",
           scoreboard.to_string(),
           num.numeric_value().unwrap(),
         ));
-        ExpressionType::Scoreboard(scoreboard)
+        Ok(Expression::Scoreboard(
+          scoreboard,
+          binary_operation.location,
+        ))
       }
-      (left, right) => self.compile_basic_operator(left, right, '+', code),
+      (left, right) => {
+        self.compile_basic_operator(left, right, binary_operation.location, '+', code)
+      }
     }
   }
 
@@ -113,33 +127,42 @@ impl Compiler {
     binary_operation: BinaryOperation,
     location: &FunctionLocation,
     code: &mut Vec<String>,
-  ) -> ExpressionType {
-    let left = self.compile_expression(*binary_operation.left, location, code);
-    let right = self.compile_expression(*binary_operation.right, location, code);
+  ) -> Result<Expression> {
+    let left = self.compile_expression(*binary_operation.left, location, code)?;
+    let right = self.compile_expression(*binary_operation.right, location, code)?;
 
     match (left, right) {
-      (ExpressionType::Void, _) | (_, ExpressionType::Void) => {
-        panic!("Cannot perform subtraction with void.")
-      }
-      (ExpressionType::Boolean(_), _) | (_, ExpressionType::Boolean(_)) => {
-        panic!("Cannot perform subtraction with boolean.")
-      }
-      (ExpressionType::String(_), _) | (_, ExpressionType::String(_)) => {
-        panic!("Cannot perform subtraction with string.")
-      }
+      (Expression::Void(location), _) | (_, Expression::Void(location)) => Err(raise_error(
+        location,
+        "Cannot perform subtraction with void.",
+      )),
+      (Expression::Boolean(_, location), _) | (_, Expression::Boolean(_, location)) => Err(
+        raise_error(location, "Cannot perform subtraction with boolean."),
+      ),
+      (Expression::String(_, location), _) | (_, Expression::String(_, location)) => Err(
+        raise_error(location, "Cannot perform subtraction with string."),
+      ),
       (left, right) if left.numeric_value().is_some() && right.numeric_value().is_some() => {
-        ExpressionType::Integer(left.numeric_value().unwrap() - right.numeric_value().unwrap())
+        Ok(Expression::Integer(
+          left.numeric_value().unwrap() - right.numeric_value().unwrap(),
+          binary_operation.location,
+        ))
       }
       (other, num) if num.numeric_value().is_some() => {
-        let scoreboard = self.copy_to_scoreboard(code, other);
+        let scoreboard = self.copy_to_scoreboard(code, other)?;
         code.push(format!(
           "scoreboard players remove {} {}",
           scoreboard.to_string(),
           num.numeric_value().unwrap(),
         ));
-        ExpressionType::Scoreboard(scoreboard)
+        Ok(Expression::Scoreboard(
+          scoreboard,
+          binary_operation.location,
+        ))
       }
-      (left, right) => self.compile_basic_operator(left, right, '-', code),
+      (left, right) => {
+        self.compile_basic_operator(left, right, binary_operation.location, '-', code)
+      }
     }
   }
 
@@ -148,24 +171,30 @@ impl Compiler {
     binary_operation: BinaryOperation,
     location: &FunctionLocation,
     code: &mut Vec<String>,
-  ) -> ExpressionType {
-    let left = self.compile_expression(*binary_operation.left, location, code);
-    let right = self.compile_expression(*binary_operation.right, location, code);
+  ) -> Result<Expression> {
+    let left = self.compile_expression(*binary_operation.left, location, code)?;
+    let right = self.compile_expression(*binary_operation.right, location, code)?;
 
     match (left, right) {
-      (ExpressionType::Void, _) | (_, ExpressionType::Void) => {
-        panic!("Cannot perform multiplication with void.")
-      }
-      (ExpressionType::Boolean(_), _) | (_, ExpressionType::Boolean(_)) => {
-        panic!("Cannot perform multiplication with boolean.")
-      }
-      (ExpressionType::String(_), _) | (_, ExpressionType::String(_)) => {
-        panic!("Cannot perform multiplication with string.")
-      }
+      (Expression::Void(location), _) | (_, Expression::Void(location)) => Err(raise_error(
+        location,
+        "Cannot perform multiplication with void.",
+      )),
+      (Expression::Boolean(_, location), _) | (_, Expression::Boolean(_, location)) => Err(
+        raise_error(location, "Cannot perform multiplication with boolean."),
+      ),
+      (Expression::String(_, location), _) | (_, Expression::String(_, location)) => Err(
+        raise_error(location, "Cannot perform multiplication with string."),
+      ),
       (left, right) if left.numeric_value().is_some() && right.numeric_value().is_some() => {
-        ExpressionType::Integer(left.numeric_value().unwrap() * right.numeric_value().unwrap())
+        Ok(Expression::Integer(
+          left.numeric_value().unwrap() * right.numeric_value().unwrap(),
+          binary_operation.location,
+        ))
       }
-      (left, right) => self.compile_basic_operator(left, right, '*', code),
+      (left, right) => {
+        self.compile_basic_operator(left, right, binary_operation.location, '*', code)
+      }
     }
   }
 
@@ -174,24 +203,29 @@ impl Compiler {
     binary_operation: BinaryOperation,
     location: &FunctionLocation,
     code: &mut Vec<String>,
-  ) -> ExpressionType {
-    let left = self.compile_expression(*binary_operation.left, location, code);
-    let right = self.compile_expression(*binary_operation.right, location, code);
+  ) -> Result<Expression> {
+    let left = self.compile_expression(*binary_operation.left, location, code)?;
+    let right = self.compile_expression(*binary_operation.right, location, code)?;
 
     match (left, right) {
-      (ExpressionType::Void, _) | (_, ExpressionType::Void) => {
-        panic!("Cannot perform division with void.")
+      (Expression::Void(location), _) | (_, Expression::Void(location)) => {
+        Err(raise_error(location, "Cannot perform division with void."))
       }
-      (ExpressionType::Boolean(_), _) | (_, ExpressionType::Boolean(_)) => {
-        panic!("Cannot perform division with boolean.")
-      }
-      (ExpressionType::String(_), _) | (_, ExpressionType::String(_)) => {
-        panic!("Cannot perform division with string.")
-      }
+      (Expression::Boolean(_, location), _) | (_, Expression::Boolean(_, location)) => Err(
+        raise_error(location, "Cannot perform division with boolean."),
+      ),
+      (Expression::String(_, location), _) | (_, Expression::String(_, location)) => Err(
+        raise_error(location, "Cannot perform division with string."),
+      ),
       (left, right) if left.numeric_value().is_some() && right.numeric_value().is_some() => {
-        ExpressionType::Integer(left.numeric_value().unwrap() / right.numeric_value().unwrap())
+        Ok(Expression::Integer(
+          left.numeric_value().unwrap() / right.numeric_value().unwrap(),
+          binary_operation.location,
+        ))
       }
-      (left, right) => self.compile_basic_operator(left, right, '/', code),
+      (left, right) => {
+        self.compile_basic_operator(left, right, binary_operation.location, '/', code)
+      }
     }
   }
 
@@ -200,24 +234,29 @@ impl Compiler {
     binary_operation: BinaryOperation,
     location: &FunctionLocation,
     code: &mut Vec<String>,
-  ) -> ExpressionType {
-    let left = self.compile_expression(*binary_operation.left, location, code);
-    let right = self.compile_expression(*binary_operation.right, location, code);
+  ) -> Result<Expression> {
+    let left = self.compile_expression(*binary_operation.left, location, code)?;
+    let right = self.compile_expression(*binary_operation.right, location, code)?;
 
     match (left, right) {
-      (ExpressionType::Void, _) | (_, ExpressionType::Void) => {
-        panic!("Cannot perform modulo with void.")
+      (Expression::Void(location), _) | (_, Expression::Void(location)) => {
+        Err(raise_error(location, "Cannot perform modulo with void."))
       }
-      (ExpressionType::Boolean(_), _) | (_, ExpressionType::Boolean(_)) => {
-        panic!("Cannot perform modulo with boolean.")
+      (Expression::Boolean(_, location), _) | (_, Expression::Boolean(_, location)) => {
+        Err(raise_error(location, "Cannot perform modulo with boolean."))
       }
-      (ExpressionType::String(_), _) | (_, ExpressionType::String(_)) => {
-        panic!("Cannot perform modulo with string.")
+      (Expression::String(_, location), _) | (_, Expression::String(_, location)) => {
+        Err(raise_error(location, "Cannot perform modulo with string."))
       }
       (left, right) if left.numeric_value().is_some() && right.numeric_value().is_some() => {
-        ExpressionType::Integer(left.numeric_value().unwrap() % right.numeric_value().unwrap())
+        Ok(Expression::Integer(
+          left.numeric_value().unwrap() % right.numeric_value().unwrap(),
+          binary_operation.location,
+        ))
       }
-      (left, right) => self.compile_basic_operator(left, right, '%', code),
+      (left, right) => {
+        self.compile_basic_operator(left, right, binary_operation.location, '%', code)
+      }
     }
   }
 
@@ -226,34 +265,41 @@ impl Compiler {
     code: &mut Vec<String>,
     binary_operation: BinaryOperation,
     location: &FunctionLocation,
-  ) -> ExpressionType {
-    let left = self.compile_expression(*binary_operation.left, location, code);
-    let right = self.compile_expression(*binary_operation.right, location, code);
+  ) -> Result<Expression> {
+    let left = self.compile_expression(*binary_operation.left, location, code)?;
+    let right = self.compile_expression(*binary_operation.right, location, code)?;
 
     match (left, right) {
-      (ExpressionType::Void, _) | (_, ExpressionType::Void) => {
-        panic!("Cannot compare with void.")
+      (Expression::Void(location), _) | (_, Expression::Void(location)) => {
+        Err(raise_error(location, "Cannot compare with void."))
       }
-      (ExpressionType::Boolean(_), _) | (_, ExpressionType::Boolean(_)) => {
-        panic!("Cannot compare with boolean.")
+      (Expression::Boolean(_, location), _) | (_, Expression::Boolean(_, location)) => {
+        Err(raise_error(location, "Cannot compare with boolean."))
       }
-      (ExpressionType::String(_), _) | (_, ExpressionType::String(_)) => {
-        panic!("Cannot compare with string.")
+      (Expression::String(_, location), _) | (_, Expression::String(_, location)) => {
+        Err(raise_error(location, "Cannot compare with string."))
       }
       (left, right) if left.numeric_value().is_some() && right.numeric_value().is_some() => {
-        ExpressionType::Boolean(left.numeric_value().unwrap() < right.numeric_value().unwrap())
+        Ok(Expression::Boolean(
+          left.numeric_value().unwrap() < right.numeric_value().unwrap(),
+          binary_operation.location,
+        ))
       }
       (num, other) if num.numeric_value().is_some() => self.compile_match_comparison(
         code,
         other,
+        binary_operation.location,
         format!("{}..", num.numeric_value().unwrap() + 1),
       ),
       (other, num) if num.numeric_value().is_some() => self.compile_match_comparison(
         code,
         other,
+        binary_operation.location,
         format!("..{}", num.numeric_value().unwrap() - 1),
       ),
-      (left, right) => self.compile_comparison_operator(code, left, right, "<"),
+      (left, right) => {
+        self.compile_comparison_operator(code, left, right, binary_operation.location, "<")
+      }
     }
   }
 
@@ -262,34 +308,41 @@ impl Compiler {
     code: &mut Vec<String>,
     binary_operation: BinaryOperation,
     location: &FunctionLocation,
-  ) -> ExpressionType {
-    let left = self.compile_expression(*binary_operation.left, location, code);
-    let right = self.compile_expression(*binary_operation.right, location, code);
+  ) -> Result<Expression> {
+    let left = self.compile_expression(*binary_operation.left, location, code)?;
+    let right = self.compile_expression(*binary_operation.right, location, code)?;
 
     match (left, right) {
-      (ExpressionType::Void, _) | (_, ExpressionType::Void) => {
-        panic!("Cannot compare with void.")
+      (Expression::Void(location), _) | (_, Expression::Void(location)) => {
+        Err(raise_error(location, "Cannot compare with void."))
       }
-      (ExpressionType::Boolean(_), _) | (_, ExpressionType::Boolean(_)) => {
-        panic!("Cannot compare with boolean.")
+      (Expression::Boolean(_, location), _) | (_, Expression::Boolean(_, location)) => {
+        Err(raise_error(location, "Cannot compare with boolean."))
       }
-      (ExpressionType::String(_), _) | (_, ExpressionType::String(_)) => {
-        panic!("Cannot compare with string.")
+      (Expression::String(_, location), _) | (_, Expression::String(_, location)) => {
+        Err(raise_error(location, "Cannot compare with string."))
       }
       (left, right) if left.numeric_value().is_some() && right.numeric_value().is_some() => {
-        ExpressionType::Boolean(left.numeric_value().unwrap() > right.numeric_value().unwrap())
+        Ok(Expression::Boolean(
+          left.numeric_value().unwrap() > right.numeric_value().unwrap(),
+          binary_operation.location,
+        ))
       }
       (num, other) if num.numeric_value().is_some() => self.compile_match_comparison(
         code,
         other,
+        binary_operation.location,
         format!("..{}", num.numeric_value().unwrap() - 1),
       ),
       (other, num) if num.numeric_value().is_some() => self.compile_match_comparison(
         code,
         other,
+        binary_operation.location,
         format!("{}..", num.numeric_value().unwrap() + 1),
       ),
-      (left, right) => self.compile_comparison_operator(code, left, right, ">"),
+      (left, right) => {
+        self.compile_comparison_operator(code, left, right, binary_operation.location, ">")
+      }
     }
   }
 
@@ -298,30 +351,41 @@ impl Compiler {
     code: &mut Vec<String>,
     binary_operation: BinaryOperation,
     location: &FunctionLocation,
-  ) -> ExpressionType {
-    let left = self.compile_expression(*binary_operation.left, location, code);
-    let right = self.compile_expression(*binary_operation.right, location, code);
+  ) -> Result<Expression> {
+    let left = self.compile_expression(*binary_operation.left, location, code)?;
+    let right = self.compile_expression(*binary_operation.right, location, code)?;
 
     match (left, right) {
-      (ExpressionType::Void, _) | (_, ExpressionType::Void) => {
-        panic!("Cannot compare with void.")
+      (Expression::Void(location), _) | (_, Expression::Void(location)) => {
+        Err(raise_error(location, "Cannot compare with void."))
       }
-      (ExpressionType::String(_), _) | (_, ExpressionType::String(_)) => {
-        panic!("Cannot compare with string.")
+      (Expression::String(_, location), _) | (_, Expression::String(_, location)) => {
+        Err(raise_error(location, "Cannot compare with string."))
       }
-      (ExpressionType::Boolean(_), _) | (_, ExpressionType::Boolean(_)) => {
-        panic!("Cannot compare with boolean.")
+      (Expression::Boolean(_, location), _) | (_, Expression::Boolean(_, location)) => {
+        Err(raise_error(location, "Cannot compare with boolean."))
       }
       (left, right) if left.numeric_value().is_some() && right.numeric_value().is_some() => {
-        ExpressionType::Boolean(left.numeric_value().unwrap() <= right.numeric_value().unwrap())
+        Ok(Expression::Boolean(
+          left.numeric_value().unwrap() <= right.numeric_value().unwrap(),
+          binary_operation.location,
+        ))
       }
-      (num, other) if num.numeric_value().is_some() => {
-        self.compile_match_comparison(code, other, format!("{}..", num.numeric_value().unwrap()))
+      (num, other) if num.numeric_value().is_some() => self.compile_match_comparison(
+        code,
+        other,
+        binary_operation.location,
+        format!("{}..", num.numeric_value().unwrap()),
+      ),
+      (other, num) if num.numeric_value().is_some() => self.compile_match_comparison(
+        code,
+        other,
+        binary_operation.location,
+        format!("..{}", num.numeric_value().unwrap()),
+      ),
+      (left, right) => {
+        self.compile_comparison_operator(code, left, right, binary_operation.location, "<=")
       }
-      (other, num) if num.numeric_value().is_some() => {
-        self.compile_match_comparison(code, other, format!("..{}", num.numeric_value().unwrap()))
-      }
-      (left, right) => self.compile_comparison_operator(code, left, right, "<="),
     }
   }
 
@@ -330,84 +394,100 @@ impl Compiler {
     code: &mut Vec<String>,
     binary_operation: BinaryOperation,
     location: &FunctionLocation,
-  ) -> ExpressionType {
-    let left = self.compile_expression(*binary_operation.left, location, code);
-    let right = self.compile_expression(*binary_operation.right, location, code);
+  ) -> Result<Expression> {
+    let left = self.compile_expression(*binary_operation.left, location, code)?;
+    let right = self.compile_expression(*binary_operation.right, location, code)?;
 
     match (left, right) {
-      (ExpressionType::Void, _) | (_, ExpressionType::Void) => {
-        panic!("Cannot compare with void.")
+      (Expression::Void(location), _) | (_, Expression::Void(location)) => {
+        Err(raise_error(location, "Cannot compare with void."))
       }
-      (ExpressionType::Boolean(_), _) | (_, ExpressionType::Boolean(_)) => {
-        panic!("Cannot compare with boolean.")
+      (Expression::Boolean(_, location), _) | (_, Expression::Boolean(_, location)) => {
+        Err(raise_error(location, "Cannot compare with boolean."))
       }
-      (ExpressionType::String(_), _) | (_, ExpressionType::String(_)) => {
-        panic!("Cannot compare with string.")
+      (Expression::String(_, location), _) | (_, Expression::String(_, location)) => {
+        Err(raise_error(location, "Cannot compare with string."))
       }
       (left, right) if left.numeric_value().is_some() && right.numeric_value().is_some() => {
-        ExpressionType::Boolean(left.numeric_value().unwrap() >= right.numeric_value().unwrap())
+        Ok(Expression::Boolean(
+          left.numeric_value().unwrap() >= right.numeric_value().unwrap(),
+          binary_operation.location,
+        ))
       }
-      (num, other) if num.numeric_value().is_some() => {
-        self.compile_match_comparison(code, other, format!("..{}", num.numeric_value().unwrap()))
+      (num, other) if num.numeric_value().is_some() => self.compile_match_comparison(
+        code,
+        other,
+        binary_operation.location,
+        format!("..{}", num.numeric_value().unwrap()),
+      ),
+      (other, num) if num.numeric_value().is_some() => self.compile_match_comparison(
+        code,
+        other,
+        binary_operation.location,
+        format!("{}..", num.numeric_value().unwrap()),
+      ),
+      (left, right) => {
+        self.compile_comparison_operator(code, left, right, binary_operation.location, ">=")
       }
-      (other, num) if num.numeric_value().is_some() => {
-        self.compile_match_comparison(code, other, format!("{}..", num.numeric_value().unwrap()))
-      }
-      (left, right) => self.compile_comparison_operator(code, left, right, ">="),
     }
   }
 
   fn compile_basic_operator(
     &mut self,
-    left: ExpressionType,
-    right: ExpressionType,
+    left: Expression,
+    right: Expression,
+    location: Location,
     operator: char,
     code: &mut Vec<String>,
-  ) -> ExpressionType {
-    let left_scoreboard = self.copy_to_scoreboard(code, left);
-    let right_scoreboard = self.move_to_scoreboard(code, right);
+  ) -> Result<Expression> {
+    let left_scoreboard = self.copy_to_scoreboard(code, left)?;
+    let right_scoreboard = self.move_to_scoreboard(code, right)?;
     code.push(format!(
       "scoreboard players operation {} {}= {}",
       left_scoreboard.to_string(),
       operator,
       right_scoreboard.to_string()
     ));
-    ExpressionType::Scoreboard(left_scoreboard)
+    Ok(Expression::Scoreboard(left_scoreboard, location))
   }
 
   fn compile_comparison_operator(
     &mut self,
     code: &mut Vec<String>,
-    left: ExpressionType,
-    right: ExpressionType,
+    left: Expression,
+    right: Expression,
+    location: Location,
     operator: &str,
-  ) -> ExpressionType {
-    let left_scoreboard = self.move_to_scoreboard(code, left);
-    let right_scoreboard = self.move_to_scoreboard(code, right);
-    ExpressionType::Condition(Condition::from_operator(
-      operator,
-      left_scoreboard,
-      right_scoreboard,
+  ) -> Result<Expression> {
+    let left_scoreboard = self.move_to_scoreboard(code, left)?;
+    let right_scoreboard = self.move_to_scoreboard(code, right)?;
+    Ok(Expression::Condition(
+      Condition::from_operator(operator, left_scoreboard, right_scoreboard),
+      location,
     ))
   }
 
   fn compile_match_comparison(
     &mut self,
     code: &mut Vec<String>,
-    value: ExpressionType,
+    value: Expression,
+    location: Location,
     range: String,
-  ) -> ExpressionType {
-    let scoreboard = self.move_to_scoreboard(code, value);
-    ExpressionType::Condition(Condition::Match(scoreboard, range))
+  ) -> Result<Expression> {
+    let scoreboard = self.move_to_scoreboard(code, value)?;
+    Ok(Expression::Condition(
+      Condition::Match(scoreboard, range),
+      location,
+    ))
   }
 
   pub(super) fn copy_to_scoreboard(
     &mut self,
     code: &mut Vec<String>,
-    value: ExpressionType,
-  ) -> ScoreboardLocation {
+    value: Expression,
+  ) -> Result<ScoreboardLocation> {
     let scoreboard = self.next_scoreboard();
-    let (conversion_code, kind) = value.to_score();
+    let (conversion_code, kind) = value.to_score()?;
     match kind {
       ScoreKind::Direct(operation) => code.push(format!(
         "scoreboard players {} {} {}",
@@ -422,20 +502,20 @@ impl Compiler {
       )),
     }
 
-    scoreboard
+    Ok(scoreboard)
   }
 
   pub(super) fn move_to_scoreboard(
     &mut self,
     code: &mut Vec<String>,
-    value: ExpressionType,
-  ) -> ScoreboardLocation {
-    if let ExpressionType::Scoreboard(scoreboard) = value {
-      return scoreboard;
+    value: Expression,
+  ) -> Result<ScoreboardLocation> {
+    if let Expression::Scoreboard(scoreboard, _) = value {
+      return Ok(scoreboard);
     }
 
     let scoreboard = self.next_scoreboard();
-    let (conversion_code, kind) = value.to_score();
+    let (conversion_code, kind) = value.to_score()?;
     match kind {
       ScoreKind::Direct(operation) => code.push(format!(
         "scoreboard players {} {} {}",
@@ -450,6 +530,6 @@ impl Compiler {
       )),
     }
 
-    scoreboard
+    Ok(scoreboard)
   }
 }

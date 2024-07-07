@@ -1,3 +1,5 @@
+use crate::error::Location;
+
 #[derive(Debug)]
 pub struct File {
   pub items: Vec<Namespace>,
@@ -79,22 +81,45 @@ pub enum StaticExpr {
 #[derive(Debug)]
 pub enum Expression {
   FunctionCall(FunctionCall),
-  Boolean(bool),
-  Byte(i8),
-  Short(i16),
-  Integer(i32),
-  Long(i64),
-  Float(f32),
-  Double(f64),
-  String(String),
-  Array(ArrayType, Vec<Expression>),
-  Compound(Vec<KeyValue>),
+  Boolean(bool, Location),
+  Byte(i8, Location),
+  Short(i16, Location),
+  Integer(i32, Location),
+  Long(i64, Location),
+  Float(f32, Location),
+  Double(f64, Location),
+  String(String, Location),
+  Array(ArrayType, Vec<Expression>, Location),
+  Compound(Vec<KeyValue>, Location),
   Variable(ZoglinResource),
   BinaryOperation(BinaryOperation),
 }
 
+impl Expression {
+  pub fn location(&self) -> Location {
+    match self {
+      Expression::FunctionCall(FunctionCall {
+        path: ZoglinResource { location, .. },
+      })
+      | Expression::Boolean(_, location)
+      | Expression::Byte(_, location)
+      | Expression::Short(_, location)
+      | Expression::Integer(_, location)
+      | Expression::Long(_, location)
+      | Expression::Float(_, location)
+      | Expression::Double(_, location)
+      | Expression::String(_, location)
+      | Expression::Array(_, _, location)
+      | Expression::Compound(_, location)
+      | Expression::Variable(ZoglinResource { location, .. })
+      | Expression::BinaryOperation(BinaryOperation { location, .. }) => location.clone(),
+    }
+  }
+}
+
 #[derive(Debug)]
 pub struct KeyValue {
+  pub location: Location,
   pub key: String,
   pub value: Expression,
 }
@@ -114,6 +139,7 @@ pub struct FunctionCall {
 
 #[derive(Debug)]
 pub struct ZoglinResource {
+  pub location: Location,
   pub namespace: Option<String>,
   pub modules: Vec<String>,
   pub name: String,
@@ -121,6 +147,7 @@ pub struct ZoglinResource {
 
 #[derive(Debug)]
 pub struct BinaryOperation {
+  pub location: Location,
   pub left: Box<Expression>,
   pub right: Box<Expression>,
   pub operator: Operator,

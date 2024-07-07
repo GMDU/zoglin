@@ -1,4 +1,5 @@
 use crate::error::Result;
+use crate::lexer::token::Token;
 use crate::{error::raise_error, lexer::token::TokenKind};
 
 use super::ast::BinaryOperation;
@@ -97,11 +98,17 @@ impl Parser {
   }
 
   fn parse_binary_operation(&mut self, left: Expression) -> Result<Expression> {
-    let operator = Parser::match_operator(self.current().kind);
-    let precedence = Parser::match_precedence(self.consume().kind);
+    let Token {
+      location,
+      kind,
+      value: _,
+    } = self.consume();
+    let operator = Parser::match_operator(kind);
+    let precedence = Parser::match_precedence(kind);
     let right = self.parse_expression(precedence.1)?;
     return Ok(Expression::BinaryOperation(BinaryOperation {
       operator,
+      location,
       left: Box::new(left),
       right: Box::new(right),
     }));

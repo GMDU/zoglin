@@ -2,31 +2,34 @@ use std::collections::HashMap;
 
 use regex::Regex;
 
-use crate::parser::ast::ArrayType;
+use crate::{
+  error::{raise_error, Location, Result},
+  parser::ast::ArrayType,
+};
 
 use super::{
   file_tree::{ScoreboardLocation, StorageLocation},
   Compiler,
 };
 
-pub(super) enum ExpressionType {
-  Void,
-  Byte(i8),
-  Short(i16),
-  Integer(i32),
-  Long(i64),
-  Float(f32),
-  Double(f64),
-  Storage(StorageLocation),
-  Scoreboard(ScoreboardLocation),
-  Boolean(bool),
-  String(String),
-  Array(Vec<ExpressionType>),
-  ByteArray(Vec<ExpressionType>),
-  IntArray(Vec<ExpressionType>),
-  LongArray(Vec<ExpressionType>),
-  Compound(HashMap<String, ExpressionType>),
-  Condition(Condition),
+pub(super) enum Expression {
+  Void(Location),
+  Byte(i8, Location),
+  Short(i16, Location),
+  Integer(i32, Location),
+  Long(i64, Location),
+  Float(f32, Location),
+  Double(f64, Location),
+  Storage(StorageLocation, Location),
+  Scoreboard(ScoreboardLocation, Location),
+  Boolean(bool, Location),
+  String(String, Location),
+  Array(Vec<Expression>, Location),
+  ByteArray(Vec<Expression>, Location),
+  IntArray(Vec<Expression>, Location),
+  LongArray(Vec<Expression>, Location),
+  Compound(HashMap<String, Expression>, Location),
+  Condition(Condition, Location),
 }
 
 pub(super) enum Condition {
@@ -89,31 +92,36 @@ pub(super) enum ConditionKind {
   Known(bool),
 }
 
-impl ExpressionType {
+impl Expression {
   pub(super) fn to_storage(
     &self,
     state: &mut Compiler,
     code: &mut Vec<String>,
-  ) -> (String, StorageKind) {
-    match self {
-      ExpressionType::Void => panic!("Cannot assign void to a value"),
-      ExpressionType::Byte(b) => (format!("value {}b", *b), StorageKind::Direct),
-      ExpressionType::Short(s) => (format!("value {}s", *s), StorageKind::Direct),
-      ExpressionType::Integer(i) => (format!("value {}", *i), StorageKind::Direct),
-      ExpressionType::Long(l) => (format!("value {}l", *l), StorageKind::Direct),
-      ExpressionType::Float(f) => (format!("value {}f", *f), StorageKind::Direct),
-      ExpressionType::Double(d) => (format!("value {}d", *d), StorageKind::Direct),
-      ExpressionType::Boolean(b) => (format!("value {}", *b), StorageKind::Direct),
-      ExpressionType::String(s) => (
+  ) -> Result<(String, StorageKind)> {
+    Ok(match self {
+      Expression::Void(location) => {
+        return Err(raise_error(
+          location.clone(),
+          "Cannot assign void to a value",
+        ))
+      }
+      Expression::Byte(b, _) => (format!("value {}b", *b), StorageKind::Direct),
+      Expression::Short(s, _) => (format!("value {}s", *s), StorageKind::Direct),
+      Expression::Integer(i, _) => (format!("value {}", *i), StorageKind::Direct),
+      Expression::Long(l, _) => (format!("value {}l", *l), StorageKind::Direct),
+      Expression::Float(f, _) => (format!("value {}f", *f), StorageKind::Direct),
+      Expression::Double(d, _) => (format!("value {}d", *d), StorageKind::Direct),
+      Expression::Boolean(b, _) => (format!("value {}", *b), StorageKind::Direct),
+      Expression::String(s, _) => (
         format!("value \"{}\"", s.escape_default().to_string()),
         StorageKind::Direct,
       ),
-      ExpressionType::Array(a) => array_to_storage(&a, "", state, code),
-      ExpressionType::ByteArray(a) => array_to_storage(&a, "B;", state, code),
-      ExpressionType::IntArray(a) => array_to_storage(&a, "I;", state, code),
-      ExpressionType::LongArray(a) => array_to_storage(&a, "L;", state, code),
+      Expression::Array(a, _) => array_to_storage(&a, "", state, code)?,
+      Expression::ByteArray(a, _) => array_to_storage(&a, "B;", state, code)?,
+      Expression::IntArray(a, _) => array_to_storage(&a, "I;", state, code)?,
+      Expression::LongArray(a, _) => array_to_storage(&a, "L;", state, code)?,
       // TODO: optimise this, like a lot
-      ExpressionType::Compound(types) => {
+      Expression::Compound(types, _) => {
         let storage = state.next_storage().to_string();
         code.push(format!("data modify storage {storage} set value {{}}"));
         for (key, value) in types {
@@ -124,7 +132,7 @@ impl ExpressionType {
             // TODO: Escape other stuff too (like `\`)
             &format!("\"{}\"", key.replace("\"", "\\\""))
           };
-          match value.to_storage(state, code) {
+          match value.to_storage(state, code)? {
             (expr_code, StorageKind::Direct) => {
               code.push(format!(
                 "data modify storage {storage}.{key} set {expr_code}"
@@ -139,114 +147,193 @@ impl ExpressionType {
         }
         (format!("from storage {storage}"), StorageKind::Direct)
       }
-      ExpressionType::Storage(location) => (
+      Expression::Storage(location, _) => (
         format!("from storage {}", location.to_string()),
         StorageKind::Direct,
       ),
-      ExpressionType::Scoreboard(location) => (
+      Expression::Scoreboard(location, _) => (
         format!("scoreboard players get {}", location.to_string()),
         StorageKind::Indirect,
       ),
-      ExpressionType::Condition(condition) => (
+      Expression::Condition(condition, _) => (
         format!("execute {}", condition.to_string()),
         StorageKind::Indirect,
       ),
-    }
+    })
   }
 
-  pub(super) fn to_score(&self) -> (String, ScoreKind) {
-    match self {
-      ExpressionType::Void => panic!("Cannot assign void to a value"),
-      ExpressionType::Byte(b) => (b.to_string(), ScoreKind::Direct("set".to_string())),
-      ExpressionType::Short(s) => (s.to_string(), ScoreKind::Direct("set".to_string())),
-      ExpressionType::Integer(i) => (i.to_string(), ScoreKind::Direct("set".to_string())),
-      ExpressionType::Long(l) => (
+  pub(super) fn to_score(&self) -> Result<(String, ScoreKind)> {
+    Ok(match self {
+      Expression::Void(location) => {
+        return Err(raise_error(
+          location.clone(),
+          "Cannot assign void to a value",
+        ))
+      }
+      Expression::Byte(b, _) => (b.to_string(), ScoreKind::Direct("set".to_string())),
+      Expression::Short(s, _) => (s.to_string(), ScoreKind::Direct("set".to_string())),
+      Expression::Integer(i, _) => (i.to_string(), ScoreKind::Direct("set".to_string())),
+      Expression::Long(l, _) => (
         (*l as i32).to_string(),
         ScoreKind::Direct("set".to_string()),
       ),
-      ExpressionType::Float(f) => (
+      Expression::Float(f, _) => (
         (f.floor() as i32).to_string(),
         ScoreKind::Direct("set".to_string()),
       ),
-      ExpressionType::Double(d) => (
+      Expression::Double(d, _) => (
         (d.floor() as i32).to_string(),
         ScoreKind::Direct("set".to_string()),
       ),
-      ExpressionType::Boolean(b) => (
+      Expression::Boolean(b, _) => (
         if *b { "1" } else { "0" }.to_string(),
         ScoreKind::Direct("set".to_string()),
       ),
-      ExpressionType::String(_) => panic!("Cannot assign string to a scoreboard variable"),
-      ExpressionType::Array(_)
-      | ExpressionType::ByteArray(_)
-      | ExpressionType::IntArray(_)
-      | ExpressionType::LongArray(_) => panic!("Cannot assign array to a scoreboard variable"),
-      ExpressionType::Compound(_) => panic!("Cannot assign compound to a scoreboard variable"),
-      ExpressionType::Storage(location) => (
+      Expression::String(_, location) => {
+        return Err(raise_error(
+          location.clone(),
+          "Cannot assign string to a scoreboard variable",
+        ))
+      }
+      Expression::Array(_, location)
+      | Expression::ByteArray(_, location)
+      | Expression::IntArray(_, location)
+      | Expression::LongArray(_, location) => {
+        return Err(raise_error(
+          location.clone(),
+          "Cannot assign array to a scoreboard variable",
+        ))
+      }
+      Expression::Compound(_, location) => {
+        return Err(raise_error(
+          location.clone(),
+          "Cannot assign compound to a scoreboard variable",
+        ))
+      }
+      Expression::Storage(location, _) => (
         format!("data get storage {}", location.to_string()),
         ScoreKind::Indirect,
       ),
-      ExpressionType::Scoreboard(location) => (
+      Expression::Scoreboard(location, _) => (
         format!("= {}", location.to_string()),
         ScoreKind::Direct("operation".to_string()),
       ),
-      ExpressionType::Condition(condition) => (
+      Expression::Condition(condition, _) => (
         format!("execute {}", condition.to_string()),
         ScoreKind::Indirect,
       ),
-    }
+    })
   }
 
-  pub(super) fn to_condition(&self) -> ConditionKind {
-    match self {
-      ExpressionType::Void => panic!("Cannot check void"),
-      ExpressionType::Byte(b) => ConditionKind::Known(*b != 0),
-      ExpressionType::Short(s) => ConditionKind::Known(*s != 0),
-      ExpressionType::Integer(i) => ConditionKind::Known(*i != 0),
-      ExpressionType::Long(l) => ConditionKind::Known(*l != 0),
-      ExpressionType::Float(f) => ConditionKind::Known(*f != 0.0),
-      ExpressionType::Double(d) => ConditionKind::Known(*d != 0.0),
-      ExpressionType::Boolean(b) => ConditionKind::Known(*b),
-      ExpressionType::String(_) => panic!("Cannot use string as a condition"),
-      ExpressionType::Array(_)
-      | ExpressionType::ByteArray(_)
-      | ExpressionType::IntArray(_)
-      | ExpressionType::LongArray(_) => panic!("Cannot use array as a condition"),
-      ExpressionType::Compound(_) => panic!("Cannot use compound as a condition"),
-      ExpressionType::Condition(condition) => ConditionKind::Check(condition.to_string()),
-      ExpressionType::Scoreboard(scoreboard) => {
+  pub(super) fn to_condition(&self) -> Result<ConditionKind> {
+    Ok(match self {
+      Expression::Void(location) => return Err(raise_error(location.clone(), "Cannot check void")),
+      Expression::Byte(b, _) => ConditionKind::Known(*b != 0),
+      Expression::Short(s, _) => ConditionKind::Known(*s != 0),
+      Expression::Integer(i, _) => ConditionKind::Known(*i != 0),
+      Expression::Long(l, _) => ConditionKind::Known(*l != 0),
+      Expression::Float(f, _) => ConditionKind::Known(*f != 0.0),
+      Expression::Double(d, _) => ConditionKind::Known(*d != 0.0),
+      Expression::Boolean(b, _) => ConditionKind::Known(*b),
+      Expression::String(_, location) => {
+        return Err(raise_error(
+          location.clone(),
+          "Cannot use string as a condition",
+        ))
+      }
+      Expression::Array(_, location)
+      | Expression::ByteArray(_, location)
+      | Expression::IntArray(_, location)
+      | Expression::LongArray(_, location) => {
+        return Err(raise_error(
+          location.clone(),
+          "Cannot use array as a condition",
+        ))
+      }
+      Expression::Compound(_, location) => {
+        return Err(raise_error(
+          location.clone(),
+          "Cannot use compound as a condition",
+        ))
+      }
+      Expression::Condition(condition, _) => ConditionKind::Check(condition.to_string()),
+      Expression::Scoreboard(scoreboard, _) => {
         ConditionKind::Check(format!("unless score {} matches 0", scoreboard.to_string()))
       }
-      ExpressionType::Storage(_) => todo!(),
-    }
+      Expression::Storage(_, _) => todo!(),
+    })
   }
 
   pub(super) fn numeric_value(&self) -> Option<i32> {
     Some(match self {
-      ExpressionType::Byte(b) => *b as i32,
-      ExpressionType::Short(s) => *s as i32,
-      ExpressionType::Integer(i) => *i,
-      ExpressionType::Long(l) => *l as i32,
-      ExpressionType::Float(f) => f.floor() as i32,
-      ExpressionType::Double(d) => d.floor() as i32,
+      Expression::Byte(b, _) => *b as i32,
+      Expression::Short(s, _) => *s as i32,
+      Expression::Integer(i, _) => *i,
+      Expression::Long(l, _) => *l as i32,
+      Expression::Float(f, _) => f.floor() as i32,
+      Expression::Double(d, _) => d.floor() as i32,
       _ => return None,
     })
+  }
+
+  pub(super) fn location(&self) -> Location {
+    match self {
+      Expression::Void(location)
+      | Expression::Byte(_, location)
+      | Expression::Short(_, location)
+      | Expression::Integer(_, location)
+      | Expression::Long(_, location)
+      | Expression::Float(_, location)
+      | Expression::Double(_, location)
+      | Expression::Storage(_, location)
+      | Expression::Scoreboard(_, location)
+      | Expression::Boolean(_, location)
+      | Expression::String(_, location)
+      | Expression::Array(_, location)
+      | Expression::ByteArray(_, location)
+      | Expression::IntArray(_, location)
+      | Expression::LongArray(_, location)
+      | Expression::Compound(_, location)
+      | Expression::Condition(_, location) => location.clone(),
+    }
+  }
+
+  pub fn to_type(&self) -> NbtType {
+    match self {
+      Expression::Void(_) => NbtType::Unknown,
+      Expression::Byte(_, _) => NbtType::Byte,
+      Expression::Short(_, _) => NbtType::Short,
+      Expression::Integer(_, _) => NbtType::Int,
+      Expression::Long(_, _) => NbtType::Long,
+      Expression::Float(_, _) => NbtType::Float,
+      Expression::Double(_, _) => NbtType::Double,
+      Expression::Storage(_, _) => NbtType::Unknown,
+      Expression::Scoreboard(_, _) => NbtType::Int,
+      Expression::Boolean(_, _) => NbtType::Byte,
+      Expression::String(_, _) => NbtType::String,
+      Expression::Array(_, _) => NbtType::List,
+      Expression::ByteArray(_, _) => NbtType::ByteArray,
+      Expression::IntArray(_, _) => NbtType::IntArray,
+      Expression::LongArray(_, _) => NbtType::LongArray,
+      Expression::Compound(_, _) => NbtType::Compound,
+      Expression::Condition(_, _) => NbtType::Byte,
+    }
   }
 }
 
 // TODO: optimise this, like a lot
 fn array_to_storage(
-  elements: &[ExpressionType],
+  elements: &[Expression],
   prefix: &str,
   state: &mut Compiler,
   code: &mut Vec<String>,
-) -> (String, StorageKind) {
+) -> Result<(String, StorageKind)> {
   let storage = state.next_storage().to_string();
   code.push(format!(
     "data modify storage {storage} set value [{prefix}]"
   ));
   for element in elements {
-    match element.to_storage(state, code) {
+    match element.to_storage(state, code)? {
       (expr_code, StorageKind::Direct) => {
         code.push(format!("data modify storage {storage} append {expr_code}"));
       }
@@ -262,44 +349,55 @@ fn array_to_storage(
       }
     }
   }
-  (format!("from storage {storage}"), StorageKind::Direct)
+  Ok((format!("from storage {storage}"), StorageKind::Direct))
 }
 
-pub fn verify_types(types: &[ExpressionType], typ: ArrayType) -> bool {
+#[derive(Debug, Clone, Copy)]
+pub enum NbtType {
+  Unknown,
+  Byte,
+  Short,
+  Int,
+  Long,
+  Float,
+  Double,
+  ByteArray,
+  IntArray,
+  LongArray,
+  String,
+  List,
+  Compound,
+}
+
+pub fn verify_types(types: &[Expression], typ: ArrayType) -> Result<Option<Location>> {
   let mut single_type = match typ {
-    ArrayType::Any => &ExpressionType::Void,
-    ArrayType::Byte => &ExpressionType::Byte(0),
-    ArrayType::Int => &ExpressionType::Integer(0),
-    ArrayType::Long => &ExpressionType::Long(0),
+    ArrayType::Any => NbtType::Unknown,
+    ArrayType::Byte => NbtType::Byte,
+    ArrayType::Int => NbtType::Int,
+    ArrayType::Long => NbtType::Long,
   };
 
   for typ in types {
     match (typ, single_type) {
-      (ExpressionType::Void, _) => panic!("Cannot use void as a value"),
-      (ExpressionType::Storage(_), ExpressionType::Void) => {}
-      (ExpressionType::Scoreboard(_), ExpressionType::Void) => {
-        single_type = &ExpressionType::Integer(0)
+      (Expression::Void(location), _) => {
+        return Err(raise_error(location.clone(), "Cannot use void as a value"))
       }
-      (ExpressionType::Condition(_), ExpressionType::Void) => {
-        single_type = &ExpressionType::Byte(0)
-      }
-      (ExpressionType::Boolean(_), ExpressionType::Void) => single_type = &ExpressionType::Byte(0),
-      (_, ExpressionType::Void) => single_type = typ,
-      (ExpressionType::Byte(_), ExpressionType::Byte(_)) => {}
-      (ExpressionType::Short(_), ExpressionType::Short(_)) => {}
-      (ExpressionType::Integer(_), ExpressionType::Integer(_)) => {}
-      (ExpressionType::Long(_), ExpressionType::Long(_)) => {}
-      (ExpressionType::Float(_), ExpressionType::Float(_)) => {}
-      (ExpressionType::Double(_), ExpressionType::Double(_)) => {}
-      (ExpressionType::Storage(_), _) => {}
-      (ExpressionType::Scoreboard(_), ExpressionType::Integer(_)) => {}
-      (ExpressionType::Boolean(_), ExpressionType::Byte(_)) => {}
-      (ExpressionType::String(_), ExpressionType::String(_)) => {}
-      (ExpressionType::Array(_), ExpressionType::Array(_)) => {}
-      (ExpressionType::Condition(_), ExpressionType::Byte(_)) => {}
-      _ => return false,
+      (_, NbtType::Unknown) => single_type = typ.to_type(),
+      (Expression::Byte(_, _), NbtType::Byte) => {}
+      (Expression::Short(_, _), NbtType::Short) => {}
+      (Expression::Integer(_, _), NbtType::Int) => {}
+      (Expression::Long(_, _), NbtType::Long) => {}
+      (Expression::Float(_, _), NbtType::Float) => {}
+      (Expression::Double(_, _), NbtType::Double) => {}
+      (Expression::Storage(_, _), _) => {}
+      (Expression::Scoreboard(_, _), NbtType::Int) => {}
+      (Expression::Boolean(_, _), NbtType::Byte) => {}
+      (Expression::String(_, _), NbtType::String) => {}
+      (Expression::Array(_, _), NbtType::List) => {}
+      (Expression::Condition(_, _), NbtType::Byte) => {}
+      _ => return Ok(Some(typ.location())),
     }
   }
 
-  true
+  Ok(None)
 }

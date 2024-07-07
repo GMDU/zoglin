@@ -1,13 +1,15 @@
 use std::{collections::HashMap, mem::replace, path::Path};
 
-use expression::{verify_types, ConditionKind, ExpressionType};
+use expression::{verify_types, ConditionKind, Expression};
 use file_tree::{FunctionLocation, ScoreboardLocation, StorageLocation};
 use serde::Serialize;
 
 use crate::parser::ast::{
-  self, ArrayType, Command, ElseStatement, Expression, File, FunctionCall, IfStatement, KeyValue,
-  Statement, StaticExpr, ZoglinResource,
+  self, ArrayType, Command, ElseStatement, File, FunctionCall, IfStatement, KeyValue, Statement,
+  StaticExpr, ZoglinResource,
 };
+
+use crate::error::{raise_error, Location, Result};
 
 use self::{
   file_tree::{FileResource, FileTree, Function, Item, Namespace, ResourceLocation, TextResource},
@@ -150,7 +152,7 @@ impl Compiler {
 }
 
 impl Compiler {
-  pub fn compile(ast: File, output: &String) {
+  pub fn compile(ast: File, output: &String) -> Result<()> {
     let mut compiler = Compiler {
       tick_functions: Vec::new(),
       load_functions: Vec::new(),
@@ -161,13 +163,14 @@ impl Compiler {
     };
 
     compiler.register(&ast);
-    let tree = compiler.compile_tree(ast);
+    let tree = compiler.compile_tree(ast)?;
     tree.generate(output);
+    Ok(())
   }
 
-  fn compile_tree(&mut self, ast: File) -> FileTree {
+  fn compile_tree(&mut self, ast: File) -> Result<FileTree> {
     for namespace in ast.items {
-      self.compile_namespace(namespace);
+      self.compile_namespace(namespace)?;
     }
 
     if self.load_functions.len() > 0 || self.tick_functions.len() > 0 {
@@ -206,12 +209,12 @@ impl Compiler {
     }
 
     let namespaces = replace(&mut self.namespaces, HashMap::new());
-    FileTree {
+    Ok(FileTree {
       namespaces: namespaces.into_values().collect(),
-    }
+    })
   }
 
-  fn compile_namespace(&mut self, namespace: ast::Namespace) {
+  fn compile_namespace(&mut self, namespace: ast::Namespace) -> Result<()> {
     self.enter_scope(&namespace.name);
 
     for item in namespace.items {
@@ -219,34 +222,40 @@ impl Compiler {
         namespace: namespace.name.clone(),
         modules: Vec::new(),
       };
-      self.compile_item(item, &mut resource);
+      self.compile_item(item, &mut resource)?;
     }
 
     self.exit_scope();
+    Ok(())
   }
 
-  fn compile_item(&mut self, item: ast::Item, location: &mut ResourceLocation) {
+  fn compile_item(&mut self, item: ast::Item, location: &mut ResourceLocation) -> Result<()> {
     match item {
       ast::Item::Module(module) => self.compile_module(module, location),
-      ast::Item::Import(_) => {}
+      ast::Item::Import(_) => Ok(()),
       ast::Item::Function(function) => self.compile_ast_function(function, location),
       ast::Item::Resource(resource) => self.compile_resource(resource, location),
     }
   }
 
-  fn compile_module(&mut self, module: ast::Module, location: &mut ResourceLocation) {
+  fn compile_module(&mut self, module: ast::Module, location: &mut ResourceLocation) -> Result<()> {
     self.enter_scope(&module.name);
 
     location.modules.push(module.name);
 
     for item in module.items {
-      self.compile_item(item, location);
+      self.compile_item(item, location)?;
     }
 
     self.exit_scope();
+    Ok(())
   }
 
-  fn compile_resource(&mut self, resource: ast::Resource, location: &ResourceLocation) {
+  fn compile_resource(
+    &mut self,
+    resource: ast::Resource,
+    location: &ResourceLocation,
+  ) -> Result<()> {
     match resource.content {
       ast::ResourceContent::Text(name, text) => {
         let resource = TextResource {
@@ -255,7 +264,7 @@ impl Compiler {
           is_asset: resource.is_asset,
           text,
         };
-        self.add_item(location.clone(), Item::TextResource(resource))
+        Ok(self.add_item(location.clone(), Item::TextResource(resource)))
       }
       ast::ResourceContent::File(path, file) => {
         let file_path = Path::new(&file).parent().unwrap();
@@ -264,7 +273,7 @@ impl Compiler {
           is_asset: resource.is_asset,
           path: file_path.join(path).to_str().unwrap().to_string(),
         };
-        self.add_item(location.clone(), Item::FileResource(resource))
+        Ok(self.add_item(location.clone(), Item::FileResource(resource)))
       }
     }
   }
@@ -274,32 +283,37 @@ impl Compiler {
     statement: Statement,
     location: &FunctionLocation,
     code: &mut Vec<String>,
-  ) {
+  ) -> Result<()> {
     match statement {
-      Statement::Command(command) => code.push(self.compile_command(command, location)),
+      Statement::Command(command) => code.push(self.compile_command(command, location)?),
       Statement::Comment(comment) => code.push(comment),
       Statement::Expression(expression) => {
-        self.compile_expression(expression, location, code);
+        self.compile_expression(expression, location, code)?;
       }
       Statement::IfStatement(if_statement) => {
-        self.compile_if_statement(code, if_statement, location);
+        self.compile_if_statement(code, if_statement, location)?;
       }
     };
+    Ok(())
   }
 
-  fn compile_ast_function(&mut self, function: ast::Function, location: &ResourceLocation) {
+  fn compile_ast_function(
+    &mut self,
+    function: ast::Function,
+    location: &ResourceLocation,
+  ) -> Result<()> {
     let fn_location = FunctionLocation {
       module: location.clone(),
       name: function.name,
     };
 
-    self.compile_function(fn_location, function.items);
+    self.compile_function(fn_location, function.items)
   }
 
-  fn compile_function(&mut self, location: FunctionLocation, block: Vec<Statement>) {
+  fn compile_function(&mut self, location: FunctionLocation, block: Vec<Statement>) -> Result<()> {
     let mut commands = Vec::new();
     for item in block {
-      self.compile_statement(item, &location, &mut commands);
+      self.compile_statement(item, &location, &mut commands)?;
     }
 
     let function = Function {
@@ -308,114 +322,136 @@ impl Compiler {
     };
 
     self.add_item(location.module, Item::Function(function));
+    Ok(())
   }
 
-  fn compile_command(&mut self, command: Command, location: &FunctionLocation) -> String {
+  fn compile_command(&mut self, command: Command, location: &FunctionLocation) -> Result<String> {
     let mut result = String::new();
 
     for part in command.parts {
       match part {
         ast::CommandPart::Literal(lit) => result.push_str(&lit),
         ast::CommandPart::Expression(expr) => {
-          result.push_str(&mut self.compile_static_expr(expr, &location.module))
+          result.push_str(&mut self.compile_static_expr(expr, &location.module)?)
         }
       }
     }
 
-    result
+    Ok(result)
   }
 
   fn compile_expression(
     &mut self,
-    expression: Expression,
-    location: &FunctionLocation,
+    expression: ast::Expression,
+    fn_location: &FunctionLocation,
     code: &mut Vec<String>,
-  ) -> ExpressionType {
-    match expression {
-      Expression::FunctionCall(function_call) => {
-        code.push(self.compile_function_call(function_call, &location.module));
-        ExpressionType::Void
+  ) -> Result<Expression> {
+    Ok(match expression {
+      ast::Expression::FunctionCall(function_call) => {
+        let location = function_call.path.location.clone();
+        code.push(self.compile_function_call(function_call, &fn_location.module)?);
+        Expression::Void(location)
       }
-      Expression::Byte(b) => ExpressionType::Byte(b),
-      Expression::Short(s) => ExpressionType::Short(s),
-      Expression::Integer(i) => ExpressionType::Integer(i),
-      Expression::Long(l) => ExpressionType::Long(l),
-      Expression::Float(f) => ExpressionType::Float(f),
-      Expression::Double(d) => ExpressionType::Double(d),
-      Expression::Boolean(b) => ExpressionType::Boolean(b),
-      Expression::String(s) => ExpressionType::String(s),
-      Expression::Array(typ, a) => self.compile_array(code, typ, a, location),
-      Expression::Compound(key_values) => self.compile_compound(code, key_values, location),
-      Expression::Variable(variable) => ExpressionType::Storage(
-        StorageLocation::from_zoglin_resource(location.clone(), &variable),
+      ast::Expression::Byte(b, location) => Expression::Byte(b, location),
+      ast::Expression::Short(s, location) => Expression::Short(s, location),
+      ast::Expression::Integer(i, location) => Expression::Integer(i, location),
+      ast::Expression::Long(l, location) => Expression::Long(l, location),
+      ast::Expression::Float(f, location) => Expression::Float(f, location),
+      ast::Expression::Double(d, location) => Expression::Double(d, location),
+      ast::Expression::Boolean(b, location) => Expression::Boolean(b, location),
+      ast::Expression::String(s, location) => Expression::String(s, location),
+      ast::Expression::Array(typ, a, location) => {
+        self.compile_array(code, typ, a, location, fn_location)?
+      }
+      ast::Expression::Compound(key_values, location) => {
+        self.compile_compound(code, key_values, location, fn_location)?
+      }
+      ast::Expression::Variable(variable) => Expression::Storage(
+        StorageLocation::from_zoglin_resource(fn_location.clone(), &variable),
+        variable.location,
       ),
-      Expression::BinaryOperation(binary_operation) => {
-        self.compile_binary_operation(binary_operation, location, code)
+      ast::Expression::BinaryOperation(binary_operation) => {
+        self.compile_binary_operation(binary_operation, fn_location, code)?
       }
-    }
+    })
   }
 
   fn compile_array(
     &mut self,
     code: &mut Vec<String>,
     typ: ArrayType,
-    expressions: Vec<Expression>,
-    location: &FunctionLocation,
-  ) -> ExpressionType {
+    expressions: Vec<ast::Expression>,
+    location: Location,
+    fn_location: &FunctionLocation,
+  ) -> Result<Expression> {
     let mut types = Vec::new();
 
     for expr in expressions {
-      types.push(self.compile_expression(expr, location, code));
+      types.push(self.compile_expression(expr, fn_location, code)?);
     }
 
-    if !verify_types(&types, typ) {
-      match typ {
-        ArrayType::Any => panic!("Arrays can only contain values of the same type"),
-        ArrayType::Byte => panic!("Byte arrays can only byte values"),
-        ArrayType::Int => panic!("Int arrays can only integer values"),
-        ArrayType::Long => panic!("Long arrays can only long values"),
-      }
+    if let Some(location) = verify_types(&types, typ)? {
+      return Err(match typ {
+        ArrayType::Any => raise_error(location, "Arrays can only contain values of the same type"),
+        ArrayType::Byte => raise_error(location, "Byte arrays can only byte values"),
+        ArrayType::Int => raise_error(location, "Int arrays can only integer values"),
+        ArrayType::Long => raise_error(location, "Long arrays can only long values"),
+      });
     }
 
-    match typ {
-      ArrayType::Any => ExpressionType::Array(types),
-      ArrayType::Byte => ExpressionType::ByteArray(types),
-      ArrayType::Int => ExpressionType::IntArray(types),
-      ArrayType::Long => ExpressionType::LongArray(types),
-    }
+    Ok(match typ {
+      ArrayType::Any => Expression::Array(types, location),
+      ArrayType::Byte => Expression::ByteArray(types, location),
+      ArrayType::Int => Expression::IntArray(types, location),
+      ArrayType::Long => Expression::LongArray(types, location),
+    })
   }
 
   fn compile_compound(
     &mut self,
     code: &mut Vec<String>,
     key_values: Vec<KeyValue>,
-    location: &FunctionLocation,
-  ) -> ExpressionType {
+    location: Location,
+    fn_location: &FunctionLocation,
+  ) -> Result<Expression> {
     let mut types = HashMap::new();
 
-    for KeyValue { key, value } in key_values {
+    for KeyValue {
+      key,
+      value,
+      location,
+    } in key_values
+    {
       if types
-        .insert(key, self.compile_expression(value, location, code))
+        .insert(key, self.compile_expression(value, fn_location, code)?)
         .is_some()
       {
-        panic!("Duplicate keys not allowed");
+        return Err(raise_error(location, "Duplicate keys not allowed"));
       }
     }
 
-    ExpressionType::Compound(types)
+    Ok(Expression::Compound(types, location))
   }
 
-  fn compile_static_expr(&mut self, expr: StaticExpr, location: &ResourceLocation) -> String {
+  fn compile_static_expr(
+    &mut self,
+    expr: StaticExpr,
+    location: &ResourceLocation,
+  ) -> Result<String> {
     match expr {
       StaticExpr::FunctionCall(call) => self.compile_function_call(call, location),
       StaticExpr::ResourceRef {
         resource,
         is_fn: true,
-      } => self.resolve_zoglin_resource(resource, location).to_string(),
+      } => Ok(
+        self
+          .resolve_zoglin_resource(resource, location)?
+          .to_string(),
+      ),
       StaticExpr::ResourceRef {
         resource,
         is_fn: false,
-      } => ResourceLocation::from_zoglin_resource(location, &resource).to_string(),
+      } => Ok(ResourceLocation::from_zoglin_resource(location, &resource).to_string()),
     }
   }
 
@@ -423,20 +459,20 @@ impl Compiler {
     &mut self,
     function_call: FunctionCall,
     location: &ResourceLocation,
-  ) -> String {
+  ) -> Result<String> {
     let mut command = "function ".to_string();
 
-    let path = self.resolve_zoglin_resource(function_call.path, location);
+    let path = self.resolve_zoglin_resource(function_call.path, location)?;
     command.push_str(&path.to_string());
 
-    command
+    Ok(command)
   }
 
   fn resolve_zoglin_resource(
     &mut self,
     resource: ast::ZoglinResource,
     location: &ResourceLocation,
-  ) -> ResourceLocation {
+  ) -> Result<ResourceLocation> {
     let mut result = ResourceLocation {
       namespace: String::new(),
       modules: Vec::new(),
@@ -457,7 +493,7 @@ impl Compiler {
         if !resource.modules.is_empty() {
           result.modules.push(resource.name);
         }
-        return result;
+        return Ok(result);
       } else {
         result = location.clone();
       }
@@ -465,7 +501,7 @@ impl Compiler {
     result.modules.extend(resource.modules);
     result.modules.push(resource.name);
 
-    result
+    Ok(result)
   }
 
   fn compile_if_statement(
@@ -473,7 +509,7 @@ impl Compiler {
     code: &mut Vec<String>,
     if_statement: IfStatement,
     location: &FunctionLocation,
-  ) {
+  ) -> Result<()> {
     if if_statement.child.is_some() {
       let if_function = self.next_function("if", location.module.namespace.clone());
       code.push(format!("function {}", if_function.to_string()));
@@ -487,7 +523,7 @@ impl Compiler {
           if_statement.block,
           &if_function,
           true,
-        );
+        )?;
         match if_statement.child {
           Some(ElseStatement::IfStatement(if_stmt)) => {
             if_statement = *if_stmt;
@@ -495,7 +531,7 @@ impl Compiler {
 
           Some(ElseStatement::Block(block)) => {
             for item in block {
-              self.compile_statement(item, &location, &mut function_code);
+              self.compile_statement(item, &location, &mut function_code)?;
             }
             break;
           }
@@ -512,7 +548,7 @@ impl Compiler {
         }),
       );
 
-      return;
+      return Ok(());
     }
     self.compile_if_statement_without_child(
       code,
@@ -520,28 +556,28 @@ impl Compiler {
       if_statement.block,
       location,
       false,
-    );
+    )
   }
 
   fn compile_if_statement_without_child(
     &mut self,
     code: &mut Vec<String>,
-    condition: Expression,
+    condition: ast::Expression,
     body: Vec<Statement>,
     location: &FunctionLocation,
     is_child: bool,
-  ) {
-    let condition = self.compile_expression(condition, location, code);
+  ) -> Result<()> {
+    let condition = self.compile_expression(condition, location, code)?;
 
-    let check_code = match condition.to_condition() {
+    let check_code = match condition.to_condition()? {
       ConditionKind::Known(false) => {
-        return;
+        return Ok(());
       }
       ConditionKind::Known(true) => {
         for item in body {
-          self.compile_statement(item, &location, code);
+          self.compile_statement(item, &location, code)?;
         }
-        return;
+        return Ok(());
       }
       ConditionKind::Check(check_code) => check_code,
     };
@@ -555,6 +591,6 @@ impl Compiler {
       function = function.to_string()
     ));
 
-    self.compile_function(function, body);
+    self.compile_function(function, body)
   }
 }
