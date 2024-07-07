@@ -3,7 +3,7 @@ use serde::Serialize;
 use std::{fs, path::Path};
 
 use crate::{
-  error::Location,
+  error::{raise_error, raise_floating_error, Location, Result},
   parser::ast::{self, ZoglinResource},
 };
 
@@ -25,23 +25,24 @@ struct Pack {
 
 const DEFAULT_MCMETA: PackMcmeta = PackMcmeta {
   pack: Pack {
-    pack_format: 26,
+    pack_format: 48,
     description: "",
   },
 };
 
 impl FileTree {
-  pub fn generate(&self, root_path: &String) {
+  pub fn generate(&self, root_path: &String) -> Result<()> {
     let _ = fs::remove_dir_all(root_path);
     let working_path = Path::new(root_path).join("data");
-    fs::create_dir_all(&working_path).unwrap();
+    fs::create_dir_all(working_path).map_err(raise_floating_error)?;
 
-    let text = serde_json::to_string_pretty(&DEFAULT_MCMETA).unwrap();
-    fs::write(Path::new(root_path).join("pack.mcmeta"), text).unwrap();
+    let text = serde_json::to_string_pretty(&DEFAULT_MCMETA).expect("Json is valid");
+    fs::write(Path::new(root_path).join("pack.mcmeta"), text).map_err(raise_floating_error)?;
 
     for namespace in self.namespaces.iter() {
-      namespace.generate(&root_path);
+      namespace.generate(root_path)?;
     }
+    Ok(())
   }
 }
 
@@ -52,7 +53,7 @@ pub struct Namespace {
 }
 
 impl Namespace {
-  fn generate(&self, path: &str) {
+  fn generate(&self, path: &str) -> Result<()> {
     for item in self.items.iter() {
       item.generate(
         path,
@@ -60,8 +61,9 @@ impl Namespace {
           namespace: self.name.clone(),
           modules: Vec::new(),
         },
-      );
+      )?;
     }
+    Ok(())
   }
 
   pub fn get_module(&mut self, mut path: Vec<String>) -> &mut Vec<Item> {
@@ -71,10 +73,11 @@ impl Namespace {
 
     let first = path.remove(0);
 
-    if let Some(index) = self.items.iter().position(|item| match item {
-      Item::Module(module) if module.name == first => true,
-      _ => false,
-    }) {
+    if let Some(index) = self
+      .items
+      .iter()
+      .position(|item| matches!(item, Item::Module(module) if module.name == first))
+    {
       let Item::Module(module) = &mut self.items[index] else {
         unreachable!();
       };
@@ -85,8 +88,8 @@ impl Namespace {
       name: first,
       items: Vec::new(),
     }));
-    let Item::Module(module) = self.items.last_mut().unwrap() else {
-      unreachable!();
+    let Some(Item::Module(module)) = self.items.last_mut() else {
+      unreachable!("Module was just added");
     };
 
     module.get_module(path)
@@ -102,7 +105,7 @@ pub enum Item {
 }
 
 impl Item {
-  fn generate(&self, root_path: &str, local_path: &ResourceLocation) {
+  fn generate(&self, root_path: &str, local_path: &ResourceLocation) -> Result<()> {
     match self {
       Item::Module(module) => module.generate(root_path, local_path),
       Item::Function(function) => function.generate(root_path, local_path),
@@ -119,12 +122,13 @@ pub struct Module {
 }
 
 impl Module {
-  fn generate(&self, root_path: &str, local_path: &ResourceLocation) {
+  fn generate(&self, root_path: &str, local_path: &ResourceLocation) -> Result<()> {
     let mut local_path = local_path.clone();
     local_path.modules.push(self.name.clone());
     for item in self.items.iter() {
-      item.generate(root_path, &mut local_path);
+      item.generate(root_path, &local_path)?;
     }
+    Ok(())
   }
 
   fn get_module(&mut self, mut path: Vec<String>) -> &mut Vec<Item> {
@@ -134,10 +138,11 @@ impl Module {
 
     let first = path.remove(0);
 
-    if let Some(index) = self.items.iter().position(|item| match item {
-      Item::Module(module) if module.name == first => true,
-      _ => false,
-    }) {
+    if let Some(index) = self
+      .items
+      .iter()
+      .position(|item| matches!(item, Item::Module(module) if module.name == first ))
+    {
       let Item::Module(module) = &mut self.items[index] else {
         unreachable!();
       };
@@ -148,8 +153,8 @@ impl Module {
       name: first,
       items: Vec::new(),
     }));
-    let Item::Module(module) = self.items.last_mut().unwrap() else {
-      unreachable!();
+    let Some(Item::Module(module)) = self.items.last_mut() else {
+      unreachable!("Module was just added");
     };
 
     module.get_module(path)
@@ -164,16 +169,16 @@ pub struct Function {
 }
 
 impl Function {
-  fn generate(&self, root_path: &str, local_path: &ResourceLocation) {
+  fn generate(&self, root_path: &str, local_path: &ResourceLocation) -> Result<()> {
     let dir_path = Path::new(root_path)
       .join("data")
       .join(&local_path.namespace)
       .join("function")
       .join(local_path.modules.join("/"));
 
-    fs::create_dir_all(&dir_path).unwrap();
+    fs::create_dir_all(&dir_path).map_err(raise_floating_error)?;
     let file_path = dir_path.join(self.name.clone() + ".mcfunction");
-    fs::write(file_path, self.commands.join("\n")).unwrap();
+    fs::write(file_path, self.commands.join("\n")).map_err(raise_floating_error)
   }
 }
 
@@ -193,7 +198,7 @@ impl PartialEq for TextResource {
 }
 
 impl TextResource {
-  fn generate(&self, root_path: &str, local_path: &ResourceLocation) {
+  fn generate(&self, root_path: &str, local_path: &ResourceLocation) -> Result<()> {
     let resource_dir = if self.is_asset { "assets" } else { "data" };
     let dir_path = Path::new(root_path)
       .join(resource_dir)
@@ -201,9 +206,9 @@ impl TextResource {
       .join(&self.kind)
       .join(local_path.modules.join("/"));
 
-    fs::create_dir_all(&dir_path).unwrap();
+    fs::create_dir_all(&dir_path).map_err(raise_floating_error)?;
     let file_path = dir_path.join(self.name.clone() + ".json");
-    fs::write(file_path, self.text.clone()).unwrap();
+    fs::write(file_path, self.text.clone()).map_err(raise_floating_error)
   }
 }
 
@@ -212,10 +217,11 @@ pub struct FileResource {
   pub kind: String,
   pub is_asset: bool,
   pub path: String,
+  pub location: Location,
 }
 
 impl FileResource {
-  fn generate(&self, root_path: &str, local_path: &ResourceLocation) {
+  fn generate(&self, root_path: &str, local_path: &ResourceLocation) -> Result<()> {
     let resource_dir = if self.is_asset { "assets" } else { "data" };
     let dir_path = Path::new(&root_path)
       .join(resource_dir)
@@ -223,18 +229,20 @@ impl FileResource {
       .join(&self.kind)
       .join(local_path.modules.join("/"));
 
-    fs::create_dir_all(&dir_path).unwrap();
-    for entry in glob(&self.path).unwrap() {
+    fs::create_dir_all(&dir_path).map_err(raise_floating_error)?;
+    for entry in glob(&self.path).map_err(|e| raise_error(self.location.clone(), e.msg))? {
       match entry {
         Ok(path) => {
-          let filename = path.file_name().unwrap();
+          let filename = path.file_name().expect("Path should be valid");
           if Path::new(&path).is_file() {
-            fs::copy(&path, &dir_path.join(filename)).unwrap();
+            fs::copy(&path, &dir_path.join(filename)).map_err(raise_floating_error)?;
           }
         }
         Err(e) => panic!("{:?}", e),
       };
     }
+
+    Ok(())
   }
 }
 
@@ -251,7 +259,7 @@ impl ResourceLocation {
   ) -> ResourceLocation {
     if let Some(mut namespace) = resource.namespace.clone() {
       if namespace.is_empty() {
-        namespace = base_location.namespace.clone();
+        namespace.clone_from(&base_location.namespace);
       }
 
       let mut modules = resource.modules.clone();
@@ -269,9 +277,9 @@ impl ResourceLocation {
     self.namespace.clone() + ":" + &self.modules.join("/")
   }
 
-  pub fn join(&self, suffix: &String) -> String {
+  pub fn join(&self, suffix: &str) -> String {
     let mut prefix = self.to_string();
-    if self.modules.len() > 0 {
+    if !self.modules.is_empty() {
       prefix.push('/');
     }
     prefix.push_str(suffix);
@@ -315,7 +323,10 @@ impl StorageLocation {
   }
 
   fn from_resource_location(mut location: ResourceLocation) -> StorageLocation {
-    let name = location.modules.pop().unwrap();
+    let name = location
+      .modules
+      .pop()
+      .expect("There must be at least one module");
     StorageLocation {
       storage: location,
       name,

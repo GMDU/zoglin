@@ -33,9 +33,15 @@ fn main() {
     .get_matches();
 
   if let Some(matches) = matches.subcommand_matches("build") {
-    let file: &String = matches.get_one("file").unwrap();
-    let output: &String = matches.get_one("output").unwrap();
-    let debug_mode: &String = matches.get_one("debug_mode").unwrap();
+    let file: &String = matches
+      .get_one("file")
+      .expect("Argument has a default value");
+    let output: &String = matches
+      .get_one("output")
+      .expect("Argument has a default value");
+    let debug_mode: &String = matches
+      .get_one("debug_mode")
+      .expect("Argument has a default value");
     if let Err(e) = build(file, output, debug_mode).1 {
       e.print();
       exit(1);
@@ -48,8 +54,12 @@ fn main() {
       init(&String::new());
     }
   } else if let Some(matches) = matches.subcommand_matches("watch") {
-    let file: &String = matches.get_one("file").unwrap();
-    let output: &String = matches.get_one("output").unwrap();
+    let file: &String = matches
+      .get_one("file")
+      .expect("Argument has a default value");
+    let output: &String = matches
+      .get_one("output")
+      .expect("Argument has a default value");
     watch(file, output);
   }
 }
@@ -57,7 +67,11 @@ fn main() {
 fn build(file: &String, output: &String, debug_mode: &str) -> (HashSet<String>, Result<()>) {
   print!("Building {} into {}... ", file, output);
   let start = SystemTime::now();
-  let mut lexer = Lexer::new(file);
+  let result = Lexer::new(file);
+  let mut lexer = match result {
+    Ok(lexer) => lexer,
+    Err(e) => return (HashSet::new(), Err(e)),
+  };
   let result = lexer.tokenise();
   let tokens = match result {
     Ok(tokens) => tokens,
@@ -67,7 +81,10 @@ fn build(file: &String, output: &String, debug_mode: &str) -> (HashSet<String>, 
   if debug_mode == "tokens" {
     println!(
       "Read tokens in {}ms",
-      SystemTime::now().duration_since(start).unwrap().as_millis()
+      SystemTime::now()
+        .duration_since(start)
+        .expect("Now is always later than previously")
+        .as_millis()
     );
     println!("{:#?}", tokens);
     return (lexer.dependent_files, Ok(()));
@@ -83,7 +100,10 @@ fn build(file: &String, output: &String, debug_mode: &str) -> (HashSet<String>, 
   if debug_mode == "ast" {
     println!(
       "Parsed AST in {}ms",
-      SystemTime::now().duration_since(start).unwrap().as_millis()
+      SystemTime::now()
+        .duration_since(start)
+        .expect("Now is always later than previously")
+        .as_millis()
     );
     println!("{:#?}", ast);
     return (lexer.dependent_files, Ok(()));
@@ -95,9 +115,12 @@ fn build(file: &String, output: &String, debug_mode: &str) -> (HashSet<String>, 
 
   println!(
     "Built in {}ms",
-    SystemTime::now().duration_since(start).unwrap().as_millis()
+    SystemTime::now()
+      .duration_since(start)
+      .expect("Now is always later than previously")
+      .as_millis()
   );
-  return (lexer.dependent_files, Ok(()));
+  (lexer.dependent_files, Ok(()))
 }
 
 const DEFAULT_PROJECT: &str = r#"namespace $name {
@@ -112,20 +135,28 @@ const DEFAULT_PROJECT: &str = r#"namespace $name {
 "#;
 
 fn init(name: &String) {
-  if name == "" {
-    let dir = std::env::current_dir().unwrap();
-    let current_dir = Path::new(&dir).file_name().unwrap().to_str().unwrap();
-    let is_empty = dir.read_dir().unwrap().next().is_none();
+  if name.is_empty() {
+    let dir = std::env::current_dir().expect("Current directory should be valid");
+    let current_dir = Path::new(&dir)
+      .file_name()
+      .expect("Current directory cannot end in ..")
+      .to_str()
+      .expect("Path should be valid");
+    let is_empty = dir
+      .read_dir()
+      .expect("Directory should be readable")
+      .next()
+      .is_none();
     if !is_empty {
       println!("No init'ing projects in non-empty directories, naughty naughty!");
       return;
     }
     let contents = DEFAULT_PROJECT.replace("$name", current_dir);
-    fs::write("main.zog", contents).unwrap();
+    fs::write("main.zog", contents).expect("Directory should be writable");
   } else {
-    fs::create_dir(name).unwrap();
+    fs::create_dir(name).expect("Directory should be writable");
     let contents = DEFAULT_PROJECT.replace("$name", name);
-    fs::write(name.clone() + "/main.zog", contents).unwrap();
+    fs::write(name.clone() + "/main.zog", contents).expect("Directory should be writable");
   }
 }
 
@@ -144,7 +175,7 @@ fn watch(file: &String, output: &String) {
       }
       let modified = fs::metadata(name)
         .and_then(|metadata| metadata.modified())
-        .unwrap();
+        .expect("Path must be valid and readable");
       if &modified != last_modified {
         let (dep_files, result) = build(file, output, "none");
         if let Err(e) = result {
@@ -165,7 +196,9 @@ fn get_modification_times(files: HashSet<String>) -> HashMap<String, SystemTime>
   files
     .into_iter()
     .map(|name| {
-      let time = fs::metadata(&name).unwrap().modified().unwrap();
+      let time = fs::metadata(&name)
+        .and_then(|meta| meta.modified())
+        .expect("Path must be valid and readable");
       (name, time)
     })
     .collect()

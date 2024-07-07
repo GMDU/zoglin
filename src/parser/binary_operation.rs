@@ -84,7 +84,7 @@ impl Parser {
   pub fn parse_expression(&mut self, min_precedence: u8) -> Result<Expression> {
     let function = Parser::lookup_prefix(self.current().kind).ok_or(raise_error(
       self.current().location,
-      &format!("Expected expression, got {:?}.", self.current().kind),
+      format!("Expected expression, got {:?}.", self.current().kind),
     ))?;
     let mut left = function(self)?;
     while let Some(function) = Parser::lookup_infix(self.current().kind) {
@@ -106,12 +106,12 @@ impl Parser {
     let operator = Parser::match_operator(kind);
     let precedence = Parser::match_precedence(kind);
     let right = self.parse_expression(precedence.1)?;
-    return Ok(Expression::BinaryOperation(BinaryOperation {
+    Ok(Expression::BinaryOperation(BinaryOperation {
       operator,
       location,
       left: Box::new(left),
       right: Box::new(right),
-    }));
+    }))
   }
 
   fn lookup_infix(kind: TokenKind) -> Option<InfixFn> {

@@ -113,24 +113,24 @@ impl Expression {
       Expression::Double(d, _) => (format!("value {}d", *d), StorageKind::Direct),
       Expression::Boolean(b, _) => (format!("value {}", *b), StorageKind::Direct),
       Expression::String(s, _) => (
-        format!("value \"{}\"", s.escape_default().to_string()),
+        format!("value \"{}\"", s.escape_default()),
         StorageKind::Direct,
       ),
-      Expression::Array(a, _) => array_to_storage(&a, "", state, code)?,
-      Expression::ByteArray(a, _) => array_to_storage(&a, "B;", state, code)?,
-      Expression::IntArray(a, _) => array_to_storage(&a, "I;", state, code)?,
-      Expression::LongArray(a, _) => array_to_storage(&a, "L;", state, code)?,
+      Expression::Array(a, _) => array_to_storage(a, "", state, code)?,
+      Expression::ByteArray(a, _) => array_to_storage(a, "B;", state, code)?,
+      Expression::IntArray(a, _) => array_to_storage(a, "I;", state, code)?,
+      Expression::LongArray(a, _) => array_to_storage(a, "L;", state, code)?,
       // TODO: optimise this, like a lot
       Expression::Compound(types, _) => {
         let storage = state.next_storage().to_string();
         code.push(format!("data modify storage {storage} set value {{}}"));
         for (key, value) in types {
-          let unescaped_regex = Regex::new("^[A-Za-z_]\\w*$").unwrap();
-          let key = if unescaped_regex.is_match(&key) {
+          let unescaped_regex = Regex::new("^[A-Za-z_]\\w*$").expect("Regex is valid");
+          let key = if unescaped_regex.is_match(key) {
             key
           } else {
             // TODO: Escape other stuff too (like `\`)
-            &format!("\"{}\"", key.replace("\"", "\\\""))
+            &format!("\"{}\"", key.replace('"', "\\\""))
           };
           match value.to_storage(state, code)? {
             (expr_code, StorageKind::Direct) => {

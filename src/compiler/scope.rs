@@ -28,6 +28,9 @@ impl Scope {
   }
 
   pub fn get_child(&mut self, name: &String) -> Option<usize> {
-    self.children.get_mut(name).map(|children| children.remove(0))
+    self
+      .children
+      .get_mut(name)
+      .map(|children| children.remove(0))
   }
 }

@@ -1,4 +1,5 @@
-use std::{collections::HashMap, mem::replace, path::Path};
+use std::mem::take;
+use std::{collections::HashMap, path::Path};
 
 use expression::{verify_types, ConditionKind, Expression};
 use file_tree::{FunctionLocation, ScoreboardLocation, StorageLocation};
@@ -44,7 +45,9 @@ impl Compiler {
   }
 
   fn enter_scope(&mut self, name: &String) {
-    self.current_scope = self.scopes[self.current_scope].get_child(name).unwrap();
+    self.current_scope = self.scopes[self.current_scope]
+      .get_child(name)
+      .expect("Child has already been added");
   }
 
   fn exit_scope(&mut self) {
@@ -91,7 +94,10 @@ impl Compiler {
       );
     }
 
-    let namespace = self.namespaces.get_mut(&location.namespace).unwrap();
+    let namespace = self
+      .namespaces
+      .get_mut(&location.namespace)
+      .expect("Namespace has been inserted");
     namespace.get_module(location.modules)
   }
 
@@ -113,15 +119,20 @@ impl Compiler {
         ) if name1 == name2 => {
           return Err(raise_error(
             location.clone(),
-            &format!("Function \"{name2}\" is already defined."),
+            format!("Function \"{name2}\" is already defined."),
           ));
         }
         (Item::TextResource(res1), Item::TextResource(res2)) if res1 == res2 => {
           return Err(raise_error(
             res2.location.clone(),
-            &format!(
+            format!(
               "{}{} \"{}\" is already defined.",
-              res2.kind.chars().nth(0).unwrap().to_uppercase(),
+              res2
+                .kind
+                .chars()
+                .nth(0)
+                .expect("Identifiers can't be empty")
+                .to_uppercase(),
               &res2.kind[1..],
               res2.name
             ),
@@ -196,7 +207,7 @@ impl Compiler {
 
     compiler.register(&ast);
     let tree = compiler.compile_tree(ast)?;
-    tree.generate(output);
+    tree.generate(output)?;
     Ok(())
   }
 
@@ -205,7 +216,7 @@ impl Compiler {
       self.compile_namespace(namespace)?;
     }
 
-    if self.load_functions.len() > 0 || self.tick_functions.len() > 0 {
+    if !self.load_functions.is_empty() || !self.tick_functions.is_empty() {
       let tick_json = FunctionTag {
         values: &self.tick_functions,
       };
@@ -214,8 +225,8 @@ impl Compiler {
         values: &self.load_functions,
       };
 
-      let tick_text = serde_json::to_string_pretty(&tick_json).unwrap();
-      let load_text = serde_json::to_string_pretty(&load_json).unwrap();
+      let tick_text = serde_json::to_string_pretty(&tick_json).expect("Json is valid");
+      let load_text = serde_json::to_string_pretty(&load_json).expect("Json is valid");
 
       let tick: Item = Item::TextResource(TextResource {
         name: "tick".to_string(),
@@ -242,7 +253,7 @@ impl Compiler {
       self.add_item(location, load)?;
     }
 
-    let namespaces = replace(&mut self.namespaces, HashMap::new());
+    let namespaces = take(&mut self.namespaces);
     Ok(FileTree {
       namespaces: namespaces.into_values().collect(),
     })
@@ -303,11 +314,18 @@ impl Compiler {
         self.add_item(location.clone(), Item::TextResource(resource))
       }
       ast::ResourceContent::File(path, file) => {
-        let file_path = Path::new(&file).parent().unwrap();
+        let file_path = Path::new(&file)
+          .parent()
+          .expect("Directory must have a parent");
         let resource = FileResource {
           kind: resource.kind,
           is_asset: resource.is_asset,
-          path: file_path.join(path).to_str().unwrap().to_string(),
+          path: file_path
+            .join(path)
+            .to_str()
+            .expect("Path must be valid")
+            .to_string(),
+          location: resource.location,
         };
         self.add_item(location.clone(), Item::FileResource(resource))
       }
@@ -374,7 +392,7 @@ impl Compiler {
       match part {
         ast::CommandPart::Literal(lit) => result.push_str(&lit),
         ast::CommandPart::Expression(expr) => {
-          result.push_str(&mut self.compile_static_expr(expr, &location.module)?)
+          result.push_str(&self.compile_static_expr(expr, &location.module)?)
         }
       }
     }
@@ -521,25 +539,24 @@ impl Compiler {
     };
 
     if let Some(namespace) = resource.namespace {
-      if namespace.len() == 0 {
-        result.namespace = location.namespace.clone();
+      if namespace.is_empty() {
+        result.namespace.clone_from(&location.namespace);
       } else {
         result.namespace = namespace;
       }
-    } else {
-      if let Some(resolved) = self.lookup_resource(&resource) {
-        result = resolved.clone();
-        if resource.modules.len() > 1 {
-          result.modules.extend_from_slice(&resource.modules[1..]);
-        }
-        if !resource.modules.is_empty() {
-          result.modules.push(resource.name);
-        }
-        return Ok(result);
-      } else {
-        result = location.clone();
+    } else if let Some(resolved) = self.lookup_resource(&resource) {
+      result = resolved.clone();
+      if resource.modules.len() > 1 {
+        result.modules.extend_from_slice(&resource.modules[1..]);
       }
+      if !resource.modules.is_empty() {
+        result.modules.push(resource.name);
+      }
+      return Ok(result);
+    } else {
+      result = location.clone();
     }
+
     result.modules.extend(resource.modules);
     result.modules.push(resource.name);
 
@@ -573,7 +590,7 @@ impl Compiler {
 
           Some(ElseStatement::Block(block)) => {
             for item in block {
-              self.compile_statement(item, &location, &mut function_code)?;
+              self.compile_statement(item, location, &mut function_code)?;
             }
             break;
           }
@@ -618,7 +635,7 @@ impl Compiler {
       }
       ConditionKind::Known(true) => {
         for item in body {
-          self.compile_statement(item, &location, code)?;
+          self.compile_statement(item, location, code)?;
         }
         return Ok(());
       }

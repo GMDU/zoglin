@@ -67,9 +67,9 @@ impl Compiler {
     function_location.modules.push(function.name.clone());
     self.add_function(scope, function.name.clone(), function_location);
 
-    if &function.name == "tick" && location.modules.len() < 1 {
+    if &function.name == "tick" && location.modules.is_empty() {
       self.tick_functions.push(function_path);
-    } else if &function.name == "load" && location.modules.len() < 1 {
+    } else if &function.name == "load" && location.modules.is_empty() {
       self.load_functions.push(function_path);
     }
   }

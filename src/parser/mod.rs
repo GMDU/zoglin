@@ -96,7 +96,7 @@ impl Parser {
     if next.kind != kind {
       return Err(raise_error(
         next.location,
-        &format!("Expected {:?}, got {:?}", kind, next.kind),
+        format!("Expected {:?}, got {:?}", kind, next.kind),
       ));
     }
     Ok(next)
@@ -167,7 +167,7 @@ impl Parser {
       _ => {
         return Err(raise_error(
           self.current().location,
-          &format!("Unexpected token kind: {:?}", self.current().kind),
+          format!("Unexpected token kind: {:?}", self.current().kind),
         ))
       }
     })
@@ -201,14 +201,13 @@ impl Parser {
   fn parse_resource(&mut self) -> Result<Resource> {
     let is_asset = self.consume().kind == TokenKind::AssetKeyword;
     let kind = self.parse_resource_path()?;
-    let content: ResourceContent;
     let location = self.current().location;
 
-    if self.current().kind == TokenKind::Identifier {
+    let content: ResourceContent = if self.current().kind == TokenKind::Identifier {
       let name = self.expect(TokenKind::Identifier)?.value;
-      let token = self.expect(TokenKind::JSON)?;
+      let token = self.expect(TokenKind::Json)?;
 
-      content = ResourceContent::Text(name, json::from_json5(&token.value, token.location)?);
+      ResourceContent::Text(name, json::from_json5(&token.value, token.location)?)
     } else {
       let token = self.expect(TokenKind::String)?;
       let (base_path, path) = if token.value.starts_with('/') {
@@ -216,8 +215,8 @@ impl Parser {
       } else {
         (token.location.file, token.value)
       };
-      content = ResourceContent::File(path, base_path);
-    }
+      ResourceContent::File(path, base_path)
+    };
 
     Ok(Resource {
       kind,
@@ -253,14 +252,22 @@ impl Parser {
 
   fn parse_function(&mut self) -> Result<Function> {
     self.expect(TokenKind::FunctionKeyword)?;
-    let Token {value: name, location, kind: _} = self.expect(TokenKind::Identifier)?;
+    let Token {
+      value: name,
+      location,
+      kind: _,
+    } = self.expect(TokenKind::Identifier)?;
 
     self.expect(TokenKind::LeftParen)?;
     self.expect(TokenKind::RightParen)?;
 
     let items = self.parse_block()?;
 
-    Ok(Function { name, location, items })
+    Ok(Function {
+      name,
+      location,
+      items,
+    })
   }
 
   fn parse_statement(&mut self) -> Result<Statement> {
@@ -299,7 +306,7 @@ impl Parser {
         let value = current.value.parse().map_err(|_| {
           raise_error(
             current.location.clone(),
-            &format!("Value {} is too large for a byte.", current.value),
+            format!("Value {} is too large for a byte.", current.value),
           )
         })?;
         Expression::Byte(value, current.location)
@@ -308,7 +315,7 @@ impl Parser {
         let value = current.value.parse().map_err(|_| {
           raise_error(
             current.location.clone(),
-            &format!("Value {} is too large for a short.", current.value),
+            format!("Value {} is too large for a short.", current.value),
           )
         })?;
         Expression::Short(value, current.location)
@@ -319,11 +326,11 @@ impl Parser {
           let value = current.value.parse().map_err(|_| {
             raise_error(
               current.location.clone(),
-              &format!("Value {} is too large for a int.", current.value),
+              format!("Value {} is too large for a int.", current.value),
             )
           })?;
 
-          raise_warning(current.location.clone(), &format!("Value {} is too large for an int, automatically converting to a long. If this is intentional, suffix it with 'l'.", current.value));
+          raise_warning(current.location.clone(), format!("Value {} is too large for an int, automatically converting to a long. If this is intentional, suffix it with 'l'.", current.value));
           Expression::Long(value, current.location)
         }
       },
@@ -331,7 +338,7 @@ impl Parser {
         let value = current.value.parse().map_err(|_| {
           raise_error(
             current.location.clone(),
-            &format!("Value {} is too large for a long", current.value),
+            format!("Value {} is too large for a long", current.value),
           )
         })?;
         Expression::Long(value, current.location)
@@ -340,7 +347,7 @@ impl Parser {
         let value = current.value.parse().map_err(|_| {
           raise_error(
             current.location.clone(),
-            &format!("Value {} is too large for a float.", current.value),
+            format!("Value {} is too large for a float.", current.value),
           )
         })?;
         Expression::Float(value, current.location)
@@ -349,7 +356,7 @@ impl Parser {
         let value = current.value.parse().map_err(|_| {
           raise_error(
             current.location.clone(),
-            &format!("Value {} is too large for a double.", current.value),
+            format!("Value {} is too large for a double.", current.value),
           )
         })?;
         Expression::Double(value, current.location)
@@ -360,7 +367,10 @@ impl Parser {
 
   fn parse_boolean(&mut self) -> Result<Expression> {
     let token = self.consume();
-    Ok(Expression::Boolean(token.kind == TokenKind::TrueKeyword, token.location))
+    Ok(Expression::Boolean(
+      token.kind == TokenKind::TrueKeyword,
+      token.location,
+    ))
   }
 
   fn parse_string(&mut self) -> Result<Expression> {
@@ -381,7 +391,7 @@ impl Parser {
         _ => {
           return Err(raise_error(
             self.current().location,
-            &format!("\"{}\" is not a valid array type.", self.current().value),
+            format!("\"{}\" is not a valid array type.", self.current().value),
           ))
         }
       };
@@ -422,10 +432,18 @@ impl Parser {
         ));
       }
 
-      let Token {value: key, location, kind: _} = self.consume();
+      let Token {
+        value: key,
+        location,
+        kind: _,
+      } = self.consume();
       self.expect(TokenKind::Colon)?;
       let value = self.parse_expression(0)?;
-      key_values.push(KeyValue { key, value , location});
+      key_values.push(KeyValue {
+        key,
+        value,
+        location,
+      });
 
       if self.current().kind == TokenKind::Comma {
         self.consume();
@@ -468,7 +486,7 @@ impl Parser {
 
       return Ok(StaticExpr::FunctionCall(FunctionCall { path: resource }));
     }
-    return Ok(StaticExpr::ResourceRef { resource, is_fn });
+    Ok(StaticExpr::ResourceRef { resource, is_fn })
   }
 
   fn parse_function_call(&mut self, path: ZoglinResource) -> Result<FunctionCall> {

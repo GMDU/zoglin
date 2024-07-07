@@ -48,7 +48,7 @@ pub enum TokenKind {
   Float,
   Double,
   String,
-  JSON,
+  Json,
   Plus,
   Minus,
   Star,

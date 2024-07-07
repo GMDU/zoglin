@@ -100,7 +100,8 @@ impl Compiler {
       }
       (left, right) if left.numeric_value().is_some() && right.numeric_value().is_some() => {
         Ok(Expression::Integer(
-          left.numeric_value().unwrap() + right.numeric_value().unwrap(),
+          left.numeric_value().expect("Numeric value exists")
+            + right.numeric_value().expect("Numeric value exists"),
           binary_operation.location,
         ))
       }
@@ -109,7 +110,7 @@ impl Compiler {
         code.push(format!(
           "scoreboard players add {} {}",
           scoreboard.to_string(),
-          num.numeric_value().unwrap(),
+          num.numeric_value().expect("Numeric value exists"),
         ));
         Ok(Expression::Scoreboard(
           scoreboard,
@@ -144,7 +145,8 @@ impl Compiler {
       ),
       (left, right) if left.numeric_value().is_some() && right.numeric_value().is_some() => {
         Ok(Expression::Integer(
-          left.numeric_value().unwrap() - right.numeric_value().unwrap(),
+          left.numeric_value().expect("Numeric value exists")
+            - right.numeric_value().expect("Numeric value exists"),
           binary_operation.location,
         ))
       }
@@ -153,7 +155,7 @@ impl Compiler {
         code.push(format!(
           "scoreboard players remove {} {}",
           scoreboard.to_string(),
-          num.numeric_value().unwrap(),
+          num.numeric_value().expect("Numeric value exists"),
         ));
         Ok(Expression::Scoreboard(
           scoreboard,
@@ -188,7 +190,8 @@ impl Compiler {
       ),
       (left, right) if left.numeric_value().is_some() && right.numeric_value().is_some() => {
         Ok(Expression::Integer(
-          left.numeric_value().unwrap() * right.numeric_value().unwrap(),
+          left.numeric_value().expect("Numeric value exists")
+            * right.numeric_value().expect("Numeric value exists"),
           binary_operation.location,
         ))
       }
@@ -219,7 +222,8 @@ impl Compiler {
       ),
       (left, right) if left.numeric_value().is_some() && right.numeric_value().is_some() => {
         Ok(Expression::Integer(
-          left.numeric_value().unwrap() / right.numeric_value().unwrap(),
+          left.numeric_value().expect("Numeric value exists")
+            / right.numeric_value().expect("Numeric value exists"),
           binary_operation.location,
         ))
       }
@@ -250,7 +254,8 @@ impl Compiler {
       }
       (left, right) if left.numeric_value().is_some() && right.numeric_value().is_some() => {
         Ok(Expression::Integer(
-          left.numeric_value().unwrap() % right.numeric_value().unwrap(),
+          left.numeric_value().expect("Numeric value exists")
+            % right.numeric_value().expect("Numeric value exists"),
           binary_operation.location,
         ))
       }
@@ -281,7 +286,8 @@ impl Compiler {
       }
       (left, right) if left.numeric_value().is_some() && right.numeric_value().is_some() => {
         Ok(Expression::Boolean(
-          left.numeric_value().unwrap() < right.numeric_value().unwrap(),
+          left.numeric_value().expect("Numeric value exists")
+            < right.numeric_value().expect("Numeric value exists"),
           binary_operation.location,
         ))
       }
@@ -289,13 +295,19 @@ impl Compiler {
         code,
         other,
         binary_operation.location,
-        format!("{}..", num.numeric_value().unwrap() + 1),
+        format!(
+          "{}..",
+          num.numeric_value().expect("Numeric value exists") + 1
+        ),
       ),
       (other, num) if num.numeric_value().is_some() => self.compile_match_comparison(
         code,
         other,
         binary_operation.location,
-        format!("..{}", num.numeric_value().unwrap() - 1),
+        format!(
+          "..{}",
+          num.numeric_value().expect("Numeric value exists") - 1
+        ),
       ),
       (left, right) => {
         self.compile_comparison_operator(code, left, right, binary_operation.location, "<")
@@ -324,7 +336,8 @@ impl Compiler {
       }
       (left, right) if left.numeric_value().is_some() && right.numeric_value().is_some() => {
         Ok(Expression::Boolean(
-          left.numeric_value().unwrap() > right.numeric_value().unwrap(),
+          left.numeric_value().expect("Numeric value exists")
+            > right.numeric_value().expect("Numeric value exists"),
           binary_operation.location,
         ))
       }
@@ -332,13 +345,19 @@ impl Compiler {
         code,
         other,
         binary_operation.location,
-        format!("..{}", num.numeric_value().unwrap() - 1),
+        format!(
+          "..{}",
+          num.numeric_value().expect("Numeric value exists") - 1
+        ),
       ),
       (other, num) if num.numeric_value().is_some() => self.compile_match_comparison(
         code,
         other,
         binary_operation.location,
-        format!("{}..", num.numeric_value().unwrap() + 1),
+        format!(
+          "{}..",
+          num.numeric_value().expect("Numeric value exists") + 1
+        ),
       ),
       (left, right) => {
         self.compile_comparison_operator(code, left, right, binary_operation.location, ">")
@@ -367,7 +386,8 @@ impl Compiler {
       }
       (left, right) if left.numeric_value().is_some() && right.numeric_value().is_some() => {
         Ok(Expression::Boolean(
-          left.numeric_value().unwrap() <= right.numeric_value().unwrap(),
+          left.numeric_value().expect("Numeric value exists")
+            <= right.numeric_value().expect("Numeric value exists"),
           binary_operation.location,
         ))
       }
@@ -375,13 +395,13 @@ impl Compiler {
         code,
         other,
         binary_operation.location,
-        format!("{}..", num.numeric_value().unwrap()),
+        format!("{}..", num.numeric_value().expect("Numeric value exists")),
       ),
       (other, num) if num.numeric_value().is_some() => self.compile_match_comparison(
         code,
         other,
         binary_operation.location,
-        format!("..{}", num.numeric_value().unwrap()),
+        format!("..{}", num.numeric_value().expect("Numeric value exists")),
       ),
       (left, right) => {
         self.compile_comparison_operator(code, left, right, binary_operation.location, "<=")
@@ -410,7 +430,8 @@ impl Compiler {
       }
       (left, right) if left.numeric_value().is_some() && right.numeric_value().is_some() => {
         Ok(Expression::Boolean(
-          left.numeric_value().unwrap() >= right.numeric_value().unwrap(),
+          left.numeric_value().expect("Numeric value exists")
+            >= right.numeric_value().expect("Numeric value exists"),
           binary_operation.location,
         ))
       }
@@ -418,13 +439,13 @@ impl Compiler {
         code,
         other,
         binary_operation.location,
-        format!("..{}", num.numeric_value().unwrap()),
+        format!("..{}", num.numeric_value().expect("Numeric value exists")),
       ),
       (other, num) if num.numeric_value().is_some() => self.compile_match_comparison(
         code,
         other,
         binary_operation.location,
-        format!("{}..", num.numeric_value().unwrap()),
+        format!("{}..", num.numeric_value().expect("Numeric value exists")),
       ),
       (left, right) => {
         self.compile_comparison_operator(code, left, right, binary_operation.location, ">=")
