@@ -99,8 +99,40 @@ impl Compiler {
     self.scopes[scope].imported_items.insert(name, location);
   }
 
-  fn add_item(&mut self, location: ResourceLocation, item: Item) {
-    self.get_location(location).push(item);
+  fn add_item(&mut self, location: ResourceLocation, item: Item) -> Result<()> {
+    let items = self.get_location(location);
+    for i in items.iter() {
+      match (i, &item) {
+        (
+          Item::Function(Function { name: name1, .. }),
+          Item::Function(Function {
+            name: name2,
+            location,
+            ..
+          }),
+        ) if name1 == name2 => {
+          return Err(raise_error(
+            location.clone(),
+            &format!("Function \"{name2}\" is already defined."),
+          ));
+        }
+        (Item::TextResource(res1), Item::TextResource(res2)) if res1 == res2 => {
+          return Err(raise_error(
+            res2.location.clone(),
+            &format!(
+              "{}{} \"{}\" is already defined.",
+              res2.kind.chars().nth(0).unwrap().to_uppercase(),
+              &res2.kind[1..],
+              res2.name
+            ),
+          ));
+        }
+        _ => {}
+      }
+    }
+
+    items.push(item);
+    Ok(())
   }
 
   fn next_counter(&mut self, counter_name: &str) -> usize {
@@ -185,11 +217,12 @@ impl Compiler {
       let tick_text = serde_json::to_string_pretty(&tick_json).unwrap();
       let load_text = serde_json::to_string_pretty(&load_json).unwrap();
 
-      let tick = Item::TextResource(TextResource {
+      let tick: Item = Item::TextResource(TextResource {
         name: "tick".to_string(),
         kind: "tags/function".to_string(),
         is_asset: false,
         text: tick_text,
+        location: Location::blank(),
       });
 
       let load = Item::TextResource(TextResource {
@@ -197,6 +230,7 @@ impl Compiler {
         kind: "tags/function".to_string(),
         is_asset: false,
         text: load_text,
+        location: Location::blank(),
       });
 
       let location = ResourceLocation {
@@ -204,8 +238,8 @@ impl Compiler {
         modules: Vec::new(),
       };
 
-      self.add_item(location.clone(), tick);
-      self.add_item(location, load);
+      self.add_item(location.clone(), tick)?;
+      self.add_item(location, load)?;
     }
 
     let namespaces = replace(&mut self.namespaces, HashMap::new());
@@ -263,9 +297,10 @@ impl Compiler {
           kind: resource.kind,
           name,
           is_asset: resource.is_asset,
+          location: resource.location,
           text,
         };
-        Ok(self.add_item(location.clone(), Item::TextResource(resource)))
+        self.add_item(location.clone(), Item::TextResource(resource))
       }
       ast::ResourceContent::File(path, file) => {
         let file_path = Path::new(&file).parent().unwrap();
@@ -274,7 +309,7 @@ impl Compiler {
           is_asset: resource.is_asset,
           path: file_path.join(path).to_str().unwrap().to_string(),
         };
-        Ok(self.add_item(location.clone(), Item::FileResource(resource)))
+        self.add_item(location.clone(), Item::FileResource(resource))
       }
     }
   }
@@ -308,21 +343,27 @@ impl Compiler {
       name: function.name,
     };
 
-    self.compile_function(fn_location, function.items)
+    self.compile_function(function.location, fn_location, function.items)
   }
 
-  fn compile_function(&mut self, location: FunctionLocation, block: Vec<Statement>) -> Result<()> {
+  fn compile_function(
+    &mut self,
+    location: Location,
+    fn_location: FunctionLocation,
+    block: Vec<Statement>,
+  ) -> Result<()> {
     let mut commands = Vec::new();
     for item in block {
-      self.compile_statement(item, &location, &mut commands)?;
+      self.compile_statement(item, &fn_location, &mut commands)?;
     }
 
     let function = Function {
-      name: location.name,
+      name: fn_location.name,
+      location,
       commands,
     };
 
-    self.add_item(location.module, Item::Function(function));
+    self.add_item(fn_location.module, Item::Function(function))?;
     Ok(())
   }
 
@@ -546,8 +587,9 @@ impl Compiler {
         Item::Function(Function {
           name: if_function.name,
           commands: function_code,
+          location: Location::blank(),
         }),
-      );
+      )?;
 
       return Ok(());
     }
@@ -592,6 +634,6 @@ impl Compiler {
       function = function.to_string()
     ));
 
-    self.compile_function(function, body)
+    self.compile_function(Location::blank(), function, body)
   }
 }

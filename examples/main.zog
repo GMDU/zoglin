@@ -31,3 +31,25 @@ fn foo() {
 
   obj = {a: 1, b: "foo", hello: "world", "number": 1 + 2 * 3, 'Hello! My name is e@234598e!9023& and I like "cats\'': 10 / 5}
 }
+
+module players {
+  module props { include "players/props" }
+  module hunters { include "players/hunters" }
+}
+
+res advancement foo {
+
+}
+
+res recipe foo {
+
+}
+
+res tags/function bar {}
+
+res tags/function bar {}
+
+module players {
+  # module props { fn foo() {} }
+  module hunters { fn bar() {} }
+}

@@ -6,6 +6,17 @@ pub struct Location {
   pub root: String,
 }
 
+impl Location {
+  pub fn blank() -> Location {
+    Location {
+      line: 0,
+      column: 0,
+      file: String::new(),
+      root: String::new(),
+    }
+  }
+}
+
 const RESET: &str = "\x1b[0m";
 const RED: &str = "\x1b[31m";
 const YELLOW: &str = "\x1b[33m";

@@ -34,6 +34,7 @@ pub struct Import {
 #[derive(Debug)]
 pub struct Resource {
   pub is_asset: bool,
+  pub location: Location,
   pub kind: String,
   pub content: ResourceContent,
 }
@@ -46,6 +47,7 @@ pub enum ResourceContent {
 
 #[derive(Debug)]
 pub struct Function {
+  pub location: Location,
   pub name: String,
   pub items: Vec<Statement>,
 }

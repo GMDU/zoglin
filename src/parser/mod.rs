@@ -202,6 +202,7 @@ impl Parser {
     let is_asset = self.consume().kind == TokenKind::AssetKeyword;
     let kind = self.parse_resource_path()?;
     let content: ResourceContent;
+    let location = self.current().location;
 
     if self.current().kind == TokenKind::Identifier {
       let name = self.expect(TokenKind::Identifier)?.value;
@@ -222,6 +223,7 @@ impl Parser {
       kind,
       content,
       is_asset,
+      location,
     })
   }
 
@@ -251,14 +253,14 @@ impl Parser {
 
   fn parse_function(&mut self) -> Result<Function> {
     self.expect(TokenKind::FunctionKeyword)?;
-    let name = self.expect(TokenKind::Identifier)?.value;
+    let Token {value: name, location, kind: _} = self.expect(TokenKind::Identifier)?;
 
     self.expect(TokenKind::LeftParen)?;
     self.expect(TokenKind::RightParen)?;
 
     let items = self.parse_block()?;
 
-    Ok(Function { name, items })
+    Ok(Function { name, location, items })
   }
 
   fn parse_statement(&mut self) -> Result<Statement> {

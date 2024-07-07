@@ -2,7 +2,10 @@ use glob::glob;
 use serde::Serialize;
 use std::{fs, path::Path};
 
-use crate::parser::ast::{self, ZoglinResource};
+use crate::{
+  error::Location,
+  parser::ast::{self, ZoglinResource},
+};
 
 #[derive(Debug)]
 pub struct FileTree {
@@ -157,6 +160,7 @@ impl Module {
 pub struct Function {
   pub name: String,
   pub commands: Vec<String>,
+  pub location: Location,
 }
 
 impl Function {
@@ -179,6 +183,13 @@ pub struct TextResource {
   pub kind: String,
   pub is_asset: bool,
   pub text: String,
+  pub location: Location,
+}
+
+impl PartialEq for TextResource {
+  fn eq(&self, other: &Self) -> bool {
+    self.name == other.name && self.kind == other.kind && self.is_asset == other.is_asset
+  }
 }
 
 impl TextResource {
