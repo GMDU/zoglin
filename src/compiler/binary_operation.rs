@@ -32,8 +32,8 @@ impl Compiler {
       Operator::GreaterThanEquals => {
         self.compile_greater_than_equals(code, binary_operation, location)
       }
-      Operator::Equal => todo!(),
-      Operator::NotEqual => todo!(),
+      Operator::Equal => self.compile_equals(code, binary_operation, location),
+      Operator::NotEqual => self.compile_not_equals(code, binary_operation, location),
       Operator::LogicalAnd => todo!(),
       Operator::LogicalOr => todo!(),
       Operator::Assign => self.compile_assignment(binary_operation, location, code),
@@ -59,14 +59,14 @@ impl Compiler {
     let (command, kind) = typ.to_storage(self, code)?;
 
     match kind {
-      StorageKind::Direct => {
+      StorageKind::Modify => {
         code.push(format!(
           "data modify storage {} set {}",
           StorageLocation::from_zoglin_resource(location.clone(), variable).to_string(),
           command
         ));
       }
-      StorageKind::Indirect => {
+      StorageKind::Store => {
         code.push(format!(
           "execute store result storage {} int 1 run {}",
           StorageLocation::from_zoglin_resource(location.clone(), variable).to_string(),
@@ -453,6 +453,88 @@ impl Compiler {
     }
   }
 
+  fn compile_equals(
+    &mut self,
+    code: &mut Vec<String>,
+    binary_operation: BinaryOperation,
+    location: &FunctionLocation,
+  ) -> Result<Expression> {
+    let left = self.compile_expression(*binary_operation.left, location, code)?;
+    let right = self.compile_expression(*binary_operation.right, location, code)?;
+
+    if let Some(equal) = left.equal(&right) {
+      return Ok(Expression::Boolean(equal, binary_operation.location));
+    }
+
+    match (left, right) {
+      (Expression::Void(location), _) | (_, Expression::Void(location)) => {
+        Err(raise_error(location, "Cannot compare with void."))
+      }
+      (storage @ Expression::Storage(_, _), other)
+      | (other, storage @ Expression::Storage(_, _)) => {
+        self.storage_comparison(code, binary_operation.location, other, storage, true)
+      }
+      (left, right) if left.to_type().is_numeric() && right.to_type().is_numeric() => {
+        self.compile_comparison_operator(code, left, right, binary_operation.location, "=")
+      }
+      (left, right) => self.storage_comparison(code, binary_operation.location, left, right, true),
+    }
+  }
+
+  fn compile_not_equals(
+    &mut self,
+    code: &mut Vec<String>,
+    binary_operation: BinaryOperation,
+    location: &FunctionLocation,
+  ) -> Result<Expression> {
+    let left = self.compile_expression(*binary_operation.left, location, code)?;
+    let right = self.compile_expression(*binary_operation.right, location, code)?;
+
+    if let Some(equal) = left.equal(&right) {
+      return Ok(Expression::Boolean(!equal, binary_operation.location));
+    }
+
+    match (left, right) {
+      (Expression::Void(location), _) | (_, Expression::Void(location)) => {
+        Err(raise_error(location, "Cannot compare with void."))
+      }
+      (storage @ Expression::Storage(_, _), other)
+      | (other, storage @ Expression::Storage(_, _)) => {
+        self.storage_comparison(code, binary_operation.location, other, storage, false)
+      }
+      (left, right) if left.to_type().is_numeric() && right.to_type().is_numeric() => {
+        self.compile_comparison_operator(code, left, right, binary_operation.location, "!=")
+      }
+      (left, right) => self.storage_comparison(code, binary_operation.location, left, right, false),
+    }
+  }
+
+  fn storage_comparison(
+    &mut self,
+    code: &mut Vec<String>,
+    location: Location,
+    left: Expression,
+    right: Expression,
+    check_equality: bool,
+  ) -> Result<Expression> {
+    let right_storage = self.move_to_storage(code, right)?;
+    let temp_storage = self.copy_to_storage(code, &left)?;
+    let condition_scoreboard: ScoreboardLocation = self.next_scoreboard();
+    code.push(format!(
+      "execute store success score {score} run data modify storage {temp} set from storage {storage}",
+      score = condition_scoreboard.to_string(),
+      temp = temp_storage.to_string(),
+      storage = right_storage.to_string()
+    ));
+    Ok(Expression::Condition(
+      Condition::Match(
+        condition_scoreboard,
+        if check_equality { "0" } else { "1" }.to_string(),
+      ),
+      location,
+    ))
+  }
+
   fn compile_basic_operator(
     &mut self,
     left: Expression,
@@ -532,25 +614,42 @@ impl Compiler {
     value: Expression,
   ) -> Result<ScoreboardLocation> {
     if let Expression::Scoreboard(scoreboard, _) = value {
-      return Ok(scoreboard);
+      Ok(scoreboard)
+    } else {
+      self.copy_to_scoreboard(code, &value)
     }
+  }
 
-    let scoreboard = self.next_scoreboard();
-    let (conversion_code, kind) = value.to_score()?;
+  pub(super) fn copy_to_storage(
+    &mut self,
+    code: &mut Vec<String>,
+    value: &Expression,
+  ) -> Result<StorageLocation> {
+    let storage = self.next_storage();
+    let (conversion_code, kind) = value.to_storage(self, code)?;
     match kind {
-      ScoreKind::Direct(operation) => code.push(format!(
-        "scoreboard players {} {} {}",
-        operation,
-        scoreboard.to_string(),
-        conversion_code
+      StorageKind::Modify => code.push(format!(
+        "data modify storage {storage} set {conversion_code}",
+        storage = storage.to_string()
       )),
-      ScoreKind::Indirect => code.push(format!(
-        "execute store result score {} run {}",
-        scoreboard.to_string(),
-        conversion_code
+      StorageKind::Store => code.push(format!(
+        "execute store result storage {storage} int 1 run {conversion_code}",
+        storage = storage.to_string()
       )),
     }
 
-    Ok(scoreboard)
+    Ok(storage)
+  }
+
+  pub(super) fn move_to_storage(
+    &mut self,
+    code: &mut Vec<String>,
+    value: Expression,
+  ) -> Result<StorageLocation> {
+    if let Expression::Storage(location, _) = value {
+      Ok(location)
+    } else {
+      self.copy_to_storage(code, &value)
+    }
   }
 }

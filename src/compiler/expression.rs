@@ -20,8 +20,6 @@ pub(super) enum Expression {
   Long(i64, Location),
   Float(f32, Location),
   Double(f64, Location),
-  Storage(StorageLocation, Location),
-  Scoreboard(ScoreboardLocation, Location),
   Boolean(bool, Location),
   String(String, Location),
   Array {
@@ -33,6 +31,9 @@ pub(super) enum Expression {
   IntArray(Vec<Expression>, Location),
   LongArray(Vec<Expression>, Location),
   Compound(HashMap<String, Expression>, Location),
+
+  Storage(StorageLocation, Location),
+  Scoreboard(ScoreboardLocation, Location),
   Condition(Condition, Location),
 }
 
@@ -41,28 +42,59 @@ pub(super) enum Condition {
   LessEq(ScoreboardLocation, ScoreboardLocation),
   Greater(ScoreboardLocation, ScoreboardLocation),
   GreaterEq(ScoreboardLocation, ScoreboardLocation),
+  Eq(ScoreboardLocation, ScoreboardLocation),
   Match(ScoreboardLocation, String),
+  Inverted(Box<Condition>),
 }
 
 impl Condition {
   fn to_string(&self) -> String {
+    self.do_to_string(false)
+  }
+
+  fn do_to_string(&self, invert: bool) -> String {
+    let check_str = if invert { "unless" } else { "if" };
     match self {
-      Condition::Less(a, b) => format!("if score {a} < {b}", a = a.to_string(), b = b.to_string()),
+      Condition::Less(a, b) => format!(
+        "{check_str} score {a} < {b}",
+        a = a.to_string(),
+        b = b.to_string()
+      ),
       Condition::LessEq(a, b) => {
-        format!("if score {a} <= {b}", a = a.to_string(), b = b.to_string())
+        format!(
+          "{check_str} score {a} <= {b}",
+          a = a.to_string(),
+          b = b.to_string()
+        )
       }
       Condition::Greater(a, b) => {
-        format!("if score {a} > {b}", a = a.to_string(), b = b.to_string())
+        format!(
+          "{check_str} score {a} > {b}",
+          a = a.to_string(),
+          b = b.to_string()
+        )
       }
       Condition::GreaterEq(a, b) => {
-        format!("if score {a} >= {b}", a = a.to_string(), b = b.to_string())
+        format!(
+          "{check_str} score {a} >= {b}",
+          a = a.to_string(),
+          b = b.to_string()
+        )
+      }
+      Condition::Eq(a, b) => {
+        format!(
+          "{check_str} score {a} = {b}",
+          a = a.to_string(),
+          b = b.to_string()
+        )
       }
       Condition::Match(score, range) => {
         format!(
-          "if score {score} matches {range}",
+          "{check_str} score {score} matches {range}",
           score = score.to_string()
         )
       }
+      Condition::Inverted(condition) => condition.do_to_string(!invert),
     }
   }
 
@@ -76,14 +108,16 @@ impl Condition {
       "<=" => Self::LessEq(left, right),
       ">" => Self::Greater(left, right),
       ">=" => Self::GreaterEq(left, right),
+      "=" => Self::Eq(left, right),
+      "!=" => Self::Inverted(Box::new(Self::Eq(left, right))),
       _ => unreachable!(),
     }
   }
 }
 
 pub(super) enum StorageKind {
-  Direct,
-  Indirect,
+  Modify,
+  Store,
 }
 
 pub(super) enum ScoreKind {
@@ -109,16 +143,16 @@ impl Expression {
           "Cannot assign void to a value",
         ))
       }
-      Expression::Byte(b, _) => (format!("value {}b", *b), StorageKind::Direct),
-      Expression::Short(s, _) => (format!("value {}s", *s), StorageKind::Direct),
-      Expression::Integer(i, _) => (format!("value {}", *i), StorageKind::Direct),
-      Expression::Long(l, _) => (format!("value {}l", *l), StorageKind::Direct),
-      Expression::Float(f, _) => (format!("value {}f", *f), StorageKind::Direct),
-      Expression::Double(d, _) => (format!("value {}d", *d), StorageKind::Direct),
-      Expression::Boolean(b, _) => (format!("value {}", *b), StorageKind::Direct),
+      Expression::Byte(b, _) => (format!("value {}b", *b), StorageKind::Modify),
+      Expression::Short(s, _) => (format!("value {}s", *s), StorageKind::Modify),
+      Expression::Integer(i, _) => (format!("value {}", *i), StorageKind::Modify),
+      Expression::Long(l, _) => (format!("value {}l", *l), StorageKind::Modify),
+      Expression::Float(f, _) => (format!("value {}f", *f), StorageKind::Modify),
+      Expression::Double(d, _) => (format!("value {}d", *d), StorageKind::Modify),
+      Expression::Boolean(b, _) => (format!("value {}", *b), StorageKind::Modify),
       Expression::String(s, _) => (
         format!("value \"{}\"", s.escape_default()),
-        StorageKind::Direct,
+        StorageKind::Modify,
       ),
       Expression::Array {
         values, data_type, ..
@@ -141,31 +175,31 @@ impl Expression {
             )
           };
           match value.to_storage(state, code)? {
-            (expr_code, StorageKind::Direct) => {
+            (expr_code, StorageKind::Modify) => {
               code.push(format!(
                 "data modify storage {storage}.{key} set {expr_code}"
               ));
             }
-            (expr_code, StorageKind::Indirect) => {
+            (expr_code, StorageKind::Store) => {
               code.push(format!(
                 "execute store result storage {storage}.{key} int 1 run {expr_code}"
               ));
             }
           }
         }
-        (format!("from storage {storage}"), StorageKind::Direct)
+        (format!("from storage {storage}"), StorageKind::Modify)
       }
       Expression::Storage(location, _) => (
         format!("from storage {}", location.to_string()),
-        StorageKind::Direct,
+        StorageKind::Modify,
       ),
       Expression::Scoreboard(location, _) => (
         format!("scoreboard players get {}", location.to_string()),
-        StorageKind::Indirect,
+        StorageKind::Store,
       ),
       Expression::Condition(condition, _) => (
         format!("execute {}", condition.to_string()),
-        StorageKind::Indirect,
+        StorageKind::Store,
       ),
     })
   }
@@ -336,6 +370,88 @@ impl Expression {
   }
 }
 
+impl Expression {
+  pub fn equal(&self, other: &Self) -> Option<bool> {
+    Some(match (self, other) {
+      (Self::Void(_), Self::Void(_)) => true,
+      (Self::Byte(l0, _), Self::Byte(r0, _)) => l0 == r0,
+      (Self::Short(l0, _), Self::Short(r0, _)) => l0 == r0,
+      (Self::Integer(l0, _), Self::Integer(r0, _)) => l0 == r0,
+      (Self::Long(l0, _), Self::Long(r0, _)) => l0 == r0,
+      (Self::Float(l0, _), Self::Float(r0, _)) => l0 == r0,
+      (Self::Double(l0, _), Self::Double(r0, _)) => l0 == r0,
+      (Self::Boolean(l0, _), Self::Boolean(r0, _)) => l0 == r0,
+      (Self::String(l0, _), Self::String(r0, _)) => l0 == r0,
+      (
+        Self::Array {
+          values: l_values, ..
+        },
+        Self::Array {
+          values: r_values, ..
+        },
+      ) => return compare_expr_array(l_values, r_values),
+
+      (Self::ByteArray(l0, _), Self::ByteArray(r0, _)) => return compare_expr_array(l0, r0),
+      (Self::IntArray(l0, _), Self::IntArray(r0, _)) => return compare_expr_array(l0, r0),
+      (Self::LongArray(l0, _), Self::LongArray(r0, _)) => return compare_expr_array(l0, r0),
+      (Self::Compound(l0, _), Self::Compound(r0, _)) => {
+        if l0.len() != r0.len() {
+          return Some(false);
+        } else {
+          let mut equal = Some(true);
+          for (key, a) in l0 {
+            if let Some(b) = r0.get(key) {
+              match a.equal(b) {
+                Some(true) => {}
+                Some(false) => {
+                  equal = Some(false);
+                  break;
+                }
+                None => equal = None,
+              }
+            } else {
+              equal = Some(false);
+              break;
+            }
+          }
+          return equal;
+        }
+      }
+      (Self::Scoreboard(_, _), other) | (other, Self::Scoreboard(_, _))
+        if !other.to_type().is_numeric() =>
+      {
+        false
+      }
+      (Self::Storage(_, _), _)
+      | (_, Self::Storage(_, _))
+      | (Self::Scoreboard(_, _), _)
+      | (_, Self::Scoreboard(_, _))
+      | (Self::Condition(_, _), _)
+      | (_, Self::Condition(_, _)) => return None,
+      _ => false,
+    })
+  }
+}
+
+fn compare_expr_array(l_values: &Vec<Expression>, r_values: &Vec<Expression>) -> Option<bool> {
+  if l_values.len() != r_values.len() {
+    Some(false)
+  } else {
+    let mut equal = Some(true);
+    for (a, b) in l_values.iter().zip(r_values) {
+      match a.equal(b) {
+        Some(true) => {}
+        Some(false) => {
+          equal = Some(false);
+          break;
+        }
+        None => equal = None,
+      }
+    }
+    equal
+  }
+}
+
 // TODO: optimise this, like a lot
 fn array_to_storage(
   elements: &[Expression],
@@ -350,10 +466,10 @@ fn array_to_storage(
   ));
   for element in elements {
     match element.to_storage(state, code)? {
-      (expr_code, StorageKind::Direct) => {
+      (expr_code, StorageKind::Modify) => {
         code.push(format!("data modify storage {storage} append {expr_code}"));
       }
-      (expr_code, StorageKind::Indirect) => {
+      (expr_code, StorageKind::Store) => {
         let temp_storage = state.next_storage().to_string();
         code.push(format!(
           "execute store result storage {temp_storage} {data_type} 1 run {expr_code}",
@@ -367,7 +483,7 @@ fn array_to_storage(
       }
     }
   }
-  Ok((format!("from storage {storage}"), StorageKind::Direct))
+  Ok((format!("from storage {storage}"), StorageKind::Modify))
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
