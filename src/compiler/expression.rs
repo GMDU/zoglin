@@ -24,7 +24,11 @@ pub(super) enum Expression {
   Scoreboard(ScoreboardLocation, Location),
   Boolean(bool, Location),
   String(String, Location),
-  Array(Vec<Expression>, Location),
+  Array {
+    values: Vec<Expression>,
+    data_type: NbtType,
+    location: Location,
+  },
   ByteArray(Vec<Expression>, Location),
   IntArray(Vec<Expression>, Location),
   LongArray(Vec<Expression>, Location),
@@ -116,10 +120,12 @@ impl Expression {
         format!("value \"{}\"", s.escape_default()),
         StorageKind::Direct,
       ),
-      Expression::Array(a, _) => array_to_storage(a, "", state, code)?,
-      Expression::ByteArray(a, _) => array_to_storage(a, "B;", state, code)?,
-      Expression::IntArray(a, _) => array_to_storage(a, "I;", state, code)?,
-      Expression::LongArray(a, _) => array_to_storage(a, "L;", state, code)?,
+      Expression::Array {
+        values, data_type, ..
+      } => array_to_storage(values, *data_type, "", state, code)?,
+      Expression::ByteArray(a, _) => array_to_storage(a, NbtType::Byte, "B;", state, code)?,
+      Expression::IntArray(a, _) => array_to_storage(a, NbtType::Int, "I;", state, code)?,
+      Expression::LongArray(a, _) => array_to_storage(a, NbtType::Long, "L;", state, code)?,
       // TODO: optimise this, like a lot
       Expression::Compound(types, _) => {
         let storage = state.next_storage().to_string();
@@ -129,8 +135,10 @@ impl Expression {
           let key = if unescaped_regex.is_match(key) {
             key
           } else {
-            // TODO: Escape other stuff too (like `\`)
-            &format!("\"{}\"", key.replace('"', "\\\""))
+            &format!(
+              "\"{}\"",
+              key.escape_default().to_string().replace("\\'", "'")
+            )
           };
           match value.to_storage(state, code)? {
             (expr_code, StorageKind::Direct) => {
@@ -195,7 +203,7 @@ impl Expression {
           "Cannot assign string to a scoreboard variable",
         ))
       }
-      Expression::Array(_, location)
+      Expression::Array { location, .. }
       | Expression::ByteArray(_, location)
       | Expression::IntArray(_, location)
       | Expression::LongArray(_, location) => {
@@ -225,7 +233,11 @@ impl Expression {
     })
   }
 
-  pub(super) fn to_condition(&self) -> Result<ConditionKind> {
+  pub(super) fn to_condition(
+    &self,
+    compiler: &mut Compiler,
+    code: &mut Vec<String>,
+  ) -> Result<ConditionKind> {
     Ok(match self {
       Expression::Void(location) => return Err(raise_error(location.clone(), "Cannot check void")),
       Expression::Byte(b, _) => ConditionKind::Known(*b != 0),
@@ -241,7 +253,7 @@ impl Expression {
           "Cannot use string as a condition",
         ))
       }
-      Expression::Array(_, location)
+      Expression::Array { location, .. }
       | Expression::ByteArray(_, location)
       | Expression::IntArray(_, location)
       | Expression::LongArray(_, location) => {
@@ -260,7 +272,10 @@ impl Expression {
       Expression::Scoreboard(scoreboard, _) => {
         ConditionKind::Check(format!("unless score {} matches 0", scoreboard.to_string()))
       }
-      Expression::Storage(_, _) => todo!(),
+      Expression::Storage(_, _) => {
+        let scoreboard = compiler.copy_to_scoreboard(code, self)?;
+        ConditionKind::Check(format!("unless score {} matches 0", scoreboard.to_string()))
+      }
     })
   }
 
@@ -289,7 +304,7 @@ impl Expression {
       | Expression::Scoreboard(_, location)
       | Expression::Boolean(_, location)
       | Expression::String(_, location)
-      | Expression::Array(_, location)
+      | Expression::Array { location, .. }
       | Expression::ByteArray(_, location)
       | Expression::IntArray(_, location)
       | Expression::LongArray(_, location)
@@ -311,7 +326,7 @@ impl Expression {
       Expression::Scoreboard(_, _) => NbtType::Int,
       Expression::Boolean(_, _) => NbtType::Byte,
       Expression::String(_, _) => NbtType::String,
-      Expression::Array(_, _) => NbtType::List,
+      Expression::Array { .. } => NbtType::List,
       Expression::ByteArray(_, _) => NbtType::ByteArray,
       Expression::IntArray(_, _) => NbtType::IntArray,
       Expression::LongArray(_, _) => NbtType::LongArray,
@@ -324,6 +339,7 @@ impl Expression {
 // TODO: optimise this, like a lot
 fn array_to_storage(
   elements: &[Expression],
+  data_type: NbtType,
   prefix: &str,
   state: &mut Compiler,
   code: &mut Vec<String>,
@@ -339,9 +355,11 @@ fn array_to_storage(
       }
       (expr_code, StorageKind::Indirect) => {
         let temp_storage = state.next_storage().to_string();
-        // TODO: Make type known
         code.push(format!(
-          "execute store result storage {temp_storage} int 1 run {expr_code}"
+          "execute store result storage {temp_storage} {data_type} 1 run {expr_code}",
+          data_type = data_type
+            .to_store_string()
+            .expect("Only numeric types have an indirect storage kind")
         ));
         code.push(format!(
           "data modify storage {storage} append from storage {temp_storage}"
@@ -369,7 +387,25 @@ pub enum NbtType {
   Compound,
 }
 
-pub fn verify_types(types: &[Expression], typ: ArrayType) -> Result<Option<Location>> {
+impl NbtType {
+  pub fn to_store_string(self) -> Option<String> {
+    Some(
+      match self {
+        NbtType::Byte => "byte",
+        NbtType::Short => "short",
+        NbtType::Int => "int",
+        NbtType::Long => "long",
+        NbtType::Float => "float",
+        NbtType::Double => "double",
+        _ => return None,
+      }
+      .to_string(),
+    )
+  }
+}
+
+// TODO: Allow casting scoreboards to any numeric type
+pub fn verify_types(types: &[Expression], typ: ArrayType, message: &str) -> Result<NbtType> {
   let mut single_type = match typ {
     ArrayType::Any => NbtType::Unknown,
     ArrayType::Byte => NbtType::Byte,
@@ -393,11 +429,11 @@ pub fn verify_types(types: &[Expression], typ: ArrayType) -> Result<Option<Locat
       (Expression::Scoreboard(_, _), NbtType::Int) => {}
       (Expression::Boolean(_, _), NbtType::Byte) => {}
       (Expression::String(_, _), NbtType::String) => {}
-      (Expression::Array(_, _), NbtType::List) => {}
+      (Expression::Array { .. }, NbtType::List) => {}
       (Expression::Condition(_, _), NbtType::Byte) => {}
-      _ => return Ok(Some(typ.location())),
+      _ => return Err(raise_error(typ.location(), message)),
     }
   }
 
-  Ok(None)
+  Ok(single_type)
 }

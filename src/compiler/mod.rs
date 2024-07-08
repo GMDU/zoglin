@@ -450,17 +450,20 @@ impl Compiler {
       types.push(self.compile_expression(expr, fn_location, code)?);
     }
 
-    if let Some(location) = verify_types(&types, typ)? {
-      return Err(match typ {
-        ArrayType::Any => raise_error(location, "Arrays can only contain values of the same type"),
-        ArrayType::Byte => raise_error(location, "Byte arrays can only byte values"),
-        ArrayType::Int => raise_error(location, "Int arrays can only integer values"),
-        ArrayType::Long => raise_error(location, "Long arrays can only long values"),
-      });
-    }
+    let err_msg = match typ {
+      ArrayType::Any => "Arrays can only contain values of the same type",
+      ArrayType::Byte => "Byte arrays can only byte values",
+      ArrayType::Int => "Int arrays can only integer values",
+      ArrayType::Long => "Long arrays can only long values",
+    };
+    let data_type = verify_types(&types, typ, err_msg)?;
 
     Ok(match typ {
-      ArrayType::Any => Expression::Array(types, location),
+      ArrayType::Any => Expression::Array {
+        values: types,
+        location,
+        data_type,
+      },
       ArrayType::Byte => Expression::ByteArray(types, location),
       ArrayType::Int => Expression::IntArray(types, location),
       ArrayType::Long => Expression::LongArray(types, location),
@@ -629,7 +632,7 @@ impl Compiler {
   ) -> Result<()> {
     let condition = self.compile_expression(condition, location, code)?;
 
-    let check_code = match condition.to_condition()? {
+    let check_code = match condition.to_condition(self, code)? {
       ConditionKind::Known(false) => {
         return Ok(());
       }

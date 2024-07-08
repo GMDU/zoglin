@@ -238,7 +238,7 @@ impl FileResource {
             fs::copy(&path, &dir_path.join(filename)).map_err(raise_floating_error)?;
           }
         }
-        Err(e) => panic!("{:?}", e),
+        Err(e) => return Err(raise_floating_error(e)),
       };
     }
 

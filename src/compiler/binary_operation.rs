@@ -106,7 +106,7 @@ impl Compiler {
         ))
       }
       (num, other) | (other, num) if num.numeric_value().is_some() => {
-        let scoreboard = self.copy_to_scoreboard(code, other)?;
+        let scoreboard = self.copy_to_scoreboard(code, &other)?;
         code.push(format!(
           "scoreboard players add {} {}",
           scoreboard.to_string(),
@@ -151,7 +151,7 @@ impl Compiler {
         ))
       }
       (other, num) if num.numeric_value().is_some() => {
-        let scoreboard = self.copy_to_scoreboard(code, other)?;
+        let scoreboard = self.copy_to_scoreboard(code, &other)?;
         code.push(format!(
           "scoreboard players remove {} {}",
           scoreboard.to_string(),
@@ -461,7 +461,7 @@ impl Compiler {
     operator: char,
     code: &mut Vec<String>,
   ) -> Result<Expression> {
-    let left_scoreboard = self.copy_to_scoreboard(code, left)?;
+    let left_scoreboard = self.copy_to_scoreboard(code, &left)?;
     let right_scoreboard = self.move_to_scoreboard(code, right)?;
     code.push(format!(
       "scoreboard players operation {} {}= {}",
@@ -505,7 +505,7 @@ impl Compiler {
   pub(super) fn copy_to_scoreboard(
     &mut self,
     code: &mut Vec<String>,
-    value: Expression,
+    value: &Expression,
   ) -> Result<ScoreboardLocation> {
     let scoreboard = self.next_scoreboard();
     let (conversion_code, kind) = value.to_score()?;
