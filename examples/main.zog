@@ -28,7 +28,7 @@ fn foo() {
   # b = false
   # c = 1 + 2 * 3
   a = 10.2
-  arr = [1.5, a + 1, 91.7]
+  arr = [a + 1]
 
   obj = {a: 1, b: "foo", hello: "world", "number": 1 + 2 * 3, 'Hello! My name is e@234598e!9023& and I like \\"cats\'': 10 / 5}
   a = true

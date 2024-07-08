@@ -323,7 +323,7 @@ impl Expression {
       Expression::Float(_, _) => NbtType::Float,
       Expression::Double(_, _) => NbtType::Double,
       Expression::Storage(_, _) => NbtType::Unknown,
-      Expression::Scoreboard(_, _) => NbtType::Int,
+      Expression::Scoreboard(_, _) => NbtType::Numeric,
       Expression::Boolean(_, _) => NbtType::Byte,
       Expression::String(_, _) => NbtType::String,
       Expression::Array { .. } => NbtType::List,
@@ -370,9 +370,10 @@ fn array_to_storage(
   Ok((format!("from storage {storage}"), StorageKind::Direct))
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum NbtType {
   Unknown,
+  Numeric,
   Byte,
   Short,
   Int,
@@ -397,14 +398,41 @@ impl NbtType {
         NbtType::Long => "long",
         NbtType::Float => "float",
         NbtType::Double => "double",
-        _ => return None,
+
+        NbtType::Unknown
+        | NbtType::Numeric
+        | NbtType::ByteArray
+        | NbtType::IntArray
+        | NbtType::LongArray
+        | NbtType::String
+        | NbtType::List
+        | NbtType::Compound => return None,
       }
       .to_string(),
     )
   }
+
+  pub fn is_numeric(self) -> bool {
+    match self {
+      NbtType::Numeric
+      | NbtType::Byte
+      | NbtType::Short
+      | NbtType::Int
+      | NbtType::Long
+      | NbtType::Float
+      | NbtType::Double => true,
+
+      NbtType::Unknown
+      | NbtType::ByteArray
+      | NbtType::IntArray
+      | NbtType::LongArray
+      | NbtType::String
+      | NbtType::List
+      | NbtType::Compound => false,
+    }
+  }
 }
 
-// TODO: Allow casting scoreboards to any numeric type
 pub fn verify_types(types: &[Expression], typ: ArrayType, message: &str) -> Result<NbtType> {
   let mut single_type = match typ {
     ArrayType::Any => NbtType::Unknown,
@@ -419,6 +447,7 @@ pub fn verify_types(types: &[Expression], typ: ArrayType, message: &str) -> Resu
         return Err(raise_error(location.clone(), "Cannot use void as a value"))
       }
       (_, NbtType::Unknown) => single_type = typ.to_type(),
+      (t, NbtType::Numeric) if t.to_type().is_numeric() => single_type = t.to_type(),
       (Expression::Byte(_, _), NbtType::Byte) => {}
       (Expression::Short(_, _), NbtType::Short) => {}
       (Expression::Integer(_, _), NbtType::Int) => {}
@@ -426,13 +455,17 @@ pub fn verify_types(types: &[Expression], typ: ArrayType, message: &str) -> Resu
       (Expression::Float(_, _), NbtType::Float) => {}
       (Expression::Double(_, _), NbtType::Double) => {}
       (Expression::Storage(_, _), _) => {}
-      (Expression::Scoreboard(_, _), NbtType::Int) => {}
+      (Expression::Scoreboard(_, _), t) if t.is_numeric() => {}
       (Expression::Boolean(_, _), NbtType::Byte) => {}
       (Expression::String(_, _), NbtType::String) => {}
       (Expression::Array { .. }, NbtType::List) => {}
       (Expression::Condition(_, _), NbtType::Byte) => {}
       _ => return Err(raise_error(typ.location(), message)),
     }
+  }
+
+  if single_type == NbtType::Numeric {
+    single_type = NbtType::Int;
   }
 
   Ok(single_type)
