@@ -172,7 +172,7 @@ impl Lexer {
       value = self.tokenise_string();
       self.next_brace_json = false;
     } else if valid_identifier_start(self.current()) {
-      kind = self.tokenise_identifier(position);
+      kind = self.tokenise_identifier(position, line, column);
     } else {
       return Err(raise_error(
         self.location(line, column),
@@ -229,7 +229,7 @@ impl Lexer {
     exact
   }
 
-  fn tokenise_identifier(&mut self, position: usize) -> TokenKind {
+  fn tokenise_identifier(&mut self, position: usize, line: usize, column: usize) -> TokenKind {
     let mut kind = TokenKind::Identifier;
     while valid_identifier_body(self.current()) {
       self.consume();
@@ -246,6 +246,8 @@ impl Lexer {
     {
       kind = TokenKind::CommandBegin;
       self.position = position;
+      self.line = line;
+      self.column = column;
     }
     kind
   }
@@ -258,9 +260,13 @@ impl Lexer {
 
   fn next_significant_char(&mut self) -> char {
     let position = self.position;
+    let line = self.line;
+    let column = self.column;
     self.skip_whitespace();
     let current = self.current();
     self.position = position;
+    self.line = line;
+    self.column = column;
     current
   }
 
@@ -277,7 +283,9 @@ impl Lexer {
   }
 
   fn consume_many(&mut self, count: usize) {
-    self.position += count;
+    for _ in 0..count {
+      self.consume();
+    }
   }
 
   fn tokenise_json(&mut self) -> bool {
