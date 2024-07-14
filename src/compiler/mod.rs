@@ -3,6 +3,7 @@ use std::{collections::HashMap, path::Path};
 
 use expression::{verify_types, ConditionKind, Expression};
 use file_tree::{FunctionLocation, ScoreboardLocation, StorageLocation};
+use scope::{FunctionDefinition, ItemDefinition};
 use serde::Serialize;
 
 use crate::parser::ast::{
@@ -54,11 +55,11 @@ impl Compiler {
     self.current_scope = self.scopes[self.current_scope].parent;
   }
 
-  fn add_function(&mut self, scope: usize, name: String, location: ResourceLocation) {
-    self.scopes[scope].function_registry.insert(name, location);
+  fn add_function(&mut self, scope: usize, name: String, function: FunctionDefinition) {
+    self.scopes[scope].function_registry.insert(name, function);
   }
 
-  fn lookup_resource(&self, resource: &ZoglinResource) -> Option<&ResourceLocation> {
+  fn lookup_resource(&self, resource: &ZoglinResource) -> Option<ItemDefinition> {
     if resource.namespace.is_some() {
       return None;
     }
@@ -70,12 +71,12 @@ impl Compiler {
     while index != 0 {
       let scope = &self.scopes[index];
       if valid_function {
-        if let Some(resource_location) = scope.function_registry.get(first) {
-          return Some(resource_location);
+        if let Some(function_definition) = scope.function_registry.get(first) {
+          return Some(ItemDefinition::Function(function_definition.clone()));
         }
       }
       if let Some(resource_location) = scope.imported_items.get(first) {
-        return Some(resource_location);
+        return Some(resource_location.clone());
       }
 
       index = scope.parent;
@@ -101,8 +102,8 @@ impl Compiler {
     namespace.get_module(location.modules)
   }
 
-  fn add_import(&mut self, scope: usize, name: String, location: ResourceLocation) {
-    self.scopes[scope].imported_items.insert(name, location);
+  fn add_import(&mut self, scope: usize, name: String, definition: ItemDefinition) {
+    self.scopes[scope].imported_items.insert(name, definition);
   }
 
   fn add_item(&mut self, location: ResourceLocation, item: Item) -> Result<()> {
@@ -339,7 +340,10 @@ impl Compiler {
     code: &mut Vec<String>,
   ) -> Result<()> {
     match statement {
-      Statement::Command(command) => code.push(self.compile_command(command, location)?),
+      Statement::Command(command) => {
+        let result = self.compile_command(code, command, location)?;
+        code.push(result);
+      }
       Statement::Comment(comment) => code.push(comment),
       Statement::Expression(expression) => {
         self.compile_expression(expression, location, code)?;
@@ -385,14 +389,19 @@ impl Compiler {
     Ok(())
   }
 
-  fn compile_command(&mut self, command: Command, location: &FunctionLocation) -> Result<String> {
+  fn compile_command(
+    &mut self,
+    code: &mut Vec<String>,
+    command: Command,
+    location: &FunctionLocation,
+  ) -> Result<String> {
     let mut result = String::new();
 
     for part in command.parts {
       match part {
         ast::CommandPart::Literal(lit) => result.push_str(&lit),
         ast::CommandPart::Expression(expr) => {
-          result.push_str(&self.compile_static_expr(expr, &location.module)?)
+          result.push_str(&self.compile_static_expr(code, expr, location)?)
         }
       }
     }
@@ -409,7 +418,8 @@ impl Compiler {
     Ok(match expression {
       ast::Expression::FunctionCall(function_call) => {
         let location = function_call.path.location.clone();
-        code.push(self.compile_function_call(function_call, &fn_location.module)?);
+        let result = self.compile_function_call(code, function_call, fn_location)?;
+        code.push(result);
         Expression::Void(location)
       }
       ast::Expression::Byte(b, location) => Expression::Byte(b, location),
@@ -498,72 +508,109 @@ impl Compiler {
 
   fn compile_static_expr(
     &mut self,
+    code: &mut Vec<String>,
     expr: StaticExpr,
-    location: &ResourceLocation,
+    location: &FunctionLocation,
   ) -> Result<String> {
     match expr {
-      StaticExpr::FunctionCall(call) => self.compile_function_call(call, location),
+      StaticExpr::FunctionCall(call) => self.compile_function_call(code, call, location),
       StaticExpr::ResourceRef {
         resource,
         is_fn: true,
       } => Ok(
         self
-          .resolve_zoglin_resource(resource, location)?
+          .resolve_zoglin_resource(resource, &location.module)?
+          .location()
           .to_string(),
       ),
+
       StaticExpr::ResourceRef {
         resource,
         is_fn: false,
-      } => Ok(ResourceLocation::from_zoglin_resource(location, &resource).to_string()),
+      } => Ok(ResourceLocation::from_zoglin_resource(&location.module, &resource).to_string()),
     }
   }
 
   fn compile_function_call(
     &mut self,
+    code: &mut Vec<String>,
     function_call: FunctionCall,
-    location: &ResourceLocation,
+    location: &FunctionLocation,
   ) -> Result<String> {
-    let mut command = "function ".to_string();
+    let src_location = function_call.path.location.clone();
+    let path = self.resolve_zoglin_resource(function_call.path, &location.module)?;
+    let function_definition = if let ItemDefinition::Function(function_definition) = path {
+      function_definition
+    } else {
+      FunctionDefinition {
+        location: path.fn_location().clone(),
+        arguments: Vec::new(),
+      }
+    };
 
-    let path = self.resolve_zoglin_resource(function_call.path, location)?;
-    command.push_str(&path.to_string());
+    if function_call.arguments.len() != function_definition.arguments.len() {
+      return Err(raise_error(
+        src_location,
+        format!(
+          "Incorrect number of arguments. Expected {}, got {}",
+          function_definition.arguments.len(),
+          function_call.arguments.len()
+        ),
+      ));
+    }
 
-    Ok(command)
+    for (parameter, argument) in function_definition
+      .arguments
+      .into_iter()
+      .zip(function_call.arguments)
+    {
+      let expr = self.compile_expression(argument, location, code)?;
+      let storage = StorageLocation {
+        storage: function_definition.location.clone().flatten(),
+        name: parameter,
+      };
+      self.set_storage(code, &storage, &expr)?;
+    }
+
+    Ok(format!("function {}", function_definition.location.to_string()))
   }
 
   fn resolve_zoglin_resource(
     &mut self,
     resource: ast::ZoglinResource,
     location: &ResourceLocation,
-  ) -> Result<ResourceLocation> {
-    let mut result = ResourceLocation {
+  ) -> Result<ItemDefinition> {
+    let mut resource_location = ResourceLocation {
       namespace: String::new(),
       modules: Vec::new(),
     };
 
     if let Some(namespace) = resource.namespace {
       if namespace.is_empty() {
-        result.namespace.clone_from(&location.namespace);
+        resource_location.namespace.clone_from(&location.namespace);
       } else {
-        result.namespace = namespace;
+        resource_location.namespace = namespace;
       }
     } else if let Some(resolved) = self.lookup_resource(&resource) {
-      result = resolved.clone();
+      let mut result = resolved;
+
       if resource.modules.len() > 1 {
-        result.modules.extend_from_slice(&resource.modules[1..]);
+        result.modules().extend_from_slice(&resource.modules[1..]);
       }
       if !resource.modules.is_empty() {
-        result.modules.push(resource.name);
+        result.modules().push(resource.name);
       }
       return Ok(result);
     } else {
-      result = location.clone();
+      resource_location = location.clone();
     }
 
-    result.modules.extend(resource.modules);
-    result.modules.push(resource.name);
+    resource_location.modules.extend(resource.modules);
 
-    Ok(result)
+    Ok(ItemDefinition::Unknown(FunctionLocation {
+      module: resource_location,
+      name: resource.name,
+    }))
   }
 
   fn compile_if_statement(

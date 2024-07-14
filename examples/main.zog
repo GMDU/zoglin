@@ -21,7 +21,7 @@ namespace diamond
 #   }
 # }
 
-fn foo() {
+fn foo(a, b) {
   # a = 1.5 + 2.8f / 10l - 4b * 3s + 12d
   # a = "Hello, world!"
   # b = true
@@ -38,13 +38,33 @@ fn foo() {
   #   say hi
   # }
 
-  a = 1 == 2
-  b = 3 == 1 + 2
-  c = a != b
-  d = (a + 1) == 1
-  e = (a + 1) == b
-  f = [1, 2, 3] == [1 * 1, 1 + 1, 3]
-  g = [1, 2, a] == [1, 2, b]
-  h = [1, a, 2] == [1, b, 3]
-  i = {a: 1, b: 2,c:3} == {a:1,b:2}
+  # a = 1 == 2
+  # b = 3 == 1 + 2
+  # c = a != b
+  # d = (a + 1) == 1
+  # e = (a + 1) == b
+  # f = [1, 2, 3] == [1 * 1, 1 + 1, 3]
+  # g = [1, 2, a] == [1, 2, b]
+  # h = [1, a, 2] == [1, b, 3]
+  # i = {a: 1, b: 2,c:3} == {a:1,b:2}
+  c = a + b
+  if c > 0 {
+    say C is positive!
+  }
 }
+
+fn load() {
+  foo(1, 2)
+}
+
+# template my_template(a)
+# fn (b, c) {
+
+# }
+
+# fn my_fn(a, b) {
+#   a += 1
+#   say &{%b}
+# }
+
+# @template(fn my_fn, a, b)

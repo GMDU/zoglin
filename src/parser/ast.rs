@@ -49,6 +49,7 @@ pub enum ResourceContent {
 pub struct Function {
   pub location: Location,
   pub name: String,
+  pub arguments: Vec<String>,
   pub items: Vec<Statement>,
 }
 
@@ -102,6 +103,7 @@ impl Expression {
     match self {
       Expression::FunctionCall(FunctionCall {
         path: ZoglinResource { location, .. },
+        ..
       })
       | Expression::Boolean(_, location)
       | Expression::Byte(_, location)
@@ -137,6 +139,7 @@ pub enum ArrayType {
 #[derive(Debug)]
 pub struct FunctionCall {
   pub path: ZoglinResource,
+  pub arguments: Vec<Expression>,
 }
 
 #[derive(Debug)]

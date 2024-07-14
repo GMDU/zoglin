@@ -1,12 +1,51 @@
 use std::collections::HashMap;
 
-use super::file_tree::ResourceLocation;
+use super::file_tree::{FunctionLocation, ResourceLocation};
+
+#[derive(Clone)]
+pub enum ItemDefinition {
+  Function(FunctionDefinition),
+  // Resource(ResourceLocation),
+  Unknown(FunctionLocation),
+}
+
+impl ItemDefinition {
+  pub fn modules(&mut self) -> &mut Vec<String> {
+    match self {
+        ItemDefinition::Function(f) => &mut f.location.module.modules,
+        // ItemDefinition::Resource(r) => &mut r.modules,
+        ItemDefinition::Unknown(r) => &mut r.module.modules,
+    }
+  }
+
+  pub fn location(&self) -> &ResourceLocation {
+    match self {
+        ItemDefinition::Function(f) => &f.location.module,
+        // ItemDefinition::Resource(r) => r,
+        ItemDefinition::Unknown(r) => &r.module,
+    }
+  }
+
+  pub fn fn_location(&self) -> &FunctionLocation {
+    match self {
+        ItemDefinition::Function(f) => &f.location,
+        // ItemDefinition::Resource(r) => r,
+        ItemDefinition::Unknown(r) => r,
+    }
+  }
+}
+
+#[derive(Clone)]
+pub struct FunctionDefinition {
+  pub location: FunctionLocation,
+  pub arguments: Vec<String>,
+}
 
 pub struct Scope {
   pub parent: usize,
   pub children: HashMap<String, Vec<usize>>,
-  pub function_registry: HashMap<String, ResourceLocation>,
-  pub imported_items: HashMap<String, ResourceLocation>,
+  pub function_registry: HashMap<String, FunctionDefinition>,
+  pub imported_items: HashMap<String, ItemDefinition>,
 }
 
 impl Scope {

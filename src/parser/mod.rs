@@ -259,13 +259,19 @@ impl Parser {
     } = self.expect(TokenKind::Identifier)?;
 
     self.expect(TokenKind::LeftParen)?;
-    self.expect(TokenKind::RightParen)?;
+
+    let arguments = self.parse_list(TokenKind::RightParen, |parser| {
+      parser
+        .expect(TokenKind::Identifier)
+        .map(|token| token.value)
+    })?;
 
     let items = self.parse_block()?;
 
     Ok(Function {
       name,
       location,
+      arguments,
       items,
     })
   }
@@ -278,7 +284,7 @@ impl Parser {
         Statement::Comment(comment)
       }
       TokenKind::IfKeyword => Statement::IfStatement(self.parse_if_statement()?),
-      _ => Statement::Expression(self.parse_expression(0)?),
+      _ => Statement::Expression(self.parse_expression()?),
     })
   }
 
@@ -406,7 +412,7 @@ impl Parser {
 
     let mut expressions = Vec::new();
     while !self.eof() && self.current().kind != TokenKind::LeftSquare {
-      let expression = self.parse_expression(0)?;
+      let expression = self.parse_expression()?;
       expressions.push(expression);
 
       if self.current().kind == TokenKind::Comma {
@@ -438,7 +444,7 @@ impl Parser {
         kind: _,
       } = self.consume();
       self.expect(TokenKind::Colon)?;
-      let value = self.parse_expression(0)?;
+      let value = self.parse_expression()?;
       key_values.push(KeyValue {
         key,
         value,
@@ -481,18 +487,19 @@ impl Parser {
           "`fn` keyword not required when calling a function.",
         ));
       }
-      self.consume();
-      self.expect(TokenKind::RightParen)?;
 
-      return Ok(StaticExpr::FunctionCall(FunctionCall { path: resource }));
+      return Ok(StaticExpr::FunctionCall(
+        self.parse_function_call(resource)?,
+      ));
     }
     Ok(StaticExpr::ResourceRef { resource, is_fn })
   }
 
   fn parse_function_call(&mut self, path: ZoglinResource) -> Result<FunctionCall> {
     self.expect(TokenKind::LeftParen)?;
-    self.expect(TokenKind::RightParen)?;
-    Ok(FunctionCall { path })
+    let arguments = self.parse_list(TokenKind::RightParen, Self::parse_expression)?;
+
+    Ok(FunctionCall { path, arguments })
   }
 
   fn parse_zoglin_resource(&mut self) -> Result<ZoglinResource> {
@@ -537,7 +544,7 @@ impl Parser {
 
   fn parse_if_statement(&mut self) -> Result<IfStatement> {
     self.consume();
-    let condition = self.parse_expression(0)?;
+    let condition = self.parse_expression()?;
     let block = self.parse_block()?;
 
     let mut child = None;
@@ -559,5 +566,25 @@ impl Parser {
       block,
       child,
     })
+  }
+
+  fn parse_list<T>(
+    &mut self,
+    delimiter: TokenKind,
+    parse_fn: impl Fn(&mut Self) -> Result<T>,
+  ) -> Result<Vec<T>> {
+    let mut list = Vec::new();
+    while self.current().kind != delimiter {
+      list.push(parse_fn(self)?);
+
+      if self.current().kind == TokenKind::Comma {
+        self.consume();
+      } else {
+        break;
+      }
+    }
+    self.expect(delimiter)?;
+
+    Ok(list)
   }
 }

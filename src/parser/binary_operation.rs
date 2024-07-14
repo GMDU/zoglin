@@ -76,12 +76,16 @@ impl Parser {
 
   pub fn parse_bracketed_expression(&mut self) -> Result<Expression> {
     self.expect(TokenKind::LeftParen)?;
-    let expression = self.parse_expression(0)?;
+    let expression = self.parse_expression()?;
     self.expect(TokenKind::RightParen)?;
     Ok(expression)
   }
 
-  pub fn parse_expression(&mut self, min_precedence: u8) -> Result<Expression> {
+  pub fn parse_expression(&mut self) -> Result<Expression> {
+    self.parse_sub_expression(0)
+  }
+
+  pub fn parse_sub_expression(&mut self, min_precedence: u8) -> Result<Expression> {
     let function = Parser::lookup_prefix(self.current().kind).ok_or(raise_error(
       self.current().location,
       format!("Expected expression, got {:?}.", self.current().kind),
@@ -105,7 +109,7 @@ impl Parser {
     } = self.consume();
     let operator = Parser::match_operator(kind);
     let precedence = Parser::match_precedence(kind);
-    let right = self.parse_expression(precedence.1)?;
+    let right = self.parse_sub_expression(precedence.1)?;
     Ok(Expression::BinaryOperation(BinaryOperation {
       operator,
       location,

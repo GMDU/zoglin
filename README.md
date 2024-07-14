@@ -14,7 +14,10 @@ made so far.
 - Functions (2/3)
   - Function definition ✅
   - Function calling ✅
-  - Functions with parameters
+  - Functions with parameters (1/3)
+    - Storage parameters ✅
+    - Scoreboard parameters
+    - Macro parameters
 - Commands (2/2)
   - Commands in functions ✅
   - Inline expressions ✅
@@ -33,10 +36,15 @@ made so far.
 - Expressions
 - Standard Library
 - Conditionals
-- Variables (0/3)
-  - Storage variables
+- Variables (1/3)
+  - Storage variables ✅
   - Scoreboard variables
   - Compile-time variables
+- Compile-time (0/4)
+  - Compile-time statements (`if`, `for`, etc.)
+  - Compile-time functions
+  - Templates
+  - Builtin functions
 - CLI
   - watch ✅
 

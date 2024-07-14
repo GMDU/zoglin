@@ -303,6 +303,21 @@ impl FunctionLocation {
   pub fn to_string(&self) -> String {
     self.module.join(&self.name)
   }
+
+  pub fn from_zoglin_resource(
+    base_location: &ResourceLocation,
+    resource: &ZoglinResource,
+  ) -> FunctionLocation {
+    let mut resource_location = ResourceLocation::from_zoglin_resource(base_location, resource);
+    let name = resource_location
+      .modules
+      .pop()
+      .expect("There will be at least one module");
+    FunctionLocation {
+      module: resource_location,
+      name,
+    }
+  }
 }
 
 #[derive(Clone, Debug)]

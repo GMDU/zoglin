@@ -55,25 +55,8 @@ impl Compiler {
     };
 
     let typ = self.compile_expression(*binary_operation.right, location, code)?;
-
-    let (command, kind) = typ.to_storage(self, code)?;
-
-    match kind {
-      StorageKind::Modify => {
-        code.push(format!(
-          "data modify storage {} set {}",
-          StorageLocation::from_zoglin_resource(location.clone(), variable).to_string(),
-          command
-        ));
-      }
-      StorageKind::Store => {
-        code.push(format!(
-          "execute store result storage {} int 1 run {}",
-          StorageLocation::from_zoglin_resource(location.clone(), variable).to_string(),
-          command
-        ));
-      }
-    }
+    let storage = StorageLocation::from_zoglin_resource(location.clone(), variable);
+    self.set_storage(code, &storage, &typ)?;
 
     Ok(typ)
   }
@@ -626,17 +609,7 @@ impl Compiler {
     value: &Expression,
   ) -> Result<StorageLocation> {
     let storage = self.next_storage();
-    let (conversion_code, kind) = value.to_storage(self, code)?;
-    match kind {
-      StorageKind::Modify => code.push(format!(
-        "data modify storage {storage} set {conversion_code}",
-        storage = storage.to_string()
-      )),
-      StorageKind::Store => code.push(format!(
-        "execute store result storage {storage} int 1 run {conversion_code}",
-        storage = storage.to_string()
-      )),
-    }
+    self.set_storage(code, &storage, value)?;
 
     Ok(storage)
   }
@@ -651,5 +624,25 @@ impl Compiler {
     } else {
       self.copy_to_storage(code, &value)
     }
+  }
+
+  pub(super) fn set_storage(
+    &mut self,
+    code: &mut Vec<String>,
+    storage: &StorageLocation,
+    value: &Expression,
+  ) -> Result<()> {
+    let (conversion_code, kind) = value.to_storage(self, code)?;
+    match kind {
+      StorageKind::Modify => code.push(format!(
+        "data modify storage {storage} set {conversion_code}",
+        storage = storage.to_string()
+      )),
+      StorageKind::Store => code.push(format!(
+        "execute store result storage {storage} int 1 run {conversion_code}",
+        storage = storage.to_string()
+      )),
+    }
+    Ok(())
   }
 }
