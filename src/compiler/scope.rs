@@ -12,25 +12,25 @@ pub enum ItemDefinition {
 impl ItemDefinition {
   pub fn modules(&mut self) -> &mut Vec<String> {
     match self {
-        ItemDefinition::Function(f) => &mut f.location.module.modules,
-        // ItemDefinition::Resource(r) => &mut r.modules,
-        ItemDefinition::Unknown(r) => &mut r.module.modules,
+      ItemDefinition::Function(f) => &mut f.location.module.modules,
+      // ItemDefinition::Resource(r) => &mut r.modules,
+      ItemDefinition::Unknown(r) => &mut r.module.modules,
     }
   }
 
   pub fn location(&self) -> &ResourceLocation {
     match self {
-        ItemDefinition::Function(f) => &f.location.module,
-        // ItemDefinition::Resource(r) => r,
-        ItemDefinition::Unknown(r) => &r.module,
+      ItemDefinition::Function(f) => &f.location.module,
+      // ItemDefinition::Resource(r) => r,
+      ItemDefinition::Unknown(r) => &r.module,
     }
   }
 
   pub fn fn_location(&self) -> &FunctionLocation {
     match self {
-        ItemDefinition::Function(f) => &f.location,
-        // ItemDefinition::Resource(r) => r,
-        ItemDefinition::Unknown(r) => r,
+      ItemDefinition::Function(f) => &f.location,
+      // ItemDefinition::Resource(r) => r,
+      ItemDefinition::Unknown(r) => r,
     }
   }
 }

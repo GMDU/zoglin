@@ -160,12 +160,12 @@ impl Compiler {
     0
   }
 
-  fn next_scoreboard(&mut self) -> ScoreboardLocation {
+  fn next_scoreboard(&mut self, namespace: &str) -> ScoreboardLocation {
     self
       .used_scoreboards
-      .insert("zoglin.internal.vars".to_string());
+      .insert(format!("zoglin.internal.{namespace}.vars"));
     ScoreboardLocation {
-      scoreboard: vec!["zoglin", "internal", "vars"]
+      scoreboard: vec!["zoglin", "internal", namespace, "vars"]
         .into_iter()
         .map(|s| s.to_string())
         .collect(),
@@ -705,7 +705,7 @@ impl Compiler {
   ) -> Result<()> {
     let condition = self.compile_expression(condition, location, code)?;
 
-    let check_code = match condition.to_condition(self, code)? {
+    let check_code = match condition.to_condition(self, code, &location.module.namespace)? {
       ConditionKind::Known(false) => {
         return Ok(());
       }

@@ -271,6 +271,7 @@ impl Expression {
     &self,
     compiler: &mut Compiler,
     code: &mut Vec<String>,
+    namespace: &str,
   ) -> Result<ConditionKind> {
     Ok(match self {
       Expression::Void(location) => return Err(raise_error(location.clone(), "Cannot check void")),
@@ -307,7 +308,7 @@ impl Expression {
         ConditionKind::Check(format!("unless score {} matches 0", scoreboard.to_string()))
       }
       Expression::Storage(_, _) => {
-        let scoreboard = compiler.copy_to_scoreboard(code, self)?;
+        let scoreboard = compiler.copy_to_scoreboard(code, self, namespace)?;
         ConditionKind::Check(format!("unless score {} matches 0", scoreboard.to_string()))
       }
     })

@@ -61,12 +61,10 @@ impl Compiler {
 
         Ok(typ)
       }
-      _ => {
-        Err(raise_error(
-          binary_operation.left.location(),
-          "Can only assign to variables.",
-        ))
-      }
+      _ => Err(raise_error(
+        binary_operation.left.location(),
+        "Can only assign to variables.",
+      )),
     }
   }
 
@@ -98,7 +96,7 @@ impl Compiler {
         ))
       }
       (num, other) | (other, num) if num.numeric_value().is_some() => {
-        let scoreboard = self.copy_to_scoreboard(code, &other)?;
+        let scoreboard = self.copy_to_scoreboard(code, &other, &location.module.namespace)?;
         code.push(format!(
           "scoreboard players add {} {}",
           scoreboard.to_string(),
@@ -109,9 +107,14 @@ impl Compiler {
           binary_operation.location,
         ))
       }
-      (left, right) => {
-        self.compile_basic_operator(left, right, binary_operation.location, '+', code)
-      }
+      (left, right) => self.compile_basic_operator(
+        left,
+        right,
+        binary_operation.location,
+        '+',
+        code,
+        &location.module.namespace,
+      ),
     }
   }
 
@@ -143,7 +146,7 @@ impl Compiler {
         ))
       }
       (other, num) if num.numeric_value().is_some() => {
-        let scoreboard = self.copy_to_scoreboard(code, &other)?;
+        let scoreboard = self.copy_to_scoreboard(code, &other, &location.module.namespace)?;
         code.push(format!(
           "scoreboard players remove {} {}",
           scoreboard.to_string(),
@@ -154,9 +157,14 @@ impl Compiler {
           binary_operation.location,
         ))
       }
-      (left, right) => {
-        self.compile_basic_operator(left, right, binary_operation.location, '-', code)
-      }
+      (left, right) => self.compile_basic_operator(
+        left,
+        right,
+        binary_operation.location,
+        '-',
+        code,
+        &location.module.namespace,
+      ),
     }
   }
 
@@ -187,9 +195,14 @@ impl Compiler {
           binary_operation.location,
         ))
       }
-      (left, right) => {
-        self.compile_basic_operator(left, right, binary_operation.location, '*', code)
-      }
+      (left, right) => self.compile_basic_operator(
+        left,
+        right,
+        binary_operation.location,
+        '*',
+        code,
+        &location.module.namespace,
+      ),
     }
   }
 
@@ -219,9 +232,14 @@ impl Compiler {
           binary_operation.location,
         ))
       }
-      (left, right) => {
-        self.compile_basic_operator(left, right, binary_operation.location, '/', code)
-      }
+      (left, right) => self.compile_basic_operator(
+        left,
+        right,
+        binary_operation.location,
+        '/',
+        code,
+        &location.module.namespace,
+      ),
     }
   }
 
@@ -251,9 +269,14 @@ impl Compiler {
           binary_operation.location,
         ))
       }
-      (left, right) => {
-        self.compile_basic_operator(left, right, binary_operation.location, '%', code)
-      }
+      (left, right) => self.compile_basic_operator(
+        left,
+        right,
+        binary_operation.location,
+        '%',
+        code,
+        &location.module.namespace,
+      ),
     }
   }
 
@@ -291,6 +314,7 @@ impl Compiler {
           "{}..",
           num.numeric_value().expect("Numeric value exists") + 1
         ),
+        &location.module.namespace,
       ),
       (other, num) if num.numeric_value().is_some() => self.compile_match_comparison(
         code,
@@ -300,10 +324,16 @@ impl Compiler {
           "..{}",
           num.numeric_value().expect("Numeric value exists") - 1
         ),
+        &location.module.namespace,
       ),
-      (left, right) => {
-        self.compile_comparison_operator(code, left, right, binary_operation.location, "<")
-      }
+      (left, right) => self.compile_comparison_operator(
+        code,
+        left,
+        right,
+        binary_operation.location,
+        "<",
+        &location.module.namespace,
+      ),
     }
   }
 
@@ -341,6 +371,7 @@ impl Compiler {
           "..{}",
           num.numeric_value().expect("Numeric value exists") - 1
         ),
+        &location.module.namespace,
       ),
       (other, num) if num.numeric_value().is_some() => self.compile_match_comparison(
         code,
@@ -350,10 +381,16 @@ impl Compiler {
           "{}..",
           num.numeric_value().expect("Numeric value exists") + 1
         ),
+        &location.module.namespace,
       ),
-      (left, right) => {
-        self.compile_comparison_operator(code, left, right, binary_operation.location, ">")
-      }
+      (left, right) => self.compile_comparison_operator(
+        code,
+        left,
+        right,
+        binary_operation.location,
+        ">",
+        &location.module.namespace,
+      ),
     }
   }
 
@@ -388,16 +425,23 @@ impl Compiler {
         other,
         binary_operation.location,
         format!("{}..", num.numeric_value().expect("Numeric value exists")),
+        &location.module.namespace,
       ),
       (other, num) if num.numeric_value().is_some() => self.compile_match_comparison(
         code,
         other,
         binary_operation.location,
         format!("..{}", num.numeric_value().expect("Numeric value exists")),
+        &location.module.namespace,
       ),
-      (left, right) => {
-        self.compile_comparison_operator(code, left, right, binary_operation.location, "<=")
-      }
+      (left, right) => self.compile_comparison_operator(
+        code,
+        left,
+        right,
+        binary_operation.location,
+        "<=",
+        &location.module.namespace,
+      ),
     }
   }
 
@@ -432,16 +476,23 @@ impl Compiler {
         other,
         binary_operation.location,
         format!("..{}", num.numeric_value().expect("Numeric value exists")),
+        &location.module.namespace,
       ),
       (other, num) if num.numeric_value().is_some() => self.compile_match_comparison(
         code,
         other,
         binary_operation.location,
         format!("{}..", num.numeric_value().expect("Numeric value exists")),
+        &location.module.namespace,
       ),
-      (left, right) => {
-        self.compile_comparison_operator(code, left, right, binary_operation.location, ">=")
-      }
+      (left, right) => self.compile_comparison_operator(
+        code,
+        left,
+        right,
+        binary_operation.location,
+        ">=",
+        &location.module.namespace,
+      ),
     }
   }
 
@@ -463,13 +514,31 @@ impl Compiler {
         Err(raise_error(location, "Cannot compare with void."))
       }
       (storage @ Expression::Storage(_, _), other)
-      | (other, storage @ Expression::Storage(_, _)) => {
-        self.storage_comparison(code, binary_operation.location, other, storage, true)
-      }
-      (left, right) if left.to_type().is_numeric() && right.to_type().is_numeric() => {
-        self.compile_comparison_operator(code, left, right, binary_operation.location, "=")
-      }
-      (left, right) => self.storage_comparison(code, binary_operation.location, left, right, true),
+      | (other, storage @ Expression::Storage(_, _)) => self.storage_comparison(
+        code,
+        binary_operation.location,
+        other,
+        storage,
+        true,
+        &location.module.namespace,
+      ),
+      (left, right) if left.to_type().is_numeric() && right.to_type().is_numeric() => self
+        .compile_comparison_operator(
+          code,
+          left,
+          right,
+          binary_operation.location,
+          "=",
+          &location.module.namespace,
+        ),
+      (left, right) => self.storage_comparison(
+        code,
+        binary_operation.location,
+        left,
+        right,
+        true,
+        &location.module.namespace,
+      ),
     }
   }
 
@@ -491,13 +560,31 @@ impl Compiler {
         Err(raise_error(location, "Cannot compare with void."))
       }
       (storage @ Expression::Storage(_, _), other)
-      | (other, storage @ Expression::Storage(_, _)) => {
-        self.storage_comparison(code, binary_operation.location, other, storage, false)
-      }
-      (left, right) if left.to_type().is_numeric() && right.to_type().is_numeric() => {
-        self.compile_comparison_operator(code, left, right, binary_operation.location, "!=")
-      }
-      (left, right) => self.storage_comparison(code, binary_operation.location, left, right, false),
+      | (other, storage @ Expression::Storage(_, _)) => self.storage_comparison(
+        code,
+        binary_operation.location,
+        other,
+        storage,
+        false,
+        &location.module.namespace,
+      ),
+      (left, right) if left.to_type().is_numeric() && right.to_type().is_numeric() => self
+        .compile_comparison_operator(
+          code,
+          left,
+          right,
+          binary_operation.location,
+          "!=",
+          &location.module.namespace,
+        ),
+      (left, right) => self.storage_comparison(
+        code,
+        binary_operation.location,
+        left,
+        right,
+        false,
+        &location.module.namespace,
+      ),
     }
   }
 
@@ -508,10 +595,11 @@ impl Compiler {
     left: Expression,
     right: Expression,
     check_equality: bool,
+    namespace: &str,
   ) -> Result<Expression> {
     let right_storage = self.move_to_storage(code, right)?;
     let temp_storage = self.copy_to_storage(code, &left)?;
-    let condition_scoreboard: ScoreboardLocation = self.next_scoreboard();
+    let condition_scoreboard: ScoreboardLocation = self.next_scoreboard(namespace);
     code.push(format!(
       "execute store success score {score} run data modify storage {temp} set from storage {storage}",
       score = condition_scoreboard.to_string(),
@@ -534,9 +622,10 @@ impl Compiler {
     location: Location,
     operator: char,
     code: &mut Vec<String>,
+    namespace: &str,
   ) -> Result<Expression> {
-    let left_scoreboard = self.copy_to_scoreboard(code, &left)?;
-    let right_scoreboard = self.move_to_scoreboard(code, right)?;
+    let left_scoreboard = self.copy_to_scoreboard(code, &left, namespace)?;
+    let right_scoreboard = self.move_to_scoreboard(code, right, namespace)?;
     code.push(format!(
       "scoreboard players operation {} {}= {}",
       left_scoreboard.to_string(),
@@ -553,9 +642,10 @@ impl Compiler {
     right: Expression,
     location: Location,
     operator: &str,
+    namespace: &str,
   ) -> Result<Expression> {
-    let left_scoreboard = self.move_to_scoreboard(code, left)?;
-    let right_scoreboard = self.move_to_scoreboard(code, right)?;
+    let left_scoreboard = self.move_to_scoreboard(code, left, namespace)?;
+    let right_scoreboard = self.move_to_scoreboard(code, right, namespace)?;
     Ok(Expression::Condition(
       Condition::from_operator(operator, left_scoreboard, right_scoreboard),
       location,
@@ -568,8 +658,9 @@ impl Compiler {
     value: Expression,
     location: Location,
     range: String,
+    namespace: &str,
   ) -> Result<Expression> {
-    let scoreboard = self.move_to_scoreboard(code, value)?;
+    let scoreboard = self.move_to_scoreboard(code, value, namespace)?;
     Ok(Expression::Condition(
       Condition::Match(scoreboard, range),
       location,
@@ -580,8 +671,9 @@ impl Compiler {
     &mut self,
     code: &mut Vec<String>,
     value: &Expression,
+    namespace: &str,
   ) -> Result<ScoreboardLocation> {
-    let scoreboard = self.next_scoreboard();
+    let scoreboard = self.next_scoreboard(namespace);
     self.set_scoreboard(code, &scoreboard, value)?;
     Ok(scoreboard)
   }
@@ -590,11 +682,12 @@ impl Compiler {
     &mut self,
     code: &mut Vec<String>,
     value: Expression,
+    namespace: &str,
   ) -> Result<ScoreboardLocation> {
     if let Expression::Scoreboard(scoreboard, _) = value {
       Ok(scoreboard)
     } else {
-      self.copy_to_scoreboard(code, &value)
+      self.copy_to_scoreboard(code, &value, namespace)
     }
   }
 
