@@ -474,6 +474,13 @@ impl Parser {
     }
   }
 
+  fn parse_scoreboard_variable(&mut self) -> Result<Expression> {
+    self.expect(TokenKind::Dollar)?;
+    Ok(Expression::ScoreboardVariable(
+      self.parse_zoglin_resource()?,
+    ))
+  }
+
   fn parse_static_expr(&mut self) -> Result<StaticExpr> {
     let is_fn = self.current().kind == TokenKind::FunctionKeyword;
     if is_fn {

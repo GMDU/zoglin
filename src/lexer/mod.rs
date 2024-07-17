@@ -54,6 +54,7 @@ static OPERATOR_REGISTRY: &[(&str, TokenKind)] = &[
   ("*=", TokenKind::StarEquals),
   ("/=", TokenKind::ForwardSlashEquals),
   ("%=", TokenKind::PercentEquals),
+  ("$", TokenKind::Dollar),
 ];
 
 static KEYWORD_REGISTRY: &[(&str, TokenKind)] = &[

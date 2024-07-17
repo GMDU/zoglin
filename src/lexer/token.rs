@@ -11,8 +11,11 @@ pub struct Token {
 
 #[derive(PartialEq, Debug, Clone, Copy)]
 pub enum TokenKind {
+  // Special
   EndOfFile,
   EndOfInclude,
+
+  // Keywords
   NamespaceKeyword,
   FunctionKeyword,
   ModuleKeyword,
@@ -23,13 +26,17 @@ pub enum TokenKind {
   AsKeyword,
   IfKeyword,
   ElseKeyword,
+  TrueKeyword,
+  FalseKeyword,
+
+  // Non-zoglin
   CommandBegin,
   CommandString,
   CommandEnd,
+  Json,
   Comment,
-  TrueKeyword,
-  FalseKeyword,
-  Identifier,
+
+  // Symbols
   LeftBrace,
   RightBrace,
   LeftSquare,
@@ -41,14 +48,6 @@ pub enum TokenKind {
   Dot,
   Semicolon,
   Comma,
-  Byte,
-  Short,
-  Long,
-  Integer,
-  Float,
-  Double,
-  String,
-  Json,
   Plus,
   Minus,
   Star,
@@ -71,4 +70,15 @@ pub enum TokenKind {
   StarEquals,
   ForwardSlashEquals,
   PercentEquals,
+  Dollar,
+
+  // Values
+  Identifier,
+  Byte,
+  Short,
+  Long,
+  Integer,
+  Float,
+  Double,
+  String,
 }

@@ -95,6 +95,7 @@ pub enum Expression {
   Array(ArrayType, Vec<Expression>, Location),
   Compound(Vec<KeyValue>, Location),
   Variable(ZoglinResource),
+  ScoreboardVariable(ZoglinResource),
   BinaryOperation(BinaryOperation),
 }
 
@@ -116,6 +117,7 @@ impl Expression {
       | Expression::Array(_, _, location)
       | Expression::Compound(_, location)
       | Expression::Variable(ZoglinResource { location, .. })
+      | Expression::ScoreboardVariable(ZoglinResource { location, .. })
       | Expression::BinaryOperation(BinaryOperation { location, .. }) => location.clone(),
     }
   }

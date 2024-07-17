@@ -1,5 +1,3 @@
-use std::borrow::Borrow;
-
 use crate::parser::ast::{self, BinaryOperation, Operator};
 
 use crate::error::{raise_error, Location, Result};
@@ -47,18 +45,29 @@ impl Compiler {
     location: &FunctionLocation,
     code: &mut Vec<String>,
   ) -> Result<Expression> {
-    let ast::Expression::Variable(variable) = binary_operation.left.borrow() else {
-      return Err(raise_error(
-        binary_operation.left.location(),
-        "Can only assign to variables.",
-      ));
-    };
+    match *binary_operation.left {
+      ast::Expression::Variable(variable) => {
+        let typ = self.compile_expression(*binary_operation.right, location, code)?;
+        let storage = StorageLocation::from_zoglin_resource(location.clone(), &variable);
+        self.set_storage(code, &storage, &typ)?;
 
-    let typ = self.compile_expression(*binary_operation.right, location, code)?;
-    let storage = StorageLocation::from_zoglin_resource(location.clone(), variable);
-    self.set_storage(code, &storage, &typ)?;
+        Ok(typ)
+      }
+      ast::Expression::ScoreboardVariable(variable) => {
+        let typ: Expression = self.compile_expression(*binary_operation.right, location, code)?;
+        let scoreboard = ScoreboardLocation::from_zoglin_resource(location.clone(), &variable);
+        self.set_scoreboard(code, &scoreboard, &typ)?;
+        self.used_scoreboards.insert(scoreboard.scoreboard_string());
 
-    Ok(typ)
+        Ok(typ)
+      }
+      _ => {
+        Err(raise_error(
+          binary_operation.left.location(),
+          "Can only assign to variables.",
+        ))
+      }
+    }
   }
 
   fn compile_plus(
@@ -573,6 +582,28 @@ impl Compiler {
     value: &Expression,
   ) -> Result<ScoreboardLocation> {
     let scoreboard = self.next_scoreboard();
+    self.set_scoreboard(code, &scoreboard, value)?;
+    Ok(scoreboard)
+  }
+
+  pub(super) fn move_to_scoreboard(
+    &mut self,
+    code: &mut Vec<String>,
+    value: Expression,
+  ) -> Result<ScoreboardLocation> {
+    if let Expression::Scoreboard(scoreboard, _) = value {
+      Ok(scoreboard)
+    } else {
+      self.copy_to_scoreboard(code, &value)
+    }
+  }
+
+  pub(super) fn set_scoreboard(
+    &mut self,
+    code: &mut Vec<String>,
+    scoreboard: &ScoreboardLocation,
+    value: &Expression,
+  ) -> Result<()> {
     let (conversion_code, kind) = value.to_score()?;
     match kind {
       ScoreKind::Direct(operation) => code.push(format!(
@@ -587,20 +618,7 @@ impl Compiler {
         conversion_code
       )),
     }
-
-    Ok(scoreboard)
-  }
-
-  pub(super) fn move_to_scoreboard(
-    &mut self,
-    code: &mut Vec<String>,
-    value: Expression,
-  ) -> Result<ScoreboardLocation> {
-    if let Expression::Scoreboard(scoreboard, _) = value {
-      Ok(scoreboard)
-    } else {
-      self.copy_to_scoreboard(code, &value)
-    }
+    Ok(())
   }
 
   pub(super) fn copy_to_storage(

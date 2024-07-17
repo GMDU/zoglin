@@ -39,6 +39,7 @@ made so far.
 - Variables (1/3)
   - Storage variables ✅
   - Scoreboard variables
+  - Scoreboard selectors
   - Compile-time variables
 - Compile-time (0/4)
   - Compile-time statements (`if`, `for`, etc.)
@@ -875,3 +876,22 @@ Semicolon, Comma,
 [*; a, b, c]
 
 *array[0]
+
+## Builtin functions
+These functions are built in to the Zoglin compiler and allow programmers to do things which wouldn't otherwise be possible using the Zoglin language
+
+- `@path`
+- `@namespace`
+- `@template`
+- `@file`
+- `@load_file`?
+- `@error`
+- `@warning`
+- `@metadata`
+- `@zoglin`
+
+## Standard library functions
+These are planned functions to be included in the Zoglin standard library.
+
+- `print`
+- `&score`

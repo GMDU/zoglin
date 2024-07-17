@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::mem::take;
 use std::{collections::HashMap, path::Path};
 
@@ -23,6 +24,7 @@ mod file_tree;
 mod register;
 mod scope;
 
+#[derive(Default)]
 pub struct Compiler {
   tick_functions: Vec<String>,
   load_functions: Vec<String>,
@@ -30,6 +32,7 @@ pub struct Compiler {
   current_scope: usize,
   counters: HashMap<String, usize>,
   namespaces: HashMap<String, Namespace>,
+  used_scoreboards: HashSet<String>,
 }
 
 #[derive(Serialize)]
@@ -158,6 +161,9 @@ impl Compiler {
   }
 
   fn next_scoreboard(&mut self) -> ScoreboardLocation {
+    self
+      .used_scoreboards
+      .insert("zoglin.internal.vars".to_string());
     ScoreboardLocation {
       scoreboard: vec!["zoglin", "internal", "vars"]
         .into_iter()
@@ -197,14 +203,7 @@ impl Compiler {
 
 impl Compiler {
   pub fn compile(ast: File, output: &String) -> Result<()> {
-    let mut compiler = Compiler {
-      tick_functions: Vec::new(),
-      load_functions: Vec::new(),
-      scopes: Vec::new(),
-      current_scope: 0,
-      counters: HashMap::new(),
-      namespaces: HashMap::new(),
-    };
+    let mut compiler = Compiler::default();
 
     compiler.register(&ast);
     let tree = compiler.compile_tree(ast)?;
@@ -217,17 +216,31 @@ impl Compiler {
       self.compile_namespace(namespace)?;
     }
 
-    if !self.load_functions.is_empty() || !self.tick_functions.is_empty() {
+    let load_json = FunctionTag {
+      values: &self.load_functions,
+    };
+
+    let load_text = serde_json::to_string_pretty(&load_json).expect("Json is valid");
+
+    let load = Item::TextResource(TextResource {
+      name: "load".to_string(),
+      kind: "tags/function".to_string(),
+      is_asset: false,
+      text: load_text,
+      location: Location::blank(),
+    });
+
+    let location = ResourceLocation {
+      namespace: "minecraft".to_string(),
+      modules: Vec::new(),
+    };
+    self.add_item(location.clone(), load)?;
+
+    if !self.tick_functions.is_empty() {
       let tick_json = FunctionTag {
         values: &self.tick_functions,
       };
-
-      let load_json = FunctionTag {
-        values: &self.load_functions,
-      };
-
       let tick_text = serde_json::to_string_pretty(&tick_json).expect("Json is valid");
-      let load_text = serde_json::to_string_pretty(&load_json).expect("Json is valid");
 
       let tick: Item = Item::TextResource(TextResource {
         name: "tick".to_string(),
@@ -236,22 +249,7 @@ impl Compiler {
         text: tick_text,
         location: Location::blank(),
       });
-
-      let load = Item::TextResource(TextResource {
-        name: "load".to_string(),
-        kind: "tags/function".to_string(),
-        is_asset: false,
-        text: load_text,
-        location: Location::blank(),
-      });
-
-      let location = ResourceLocation {
-        namespace: "minecraft".to_string(),
-        modules: Vec::new(),
-      };
-
-      self.add_item(location.clone(), tick)?;
-      self.add_item(location, load)?;
+      self.add_item(location, tick)?;
     }
 
     let namespaces = take(&mut self.namespaces);
@@ -261,10 +259,14 @@ impl Compiler {
   }
 
   fn compile_namespace(&mut self, namespace: ast::Namespace) -> Result<()> {
+    self
+      .load_functions
+      .insert(0, format!("zoglin:generated/{}/load", namespace.name));
+
     self.enter_scope(&namespace.name);
 
     let resource: ResourceLocation = ResourceLocation {
-      namespace: namespace.name,
+      namespace: namespace.name.clone(),
       modules: Vec::new(),
     };
 
@@ -273,6 +275,23 @@ impl Compiler {
     }
 
     self.exit_scope();
+
+    let load_function = Item::Function(Function {
+      name: "load".to_string(),
+      commands: take(&mut self.used_scoreboards)
+        .into_iter()
+        .map(|scoreboard| format!("scoreboard objectives add {scoreboard} dummy"))
+        .collect(),
+      location: Location::blank(),
+    });
+    self.add_item(
+      ResourceLocation {
+        namespace: "zoglin".to_string(),
+        modules: vec!["generated".to_string(), namespace.name],
+      },
+      load_function,
+    )?;
+
     Ok(())
   }
 
@@ -440,6 +459,10 @@ impl Compiler {
         StorageLocation::from_zoglin_resource(fn_location.clone(), &variable),
         variable.location,
       ),
+      ast::Expression::ScoreboardVariable(variable) => Expression::Scoreboard(
+        ScoreboardLocation::from_zoglin_resource(fn_location.clone(), &variable),
+        variable.location,
+      ),
       ast::Expression::BinaryOperation(binary_operation) => {
         self.compile_binary_operation(binary_operation, fn_location, code)?
       }
@@ -572,7 +595,10 @@ impl Compiler {
       self.set_storage(code, &storage, &expr)?;
     }
 
-    Ok(format!("function {}", function_definition.location.to_string()))
+    Ok(format!(
+      "function {}",
+      function_definition.location.to_string()
+    ))
   }
 
   fn resolve_zoglin_resource(

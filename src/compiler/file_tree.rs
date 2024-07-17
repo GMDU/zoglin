@@ -363,4 +363,31 @@ impl ScoreboardLocation {
   pub fn to_string(&self) -> String {
     format!("{} {}", self.name, self.scoreboard.join("."))
   }
+
+  pub fn scoreboard_string(&self) -> String {
+    self.scoreboard.join(".")
+  }
+
+  pub fn from_zoglin_resource(
+    fn_loc: FunctionLocation,
+    resource: &ZoglinResource,
+  ) -> ScoreboardLocation {
+    ScoreboardLocation::from_resource_location(ResourceLocation::from_zoglin_resource(
+      &fn_loc.flatten(),
+      resource,
+    ))
+  }
+
+  fn from_resource_location(mut location: ResourceLocation) -> ScoreboardLocation {
+    let name = location
+      .modules
+      .pop()
+      .expect("There must be at least one module");
+    let mut scoreboard = location.modules;
+    scoreboard.insert(0, location.namespace);
+    ScoreboardLocation {
+      scoreboard,
+      name: format!("${name}"),
+    }
+  }
 }

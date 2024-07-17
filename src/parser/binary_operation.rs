@@ -69,6 +69,7 @@ impl Parser {
       LeftParen => Parser::parse_bracketed_expression,
       LeftSquare => Parser::parse_array,
       LeftBrace => Parser::parse_compound,
+      Dollar => Parser::parse_scoreboard_variable,
       _ => return None,
     };
     Some(function)
