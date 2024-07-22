@@ -384,13 +384,14 @@ impl Compiler {
       name: function.name,
     };
 
-    self.compile_function(function.location, fn_location, function.items)
+    self.compile_function(function.location, fn_location, None, function.items)
   }
 
   fn compile_function(
     &mut self,
     location: Location,
     fn_location: FunctionLocation,
+    output_function: Option<FunctionLocation>,
     block: Vec<Statement>,
   ) -> Result<()> {
     let mut commands = Vec::new();
@@ -398,13 +399,15 @@ impl Compiler {
       self.compile_statement(item, &fn_location, &mut commands)?;
     }
 
+    let output_function = output_function.unwrap_or(fn_location);
+
     let function = Function {
-      name: fn_location.name,
+      name: output_function.name,
       location,
       commands,
     };
 
-    self.add_item(fn_location.module, Item::Function(function))?;
+    self.add_item(output_function.module, Item::Function(function))?;
     Ok(())
   }
 
@@ -740,6 +743,6 @@ impl Compiler {
       function = function.to_string()
     ));
 
-    self.compile_function(Location::blank(), function, body)
+    self.compile_function(Location::blank(), location.clone(), Some(function), body)
   }
 }
