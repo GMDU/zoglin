@@ -1,4 +1,6 @@
-use ast::{ArrayType, Command, CommandPart, ElseStatement, KeyValue, StaticExpr};
+use ast::{
+  ArrayType, Command, CommandPart, ElseStatement, KeyValue, Parameter, ParameterKind, StaticExpr,
+};
 
 use self::ast::{
   Expression, File, Function, FunctionCall, IfStatement, Import, Item, Module, Namespace, Resource,
@@ -250,6 +252,20 @@ impl Parser {
     Ok(text)
   }
 
+  fn parse_parameter(&mut self) -> Result<Parameter> {
+    let kind = match self.current().kind {
+      TokenKind::Dollar => {
+        self.consume();
+        ParameterKind::Scoreboard
+      }
+      TokenKind::Percent => todo!(),
+      TokenKind::Ampersand => todo!(),
+      _ => ParameterKind::Storage,
+    };
+    let name = self.expect(TokenKind::Identifier)?.value;
+    Ok(Parameter { name, kind })
+  }
+
   fn parse_function(&mut self) -> Result<Function> {
     self.expect(TokenKind::FunctionKeyword)?;
     let Token {
@@ -260,18 +276,14 @@ impl Parser {
 
     self.expect(TokenKind::LeftParen)?;
 
-    let arguments = self.parse_list(TokenKind::RightParen, |parser| {
-      parser
-        .expect(TokenKind::Identifier)
-        .map(|token| token.value)
-    })?;
+    let arguments = self.parse_list(TokenKind::RightParen, Parser::parse_parameter)?;
 
     let items = self.parse_block()?;
 
     Ok(Function {
       name,
       location,
-      arguments,
+      parameters: arguments,
       items,
     })
   }

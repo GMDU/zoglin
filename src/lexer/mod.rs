@@ -45,6 +45,7 @@ static OPERATOR_REGISTRY: &[(&str, TokenKind)] = &[
   (">=", TokenKind::GreaterThanEquals),
   ("==", TokenKind::DoubleEquals),
   ("!=", TokenKind::BangEquals),
+  ("&", TokenKind::Ampersand),
   ("&&", TokenKind::DoubleAmpersand),
   ("||", TokenKind::DoublePipe),
   ("!", TokenKind::Bang),

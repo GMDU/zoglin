@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 
+use crate::parser::ast::Parameter;
+
 use super::file_tree::{FunctionLocation, ResourceLocation};
 
 #[derive(Clone)]
@@ -38,7 +40,7 @@ impl ItemDefinition {
 #[derive(Clone)]
 pub struct FunctionDefinition {
   pub location: FunctionLocation,
-  pub arguments: Vec<String>,
+  pub arguments: Vec<Parameter>,
 }
 
 pub struct Scope {

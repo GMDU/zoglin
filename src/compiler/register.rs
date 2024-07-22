@@ -76,7 +76,7 @@ impl Compiler {
       function.name.clone(),
       FunctionDefinition {
         location: function_location,
-        arguments: function.arguments.clone(),
+        arguments: function.parameters.clone(),
       },
     );
 

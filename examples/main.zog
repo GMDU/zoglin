@@ -21,7 +21,7 @@ namespace diamond
 #   }
 # }
 
-fn foo(a, b) {
+fn foo($a, $b) {
   # a = 1.5 + 2.8f / 10l - 4b * 3s + 12d
   # a = "Hello, world!"
   # b = true
@@ -47,20 +47,20 @@ fn foo(a, b) {
   # g = [1, 2, a] == [1, 2, b]
   # h = [1, a, 2] == [1, b, 3]
   # i = {a: 1, b: 2,c:3} == {a:1,b:2}
-  c = a + b
-  if c > 0 {
+  $c = $a + $b
+  if $c > 0 {
     say C is positive!
   }
 }
 
 fn load() {
   foo(1, 2)
-  foo:bar/baz = 10
-  apples = 2
-  a = foo:bar/baz: / apples
+  # foo:bar/baz = 10
+  # apples = 2
+  # a = foo:bar/baz: / apples
   # $[@a[nbt={foo:"]"}]]
-  $foo = 1
-  b = $foo
+  # $foo = 1
+  # b = $foo
 
   # $.. = 10
 

@@ -390,4 +390,13 @@ impl ScoreboardLocation {
       name: format!("${name}"),
     }
   }
+
+  pub fn from_named_resource_location(location: ResourceLocation, name: &str) -> ScoreboardLocation {
+    let mut scoreboard = location.modules;
+    scoreboard.insert(0, location.namespace);
+    ScoreboardLocation {
+      scoreboard,
+      name: format!("${name}"),
+    }
+  }
 }

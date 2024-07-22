@@ -8,8 +8,8 @@ use scope::{FunctionDefinition, ItemDefinition};
 use serde::Serialize;
 
 use crate::parser::ast::{
-  self, ArrayType, Command, ElseStatement, File, FunctionCall, IfStatement, KeyValue, Statement,
-  StaticExpr, ZoglinResource,
+  self, ArrayType, Command, ElseStatement, File, FunctionCall, IfStatement, KeyValue,
+  ParameterKind, Statement, StaticExpr, ZoglinResource,
 };
 
 use crate::error::{raise_error, Location, Result};
@@ -588,11 +588,24 @@ impl Compiler {
       .zip(function_call.arguments)
     {
       let expr = self.compile_expression(argument, location, code)?;
-      let storage = StorageLocation {
-        storage: function_definition.location.clone().flatten(),
-        name: parameter,
-      };
-      self.set_storage(code, &storage, &expr)?;
+      match parameter.kind {
+        ParameterKind::Storage => {
+          let storage = StorageLocation {
+            storage: function_definition.location.clone().flatten(),
+            name: parameter.name,
+          };
+          self.set_storage(code, &storage, &expr)?;
+        }
+        ParameterKind::Scoreboard => {
+          let scoreboard = ScoreboardLocation::from_named_resource_location(
+            function_definition.location.clone().flatten(),
+            &parameter.name,
+          );
+          self.set_scoreboard(code, &scoreboard, &expr)?;
+        }
+        ParameterKind::Macro => todo!(),
+        ParameterKind::CompileTime => todo!(),
+      }
     }
 
     Ok(format!(

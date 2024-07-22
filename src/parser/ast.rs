@@ -45,11 +45,25 @@ pub enum ResourceContent {
   File(String, String),
 }
 
+#[derive(Debug, Clone, Copy)]
+pub enum ParameterKind {
+  Storage,
+  Scoreboard,
+  Macro,
+  CompileTime,
+}
+
+#[derive(Debug, Clone)]
+pub struct Parameter {
+  pub name: String,
+  pub kind: ParameterKind,
+}
+
 #[derive(Debug)]
 pub struct Function {
   pub location: Location,
   pub name: String,
-  pub arguments: Vec<String>,
+  pub parameters: Vec<Parameter>,
   pub items: Vec<Statement>,
 }
 
