@@ -65,9 +65,7 @@ fn load() {
   a = 1
   b = 2
 
-  if a {
-    foo(a, b)
-  }
+  if a > 2 {}
 
   # $.. = 10
 

@@ -384,31 +384,32 @@ impl Compiler {
       name: function.name,
     };
 
-    self.compile_function(function.location, fn_location, None, function.items)
+    let commands = self.compile_block(&fn_location, function.items)?;
+    self.add_function_item(function.location, fn_location, commands)
   }
 
-  fn compile_function(
+  fn add_function_item(
     &mut self,
     location: Location,
     fn_location: FunctionLocation,
-    output_function: Option<FunctionLocation>,
-    block: Vec<Statement>,
+    commands: Vec<String>,
   ) -> Result<()> {
-    let mut commands = Vec::new();
-    for item in block {
-      self.compile_statement(item, &fn_location, &mut commands)?;
-    }
-
-    let output_function = output_function.unwrap_or(fn_location);
 
     let function = Function {
-      name: output_function.name,
+      name: fn_location.name,
       location,
       commands,
     };
 
-    self.add_item(output_function.module, Item::Function(function))?;
-    Ok(())
+    self.add_item(fn_location.module, Item::Function(function))
+  }
+
+  fn compile_block(&mut self, location: &FunctionLocation, block: Vec<Statement>) -> Result<Vec<String>> {
+    let mut commands = Vec::new();
+    for item in block {
+      self.compile_statement(item, location, &mut commands)?;
+    }
+    Ok(commands)
   }
 
   fn compile_command(
@@ -734,15 +735,24 @@ impl Compiler {
       ConditionKind::Check(check_code) => check_code,
     };
 
-    let function = self.next_function("if", location.module.namespace.clone());
+    let commands = self.compile_block(location, body)?;
+
+    let command = match commands.len() {
+        0 => return Ok(()),
+        1 => &commands[0],
+        _ => {
+          let function = self.next_function("if", location.module.namespace.clone());
+          let fn_str = function.to_string();
+          self.add_function_item(Location::blank(), function, commands)?;
+          &format!("function {fn_str}")
+        }
+    };
 
     code.push(format!(
-      "execute {condition} {run_str} function {function}",
+      "execute {condition} {run_str} {command}",
       condition = check_code,
       run_str = if is_child { "run return run" } else { "run" },
-      function = function.to_string()
     ));
-
-    self.compile_function(Location::blank(), location.clone(), Some(function), body)
+    Ok(())
   }
 }
