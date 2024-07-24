@@ -705,6 +705,11 @@ impl Compiler {
         scoreboard.to_string(),
         conversion_code
       )),
+      ScoreKind::Macro => code.push(format!(
+        "$scoreboard players set {} $({})",
+        scoreboard.to_string(),
+        conversion_code
+      )),
       ScoreKind::Indirect => code.push(format!(
         "execute store result score {} run {}",
         scoreboard.to_string(),
@@ -747,6 +752,10 @@ impl Compiler {
     match kind {
       StorageKind::Modify => code.push(format!(
         "data modify storage {storage} set {conversion_code}",
+        storage = storage.to_string()
+      )),
+      StorageKind::Macro => code.push(format!(
+        "$data modify storage {storage} set value $({conversion_code})",
         storage = storage.to_string()
       )),
       StorageKind::Store => code.push(format!(

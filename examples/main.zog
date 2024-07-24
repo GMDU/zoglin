@@ -51,6 +51,8 @@ fn foo($a, $b) {
   if $c > 0 {
     say C is positive!
   }
+
+  value = %c
 }
 
 fn load() {
@@ -65,7 +67,7 @@ fn load() {
   a = 1
   b = 2
 
-  if a > 2 {}
+  print("Hello, world!")
 
   # $.. = 10
 
@@ -76,6 +78,10 @@ fn load() {
   # $[@s]
   # :bar = 1
   # &score("@s", :bar, 1)
+}
+
+fn print(%text) {
+  tellraw @a "Printed: &{%text}"
 }
 
 # template my_template(a)

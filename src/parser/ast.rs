@@ -45,7 +45,7 @@ pub enum ResourceContent {
   File(String, String),
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ParameterKind {
   Storage,
   Scoreboard,
@@ -88,6 +88,7 @@ pub enum CommandPart {
 
 #[derive(Debug)]
 pub enum StaticExpr {
+  MacroVariable(String),
   FunctionCall(FunctionCall),
   ResourceRef {
     resource: ZoglinResource,
@@ -110,6 +111,7 @@ pub enum Expression {
   Compound(Vec<KeyValue>, Location),
   Variable(ZoglinResource),
   ScoreboardVariable(ZoglinResource),
+  MacroVariable(String, Location),
   BinaryOperation(BinaryOperation),
 }
 
@@ -132,6 +134,7 @@ impl Expression {
       | Expression::Compound(_, location)
       | Expression::Variable(ZoglinResource { location, .. })
       | Expression::ScoreboardVariable(ZoglinResource { location, .. })
+      | Expression::MacroVariable(_, location)
       | Expression::BinaryOperation(BinaryOperation { location, .. }) => location.clone(),
     }
   }

@@ -11,13 +11,14 @@ made so far.
 - CLI ✅
 - Namespaces ✅
 - Modules ✅
-- Functions (2/3)
+- Functions (3/4)
   - Function definition ✅
   - Function calling ✅
-  - Functions with parameters (1/3)
+  - Functions with parameters (3/3)
     - Storage parameters ✅
-    - Scoreboard parameters
-    - Macro parameters
+    - Scoreboard parameters ✅
+    - Macro parameters ✅
+  - Functions with return values
 - Commands (2/2)
   - Commands in functions ✅
   - Inline expressions ✅
@@ -713,7 +714,7 @@ foo()
 api/foo() # ERROR: only imported the exports
 ```
 
-If you want to import everything from a module, including non-exported functions and modules (but excluding private ones), you can use `/*`.
+If you want to import everything from a module, including non-exported functions and modules (but excluding private ones), you can use `/*` or `:*`.
 
 Example:
 ```

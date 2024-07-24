@@ -394,7 +394,6 @@ impl Compiler {
     fn_location: FunctionLocation,
     commands: Vec<String>,
   ) -> Result<()> {
-
     let function = Function {
       name: fn_location.name,
       location,
@@ -404,7 +403,11 @@ impl Compiler {
     self.add_item(fn_location.module, Item::Function(function))
   }
 
-  fn compile_block(&mut self, location: &FunctionLocation, block: Vec<Statement>) -> Result<Vec<String>> {
+  fn compile_block(
+    &mut self,
+    location: &FunctionLocation,
+    block: Vec<Statement>,
+  ) -> Result<Vec<String>> {
     let mut commands = Vec::new();
     for item in block {
       self.compile_statement(item, location, &mut commands)?;
@@ -419,14 +422,28 @@ impl Compiler {
     location: &FunctionLocation,
   ) -> Result<String> {
     let mut result = String::new();
+    let mut is_macro = false;
+    let mut has_macro_prefix = false;
 
-    for part in command.parts {
+    for (i, part) in command.parts.into_iter().enumerate() {
       match part {
-        ast::CommandPart::Literal(lit) => result.push_str(&lit),
+        ast::CommandPart::Literal(lit) => {
+          if i == 0 && lit.starts_with('$') {
+            has_macro_prefix = true;
+          }
+
+          result.push_str(&lit)
+        }
         ast::CommandPart::Expression(expr) => {
-          result.push_str(&self.compile_static_expr(code, expr, location)?)
+          let (code, needs_macro) = self.compile_static_expr(code, expr, location)?;
+          is_macro = is_macro || needs_macro;
+          result.push_str(&code)
         }
       }
+    }
+
+    if is_macro && !has_macro_prefix {
+      result.insert(0, '$');
     }
 
     Ok(result)
@@ -467,6 +484,7 @@ impl Compiler {
         ScoreboardLocation::from_zoglin_resource(fn_location.clone(), &variable),
         variable.location,
       ),
+      ast::Expression::MacroVariable(name, location) => Expression::Macro(name, location),
       ast::Expression::BinaryOperation(binary_operation) => {
         self.compile_binary_operation(binary_operation, fn_location, code)?
       }
@@ -533,28 +551,36 @@ impl Compiler {
     Ok(Expression::Compound(types, location))
   }
 
+  // Returns whether the expression requires a macro command
   fn compile_static_expr(
     &mut self,
     code: &mut Vec<String>,
     expr: StaticExpr,
     location: &FunctionLocation,
-  ) -> Result<String> {
+  ) -> Result<(String, bool)> {
     match expr {
-      StaticExpr::FunctionCall(call) => self.compile_function_call(code, call, location),
+      StaticExpr::FunctionCall(call) => {
+        Ok((self.compile_function_call(code, call, location)?, false))
+      }
       StaticExpr::ResourceRef {
         resource,
         is_fn: true,
-      } => Ok(
+      } => Ok((
         self
           .resolve_zoglin_resource(resource, &location.module)?
           .location()
           .to_string(),
-      ),
+        false,
+      )),
+      StaticExpr::MacroVariable(name) => Ok((format!("$({name})"), true)),
 
       StaticExpr::ResourceRef {
         resource,
         is_fn: false,
-      } => Ok(ResourceLocation::from_zoglin_resource(&location.module, &resource).to_string()),
+      } => Ok((
+        ResourceLocation::from_zoglin_resource(&location.module, &resource).to_string(),
+        false,
+      )),
     }
   }
 
@@ -586,6 +612,15 @@ impl Compiler {
       ));
     }
 
+    let has_macro_args = function_definition
+      .arguments
+      .iter()
+      .any(|param| param.kind == ParameterKind::Macro);
+
+    if has_macro_args {
+      code.push("data remove storage zoglin:internal/vars macro_args".to_string());
+    }
+
     for (parameter, argument) in function_definition
       .arguments
       .into_iter()
@@ -607,15 +642,31 @@ impl Compiler {
           );
           self.set_scoreboard(code, &scoreboard, &expr)?;
         }
-        ParameterKind::Macro => todo!(),
+        ParameterKind::Macro => {
+          let storage = StorageLocation {
+            storage: ResourceLocation {
+              namespace: "zoglin".to_string(),
+              modules: vec!["internal".to_string(), "vars".to_string()],
+            },
+            name: format!("macro_args.{}", parameter.name),
+          };
+          self.set_storage(code, &storage, &expr)?;
+        }
         ParameterKind::CompileTime => todo!(),
       }
     }
 
-    Ok(format!(
-      "function {}",
-      function_definition.location.to_string()
-    ))
+    if has_macro_args {
+      Ok(format!(
+        "function {} with storage zoglin:internal/vars macro_args",
+        function_definition.location.to_string()
+      ))
+    } else {
+      Ok(format!(
+        "function {}",
+        function_definition.location.to_string()
+      ))
+    }
   }
 
   fn resolve_zoglin_resource(
@@ -738,14 +789,14 @@ impl Compiler {
     let commands = self.compile_block(location, body)?;
 
     let command = match commands.len() {
-        0 => return Ok(()),
-        1 => &commands[0],
-        _ => {
-          let function = self.next_function("if", location.module.namespace.clone());
-          let fn_str = function.to_string();
-          self.add_function_item(Location::blank(), function, commands)?;
-          &format!("function {fn_str}")
-        }
+      0 => return Ok(()),
+      1 => &commands[0],
+      _ => {
+        let function = self.next_function("if", location.module.namespace.clone());
+        let fn_str = function.to_string();
+        self.add_function_item(Location::blank(), function, commands)?;
+        &format!("function {fn_str}")
+      }
     };
 
     code.push(format!(

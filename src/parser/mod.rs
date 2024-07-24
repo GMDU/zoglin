@@ -258,7 +258,10 @@ impl Parser {
         self.consume();
         ParameterKind::Scoreboard
       }
-      TokenKind::Percent => todo!(),
+      TokenKind::Percent => {
+        self.consume();
+        ParameterKind::Macro
+      }
       TokenKind::Ampersand => todo!(),
       _ => ParameterKind::Storage,
     };
@@ -494,24 +497,32 @@ impl Parser {
   }
 
   fn parse_static_expr(&mut self) -> Result<StaticExpr> {
-    let is_fn = self.current().kind == TokenKind::FunctionKeyword;
-    if is_fn {
-      self.consume();
-    }
-    let resource = self.parse_zoglin_resource()?;
-    if self.current().kind == TokenKind::LeftParen {
-      if is_fn {
-        return Err(raise_error(
-          self.current().location,
-          "`fn` keyword not required when calling a function.",
-        ));
+    match self.current().kind {
+      TokenKind::Percent => {
+        self.consume();
+        let name = self.expect(TokenKind::Identifier)?.value;
+        Ok(StaticExpr::MacroVariable(name))
       }
-
-      return Ok(StaticExpr::FunctionCall(
-        self.parse_function_call(resource)?,
-      ));
+      TokenKind::FunctionKeyword => {
+        let resource = self.parse_zoglin_resource()?;
+        Ok(StaticExpr::ResourceRef {
+          resource,
+          is_fn: true,
+        })
+      }
+      _ => {
+        let resource: ZoglinResource = self.parse_zoglin_resource()?;
+        if self.current().kind == TokenKind::LeftParen {
+          return Ok(StaticExpr::FunctionCall(
+            self.parse_function_call(resource)?,
+          ));
+        }
+        Ok(StaticExpr::ResourceRef {
+          resource,
+          is_fn: false,
+        })
+      }
     }
-    Ok(StaticExpr::ResourceRef { resource, is_fn })
   }
 
   fn parse_function_call(&mut self, path: ZoglinResource) -> Result<FunctionCall> {

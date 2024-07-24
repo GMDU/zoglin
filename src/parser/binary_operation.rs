@@ -70,6 +70,11 @@ impl Parser {
       LeftSquare => Parser::parse_array,
       LeftBrace => Parser::parse_compound,
       Dollar => Parser::parse_scoreboard_variable,
+      Percent => |parser: &mut Parser| {
+        parser.consume();
+        let name = parser.expect(TokenKind::Identifier)?;
+        Ok(Expression::MacroVariable(name.value, name.location))
+      },
       _ => return None,
     };
     Some(function)

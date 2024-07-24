@@ -34,6 +34,7 @@ pub(super) enum Expression {
 
   Storage(StorageLocation, Location),
   Scoreboard(ScoreboardLocation, Location),
+  Macro(String, Location),
   Condition(Condition, Location),
 }
 
@@ -118,11 +119,13 @@ impl Condition {
 pub(super) enum StorageKind {
   Modify,
   Store,
+  Macro,
 }
 
 pub(super) enum ScoreKind {
   Direct(String),
   Indirect,
+  Macro,
 }
 
 pub(super) enum ConditionKind {
@@ -185,6 +188,11 @@ impl Expression {
                 "execute store result storage {storage}.{key} int 1 run {expr_code}"
               ));
             }
+            (name, StorageKind::Macro) => {
+              code.push(format!(
+                "$data modify storage {storage}.{key} set value $({name})"
+              ));
+            }
           }
         }
         (format!("from storage {storage}"), StorageKind::Modify)
@@ -197,6 +205,7 @@ impl Expression {
         format!("scoreboard players get {}", location.to_string()),
         StorageKind::Store,
       ),
+      Expression::Macro(name, _) => (name.clone(), StorageKind::Macro),
       Expression::Condition(condition, _) => (
         format!("execute {}", condition.to_string()),
         StorageKind::Store,
@@ -260,6 +269,7 @@ impl Expression {
         format!("= {}", location.to_string()),
         ScoreKind::Direct("operation".to_string()),
       ),
+      Expression::Macro(name, _) => (name.clone(), ScoreKind::Macro),
       Expression::Condition(condition, _) => (
         format!("execute {}", condition.to_string()),
         ScoreKind::Indirect,
@@ -311,6 +321,10 @@ impl Expression {
         let scoreboard = compiler.copy_to_scoreboard(code, self, namespace)?;
         ConditionKind::Check(format!("unless score {} matches 0", scoreboard.to_string()))
       }
+      Expression::Macro(_, _) => {
+        let scoreboard = compiler.copy_to_scoreboard(code, self, namespace)?;
+        ConditionKind::Check(format!("unless score {} matches 0", scoreboard.to_string()))
+      }
     })
   }
 
@@ -343,6 +357,7 @@ impl Expression {
       | Expression::ByteArray(_, location)
       | Expression::IntArray(_, location)
       | Expression::LongArray(_, location)
+      | Expression::Macro(_, location)
       | Expression::Compound(_, location)
       | Expression::Condition(_, location) => location.clone(),
     }
@@ -366,6 +381,7 @@ impl Expression {
       Expression::IntArray(_, _) => NbtType::IntArray,
       Expression::LongArray(_, _) => NbtType::LongArray,
       Expression::Compound(_, _) => NbtType::Compound,
+      Expression::Macro(_, _) => NbtType::Unknown,
       Expression::Condition(_, _) => NbtType::Byte,
     }
   }
@@ -469,6 +485,9 @@ fn array_to_storage(
     match element.to_storage(state, code)? {
       (expr_code, StorageKind::Modify) => {
         code.push(format!("data modify storage {storage} append {expr_code}"));
+      }
+      (name, StorageKind::Macro) => {
+        code.push(format!("$data modify storage {storage} append value $({name})"));
       }
       (expr_code, StorageKind::Store) => {
         let temp_storage = state.next_storage().to_string();
