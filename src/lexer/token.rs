@@ -28,6 +28,7 @@ pub enum TokenKind {
   ElseKeyword,
   TrueKeyword,
   FalseKeyword,
+  ReturnKeyword,
 
   // Non-zoglin
   CommandBegin,

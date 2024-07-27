@@ -37,9 +37,9 @@ made so far.
 - Expressions
 - Standard Library
 - Conditionals
-- Variables (1/3)
+- Variables (2/4)
   - Storage variables ✅
-  - Scoreboard variables
+  - Scoreboard variables ✅
   - Scoreboard selectors
   - Compile-time variables
 - Compile-time (0/4)

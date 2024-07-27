@@ -71,6 +71,7 @@ static KEYWORD_REGISTRY: &[(&str, TokenKind)] = &[
   ("else", TokenKind::ElseKeyword),
   ("true", TokenKind::TrueKeyword),
   ("false", TokenKind::FalseKeyword),
+  ("return", TokenKind::ReturnKeyword),
 ];
 
 impl Lexer {
