@@ -64,10 +64,7 @@ fn load() {
   # $foo = 1
   # b = $foo
 
-  a = 1
-  b = 2
-
-  print("Hello, world!")
+  foo = <chocolate>add(1, 2)
 
   # $.. = 10
 
@@ -78,6 +75,10 @@ fn load() {
   # $[@s]
   # :bar = 1
   # &score("@s", :bar, 1)
+}
+
+fn %add() {
+
 }
 
 fn print(%text) {

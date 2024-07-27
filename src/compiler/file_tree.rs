@@ -327,6 +327,10 @@ pub struct StorageLocation {
 }
 
 impl StorageLocation {
+  pub fn new(storage: ResourceLocation, name: String) -> StorageLocation {
+    StorageLocation { storage, name }
+  }
+
   pub fn from_zoglin_resource(
     fn_loc: FunctionLocation,
     resource: &ZoglinResource,
@@ -391,7 +395,10 @@ impl ScoreboardLocation {
     }
   }
 
-  pub fn from_named_resource_location(location: ResourceLocation, name: &str) -> ScoreboardLocation {
+  pub fn from_named_resource_location(
+    location: ResourceLocation,
+    name: &str,
+  ) -> ScoreboardLocation {
     let mut scoreboard = location.modules;
     scoreboard.insert(0, location.namespace);
     ScoreboardLocation {

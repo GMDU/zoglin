@@ -358,20 +358,22 @@ impl Compiler {
     location: &FunctionLocation,
     code: &mut Vec<String>,
   ) -> Result<()> {
-    match statement {
+    Ok(match statement {
       Statement::Command(command) => {
         let result = self.compile_command(code, command, location)?;
         code.push(result);
       }
-      Statement::Comment(comment) => code.push(comment),
+      Statement::Comment(comment) => {
+        code.push(comment);
+      }
       Statement::Expression(expression) => {
-        self.compile_expression(expression, location, code)?;
+        self.compile_expression(expression, location, code, true)?;
       }
       Statement::IfStatement(if_statement) => {
         self.compile_if_statement(code, if_statement, location)?;
       }
-    };
-    Ok(())
+      Statement::Return(value) => self.compile_return(code, value, location)?,
+    })
   }
 
   fn compile_ast_function(
@@ -454,13 +456,24 @@ impl Compiler {
     expression: ast::Expression,
     fn_location: &FunctionLocation,
     code: &mut Vec<String>,
+    ignored: bool,
   ) -> Result<Expression> {
     Ok(match expression {
       ast::Expression::FunctionCall(function_call) => {
         let location = function_call.path.location.clone();
-        let result = self.compile_function_call(code, function_call, fn_location)?;
-        code.push(result);
-        Expression::Void(location)
+        let (command, fn_location) =
+          self.compile_function_call(code, function_call, fn_location)?;
+        if !ignored {
+          code.push(format!(
+            "data modify storage {} return set value false",
+            fn_location.to_string()
+          ));
+        }
+        code.push(command);
+        Expression::Storage(
+          StorageLocation::new(fn_location, "return".to_string()),
+          location,
+        )
       }
       ast::Expression::Byte(b, location) => Expression::Byte(b, location),
       ast::Expression::Short(s, location) => Expression::Short(s, location),
@@ -502,7 +515,7 @@ impl Compiler {
     let mut types = Vec::new();
 
     for expr in expressions {
-      types.push(self.compile_expression(expr, fn_location, code)?);
+      types.push(self.compile_expression(expr, fn_location, code, false)?);
     }
 
     let err_msg = match typ {
@@ -541,7 +554,10 @@ impl Compiler {
     } in key_values
     {
       if types
-        .insert(key, self.compile_expression(value, fn_location, code)?)
+        .insert(
+          key,
+          self.compile_expression(value, fn_location, code, false)?,
+        )
         .is_some()
       {
         return Err(raise_error(location, "Duplicate keys not allowed"));
@@ -560,7 +576,7 @@ impl Compiler {
   ) -> Result<(String, bool)> {
     match expr {
       StaticExpr::FunctionCall(call) => {
-        Ok((self.compile_function_call(code, call, location)?, false))
+        Ok((self.compile_function_call(code, call, location)?.0, false))
       }
       StaticExpr::ResourceRef {
         resource,
@@ -589,7 +605,7 @@ impl Compiler {
     code: &mut Vec<String>,
     function_call: FunctionCall,
     location: &FunctionLocation,
-  ) -> Result<String> {
+  ) -> Result<(String, ResourceLocation)> {
     let src_location = function_call.path.location.clone();
     let path = self.resolve_zoglin_resource(function_call.path, &location.module)?;
     let function_definition = if let ItemDefinition::Function(function_definition) = path {
@@ -626,7 +642,7 @@ impl Compiler {
       .into_iter()
       .zip(function_call.arguments)
     {
-      let expr = self.compile_expression(argument, location, code)?;
+      let expr = self.compile_expression(argument, location, code, false)?;
       match parameter.kind {
         ParameterKind::Storage => {
           let storage = StorageLocation {
@@ -656,17 +672,15 @@ impl Compiler {
       }
     }
 
-    if has_macro_args {
-      Ok(format!(
+    let command = if has_macro_args {
+      format!(
         "function {} with storage zoglin:internal/vars macro_args",
         function_definition.location.to_string()
-      ))
+      )
     } else {
-      Ok(format!(
-        "function {}",
-        function_definition.location.to_string()
-      ))
-    }
+      format!("function {}", function_definition.location.to_string())
+    };
+    Ok((command, function_definition.location.flatten()))
   }
 
   fn resolve_zoglin_resource(
@@ -719,23 +733,21 @@ impl Compiler {
       let mut function_code = Vec::new();
 
       let mut if_statement = if_statement;
-      loop {
-        self.compile_if_statement_without_child(
-          &mut function_code,
-          if_statement.condition,
-          if_statement.block,
-          &if_function,
-          true,
-        )?;
+      loop {self.compile_if_statement_without_child(
+            &mut function_code,
+            if_statement.condition,
+            if_statement.block,
+            &if_function,
+            true,
+          )?;
         match if_statement.child {
           Some(ElseStatement::IfStatement(if_stmt)) => {
             if_statement = *if_stmt;
           }
 
           Some(ElseStatement::Block(block)) => {
-            for item in block {
-              self.compile_statement(item, location, &mut function_code)?;
-            }
+            let commands = self.compile_block(location, block)?;
+            code.extend(commands);
             break;
           }
 
@@ -771,16 +783,15 @@ impl Compiler {
     location: &FunctionLocation,
     is_child: bool,
   ) -> Result<()> {
-    let condition = self.compile_expression(condition, location, code)?;
+    let condition = self.compile_expression(condition, location, code, false)?;
 
     let check_code = match condition.to_condition(self, code, &location.module.namespace)? {
       ConditionKind::Known(false) => {
-        return Ok(());
+        return Ok(())
       }
       ConditionKind::Known(true) => {
-        for item in body {
-          self.compile_statement(item, location, code)?;
-        }
+        let commands  = self.compile_block(location, body)?;
+        code.extend(commands);
         return Ok(());
       }
       ConditionKind::Check(check_code) => check_code,
@@ -804,6 +815,23 @@ impl Compiler {
       condition = check_code,
       run_str = if is_child { "run return run" } else { "run" },
     ));
+    Ok(())
+  }
+
+  fn compile_return(
+    &mut self,
+    code: &mut Vec<String>,
+    value: Option<ast::Expression>,
+    location: &FunctionLocation,
+  ) -> Result<()> {
+    if let Some(value) = value {
+      let expression = self.compile_expression(value, location, code, false)?;
+      let return_storage = StorageLocation::new(location.clone().flatten(), "return".to_string());
+      self.set_storage(code, &return_storage, &expression)?;
+    }
+
+    code.push("return 418".to_string());
+
     Ok(())
   }
 }

@@ -299,6 +299,7 @@ impl Parser {
         Statement::Comment(comment)
       }
       TokenKind::IfKeyword => Statement::IfStatement(self.parse_if_statement()?),
+      TokenKind::ReturnKeyword => Statement::Return(self.parse_return()?),
       _ => Statement::Expression(self.parse_expression()?),
     })
   }
@@ -317,6 +318,11 @@ impl Parser {
     self.consume();
 
     Ok(Command { parts })
+  }
+
+  fn parse_return(&mut self) -> Result<Option<Expression>> {
+    self.consume();
+    self.parse_optional_expression()
   }
 
   fn parse_number(&mut self) -> Result<Expression> {

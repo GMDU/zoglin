@@ -73,6 +73,7 @@ pub enum Statement {
   Comment(String),
   Expression(Expression),
   IfStatement(IfStatement),
+  Return(Option<Expression>),
 }
 
 #[derive(Debug)]

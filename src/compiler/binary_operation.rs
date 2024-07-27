@@ -47,14 +47,14 @@ impl Compiler {
   ) -> Result<Expression> {
     match *binary_operation.left {
       ast::Expression::Variable(variable) => {
-        let typ = self.compile_expression(*binary_operation.right, location, code)?;
+        let typ = self.compile_expression(*binary_operation.right, location, code, false)?;
         let storage = StorageLocation::from_zoglin_resource(location.clone(), &variable);
         self.set_storage(code, &storage, &typ)?;
 
         Ok(typ)
       }
       ast::Expression::ScoreboardVariable(variable) => {
-        let typ: Expression = self.compile_expression(*binary_operation.right, location, code)?;
+        let typ: Expression = self.compile_expression(*binary_operation.right, location, code, false)?;
         let scoreboard = ScoreboardLocation::from_zoglin_resource(location.clone(), &variable);
         self.set_scoreboard(code, &scoreboard, &typ)?;
         self.used_scoreboards.insert(scoreboard.scoreboard_string());
@@ -74,8 +74,8 @@ impl Compiler {
     location: &FunctionLocation,
     code: &mut Vec<String>,
   ) -> Result<Expression> {
-    let left = self.compile_expression(*binary_operation.left, location, code)?;
-    let right = self.compile_expression(*binary_operation.right, location, code)?;
+    let left = self.compile_expression(*binary_operation.left, location, code, false)?;
+    let right = self.compile_expression(*binary_operation.right, location, code, false)?;
 
     match (left, right) {
       (Expression::Void(location), _) | (_, Expression::Void(location)) => Err(raise_error(
@@ -124,8 +124,8 @@ impl Compiler {
     location: &FunctionLocation,
     code: &mut Vec<String>,
   ) -> Result<Expression> {
-    let left = self.compile_expression(*binary_operation.left, location, code)?;
-    let right = self.compile_expression(*binary_operation.right, location, code)?;
+    let left = self.compile_expression(*binary_operation.left, location, code, false)?;
+    let right = self.compile_expression(*binary_operation.right, location, code, false)?;
 
     match (left, right) {
       (Expression::Void(location), _) | (_, Expression::Void(location)) => Err(raise_error(
@@ -174,8 +174,8 @@ impl Compiler {
     location: &FunctionLocation,
     code: &mut Vec<String>,
   ) -> Result<Expression> {
-    let left = self.compile_expression(*binary_operation.left, location, code)?;
-    let right = self.compile_expression(*binary_operation.right, location, code)?;
+    let left = self.compile_expression(*binary_operation.left, location, code, false)?;
+    let right = self.compile_expression(*binary_operation.right, location, code, false)?;
 
     match (left, right) {
       (Expression::Void(location), _) | (_, Expression::Void(location)) => Err(raise_error(
@@ -212,8 +212,8 @@ impl Compiler {
     location: &FunctionLocation,
     code: &mut Vec<String>,
   ) -> Result<Expression> {
-    let left = self.compile_expression(*binary_operation.left, location, code)?;
-    let right = self.compile_expression(*binary_operation.right, location, code)?;
+    let left = self.compile_expression(*binary_operation.left, location, code, false)?;
+    let right = self.compile_expression(*binary_operation.right, location, code, false)?;
 
     match (left, right) {
       (Expression::Void(location), _) | (_, Expression::Void(location)) => {
@@ -249,8 +249,8 @@ impl Compiler {
     location: &FunctionLocation,
     code: &mut Vec<String>,
   ) -> Result<Expression> {
-    let left = self.compile_expression(*binary_operation.left, location, code)?;
-    let right = self.compile_expression(*binary_operation.right, location, code)?;
+    let left = self.compile_expression(*binary_operation.left, location, code, false)?;
+    let right = self.compile_expression(*binary_operation.right, location, code, false)?;
 
     match (left, right) {
       (Expression::Void(location), _) | (_, Expression::Void(location)) => {
@@ -286,8 +286,8 @@ impl Compiler {
     binary_operation: BinaryOperation,
     location: &FunctionLocation,
   ) -> Result<Expression> {
-    let left = self.compile_expression(*binary_operation.left, location, code)?;
-    let right = self.compile_expression(*binary_operation.right, location, code)?;
+    let left = self.compile_expression(*binary_operation.left, location, code, false)?;
+    let right = self.compile_expression(*binary_operation.right, location, code, false)?;
 
     match (left, right) {
       (Expression::Void(location), _) | (_, Expression::Void(location)) => {
@@ -343,8 +343,8 @@ impl Compiler {
     binary_operation: BinaryOperation,
     location: &FunctionLocation,
   ) -> Result<Expression> {
-    let left = self.compile_expression(*binary_operation.left, location, code)?;
-    let right = self.compile_expression(*binary_operation.right, location, code)?;
+    let left = self.compile_expression(*binary_operation.left, location, code, false)?;
+    let right = self.compile_expression(*binary_operation.right, location, code, false)?;
 
     match (left, right) {
       (Expression::Void(location), _) | (_, Expression::Void(location)) => {
@@ -400,8 +400,8 @@ impl Compiler {
     binary_operation: BinaryOperation,
     location: &FunctionLocation,
   ) -> Result<Expression> {
-    let left = self.compile_expression(*binary_operation.left, location, code)?;
-    let right = self.compile_expression(*binary_operation.right, location, code)?;
+    let left = self.compile_expression(*binary_operation.left, location, code, false)?;
+    let right = self.compile_expression(*binary_operation.right, location, code, false)?;
 
     match (left, right) {
       (Expression::Void(location), _) | (_, Expression::Void(location)) => {
@@ -451,8 +451,8 @@ impl Compiler {
     binary_operation: BinaryOperation,
     location: &FunctionLocation,
   ) -> Result<Expression> {
-    let left = self.compile_expression(*binary_operation.left, location, code)?;
-    let right = self.compile_expression(*binary_operation.right, location, code)?;
+    let left = self.compile_expression(*binary_operation.left, location, code, false)?;
+    let right = self.compile_expression(*binary_operation.right, location, code, false)?;
 
     match (left, right) {
       (Expression::Void(location), _) | (_, Expression::Void(location)) => {
@@ -502,8 +502,8 @@ impl Compiler {
     binary_operation: BinaryOperation,
     location: &FunctionLocation,
   ) -> Result<Expression> {
-    let left = self.compile_expression(*binary_operation.left, location, code)?;
-    let right = self.compile_expression(*binary_operation.right, location, code)?;
+    let left = self.compile_expression(*binary_operation.left, location, code, false)?;
+    let right = self.compile_expression(*binary_operation.right, location, code, false)?;
 
     if let Some(equal) = left.equal(&right) {
       return Ok(Expression::Boolean(equal, binary_operation.location));
@@ -548,8 +548,8 @@ impl Compiler {
     binary_operation: BinaryOperation,
     location: &FunctionLocation,
   ) -> Result<Expression> {
-    let left = self.compile_expression(*binary_operation.left, location, code)?;
-    let right = self.compile_expression(*binary_operation.right, location, code)?;
+    let left = self.compile_expression(*binary_operation.left, location, code, false)?;
+    let right = self.compile_expression(*binary_operation.right, location, code, false)?;
 
     if let Some(equal) = left.equal(&right) {
       return Ok(Expression::Boolean(!equal, binary_operation.location));

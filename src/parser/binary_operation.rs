@@ -87,6 +87,14 @@ impl Parser {
     Ok(expression)
   }
 
+  pub fn parse_optional_expression(&mut self) -> Result<Option<Expression>> {
+    if Parser::lookup_prefix(self.current().kind).is_some() {
+      self.parse_expression().map(Some)
+    } else {
+      Ok(None)
+    }
+  }
+
   pub fn parse_expression(&mut self) -> Result<Expression> {
     self.parse_sub_expression(0)
   }
