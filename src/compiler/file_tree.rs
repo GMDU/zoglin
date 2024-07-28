@@ -395,14 +395,23 @@ impl ScoreboardLocation {
     }
   }
 
-  pub fn from_named_resource_location(
-    location: ResourceLocation,
-    name: &str,
-  ) -> ScoreboardLocation {
+  pub fn new(location: ResourceLocation, name: &str) -> ScoreboardLocation {
     let mut scoreboard = location.modules;
     scoreboard.insert(0, location.namespace);
     ScoreboardLocation {
       scoreboard,
+      name: format!("${name}"),
+    }
+  }
+
+  pub fn of_internal(name: &str) -> ScoreboardLocation {
+    ScoreboardLocation {
+      scoreboard: vec![
+        "zoglin".to_string(),
+        "internal".to_string(),
+        "vars".to_string(),
+      ],
+
       name: format!("${name}"),
     }
   }

@@ -1,7 +1,7 @@
-use crate::parser::ast::{File, Function, Import, Item, Module, Namespace};
+use crate::parser::ast::{File, Function, Import, Item, Module, Namespace, ParameterKind};
 
 use super::{
-  file_tree::{FunctionLocation, ResourceLocation},
+  file_tree::{FunctionLocation, ResourceLocation, ScoreboardLocation},
   scope::{FunctionDefinition, ItemDefinition, Scope},
   Compiler,
 };
@@ -71,12 +71,24 @@ impl Compiler {
       module: location.clone(),
       name: function.name.clone(),
     };
+
+    if function
+      .parameters
+      .iter()
+      .any(|param| matches!(param.kind, ParameterKind::Scoreboard))
+    {
+      self.used_scoreboards.insert(
+        ScoreboardLocation::new(function_location.clone().flatten(), "").scoreboard_string(),
+      );
+    }
+
     self.add_function(
       scope,
       function.name.clone(),
       FunctionDefinition {
         location: function_location,
         arguments: function.parameters.clone(),
+        return_type: function.return_type,
       },
     );
 

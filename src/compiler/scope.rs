@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::parser::ast::Parameter;
+use crate::parser::ast::{Parameter, ReturnType};
 
 use super::file_tree::{FunctionLocation, ResourceLocation};
 
@@ -41,6 +41,7 @@ impl ItemDefinition {
 pub struct FunctionDefinition {
   pub location: FunctionLocation,
   pub arguments: Vec<Parameter>,
+  pub return_type: ReturnType,
 }
 
 pub struct Scope {

@@ -9,7 +9,7 @@ use serde::Serialize;
 
 use crate::parser::ast::{
   self, ArrayType, Command, ElseStatement, File, FunctionCall, IfStatement, KeyValue,
-  ParameterKind, Statement, StaticExpr, ZoglinResource,
+  ParameterKind, ReturnType, Statement, StaticExpr, ZoglinResource,
 };
 
 use crate::error::{raise_error, Location, Result};
@@ -33,6 +33,14 @@ pub struct Compiler {
   counters: HashMap<String, usize>,
   namespaces: HashMap<String, Namespace>,
   used_scoreboards: HashSet<String>,
+}
+
+#[derive(Clone)]
+struct FunctionContext {
+  location: FunctionLocation,
+  return_type: ReturnType,
+  is_nested: bool,
+  has_nested_blocks: bool,
 }
 
 #[derive(Serialize)]
@@ -355,24 +363,32 @@ impl Compiler {
   fn compile_statement(
     &mut self,
     statement: Statement,
-    location: &FunctionLocation,
+    context: &mut FunctionContext,
     code: &mut Vec<String>,
   ) -> Result<()> {
     Ok(match statement {
       Statement::Command(command) => {
-        let result = self.compile_command(code, command, location)?;
+        let result = self.compile_command(code, command, &context.location)?;
         code.push(result);
       }
       Statement::Comment(comment) => {
         code.push(comment);
       }
       Statement::Expression(expression) => {
-        self.compile_expression(expression, location, code, true)?;
+        self.compile_expression(expression, &context.location, code, true)?;
       }
       Statement::IfStatement(if_statement) => {
-        self.compile_if_statement(code, if_statement, location)?;
+        self.compile_if_statement(code, if_statement, context)?;
+        let return_command = match context.return_type {
+          ReturnType::Storage => "return 0",
+          ReturnType::Scoreboard => "return 0",
+          ReturnType::Direct => {
+            "return run scoreboard players get $should_return zoglin.internal.vars"
+          }
+        };
+        code.push(format!("execute if score $should_return zoglin.internal.vars matches -2147483648..2147483647 run {return_command}"));
       }
-      Statement::Return(value) => self.compile_return(code, value, location)?,
+      Statement::Return(value) => self.compile_return(code, value, context)?,
     })
   }
 
@@ -385,9 +401,21 @@ impl Compiler {
       module: location.clone(),
       name: function.name,
     };
+    let mut context = FunctionContext {
+      location: fn_location,
+      return_type: function.return_type,
+      is_nested: false,
+      has_nested_blocks: false,
+    };
 
-    let commands = self.compile_block(&fn_location, function.items)?;
-    self.add_function_item(function.location, fn_location, commands)
+    let mut commands = self.compile_block(&mut context, function.items)?;
+    if context.has_nested_blocks {
+      commands.insert(
+        0,
+        "scoreboard players reset $should_return zoglin.internal.vars".to_string(),
+      );
+    }
+    self.add_function_item(function.location, context.location, commands)
   }
 
   fn add_function_item(
@@ -407,12 +435,12 @@ impl Compiler {
 
   fn compile_block(
     &mut self,
-    location: &FunctionLocation,
+    context: &mut FunctionContext,
     block: Vec<Statement>,
   ) -> Result<Vec<String>> {
     let mut commands = Vec::new();
     for item in block {
-      self.compile_statement(item, location, &mut commands)?;
+      self.compile_statement(item, context, &mut commands)?;
     }
     Ok(commands)
   }
@@ -461,19 +489,40 @@ impl Compiler {
     Ok(match expression {
       ast::Expression::FunctionCall(function_call) => {
         let location = function_call.path.location.clone();
-        let (command, fn_location) =
-          self.compile_function_call(code, function_call, fn_location)?;
-        if !ignored {
-          code.push(format!(
-            "data modify storage {} return set value false",
-            fn_location.to_string()
-          ));
+        let (command, definition) = self.compile_function_call(code, function_call, fn_location)?;
+        match definition.return_type {
+          ReturnType::Storage => {
+            let storage = StorageLocation::new(definition.location.flatten(), "return".to_string());
+            if !ignored {
+              code.push(format!(
+                "data modify storage {} set value false",
+                storage.to_string(),
+              ))
+            }
+            code.push(command);
+            Expression::Storage(storage, location)
+          }
+          ReturnType::Scoreboard => {
+            let scoreboard = ScoreboardLocation::new(definition.location.flatten(), "return");
+            if !ignored {
+              code.push(format!(
+                "scoreboard players set {} 0",
+                scoreboard.to_string()
+              ))
+            }
+            code.push(command);
+            Expression::Scoreboard(scoreboard, location)
+          }
+          ReturnType::Direct => {
+            let scoreboard = self.next_scoreboard(&fn_location.module.namespace);
+            code.push(format!(
+              "execute store result score {} run {}",
+              scoreboard.to_string(),
+              command
+            ));
+            Expression::Scoreboard(scoreboard, location)
+          }
         }
-        code.push(command);
-        Expression::Storage(
-          StorageLocation::new(fn_location, "return".to_string()),
-          location,
-        )
       }
       ast::Expression::Byte(b, location) => Expression::Byte(b, location),
       ast::Expression::Short(s, location) => Expression::Short(s, location),
@@ -605,15 +654,16 @@ impl Compiler {
     code: &mut Vec<String>,
     function_call: FunctionCall,
     location: &FunctionLocation,
-  ) -> Result<(String, ResourceLocation)> {
+  ) -> Result<(String, FunctionDefinition)> {
     let src_location = function_call.path.location.clone();
     let path = self.resolve_zoglin_resource(function_call.path, &location.module)?;
-    let function_definition = if let ItemDefinition::Function(function_definition) = path {
+    let mut function_definition = if let ItemDefinition::Function(function_definition) = path {
       function_definition
     } else {
       FunctionDefinition {
         location: path.fn_location().clone(),
         arguments: Vec::new(),
+        return_type: ReturnType::Direct,
       }
     };
 
@@ -637,8 +687,7 @@ impl Compiler {
       code.push("data remove storage zoglin:internal/vars macro_args".to_string());
     }
 
-    for (parameter, argument) in function_definition
-      .arguments
+    for (parameter, argument) in take(&mut function_definition.arguments)
       .into_iter()
       .zip(function_call.arguments)
     {
@@ -652,7 +701,7 @@ impl Compiler {
           self.set_storage(code, &storage, &expr)?;
         }
         ParameterKind::Scoreboard => {
-          let scoreboard = ScoreboardLocation::from_named_resource_location(
+          let scoreboard = ScoreboardLocation::new(
             function_definition.location.clone().flatten(),
             &parameter.name,
           );
@@ -680,7 +729,7 @@ impl Compiler {
     } else {
       format!("function {}", function_definition.location.to_string())
     };
-    Ok((command, function_definition.location.flatten()))
+    Ok((command, function_definition))
   }
 
   fn resolve_zoglin_resource(
@@ -725,29 +774,35 @@ impl Compiler {
     &mut self,
     code: &mut Vec<String>,
     if_statement: IfStatement,
-    location: &FunctionLocation,
+    context: &mut FunctionContext,
   ) -> Result<()> {
+    let mut if_context = context.clone();
+    if_context.is_nested = true;
+    context.has_nested_blocks = true;
+
     if if_statement.child.is_some() {
-      let if_function = self.next_function("if", location.module.namespace.clone());
+      let if_function = self.next_function("if", context.location.module.namespace.clone());
+
       code.push(format!("function {}", if_function.to_string()));
       let mut function_code = Vec::new();
 
       let mut if_statement = if_statement;
-      loop {self.compile_if_statement_without_child(
-            &mut function_code,
-            if_statement.condition,
-            if_statement.block,
-            &if_function,
-            true,
-          )?;
+      loop {
+        self.compile_if_statement_without_child(
+          &mut function_code,
+          if_statement.condition,
+          if_statement.block,
+          &mut if_context,
+          true,
+        )?;
         match if_statement.child {
           Some(ElseStatement::IfStatement(if_stmt)) => {
             if_statement = *if_stmt;
           }
 
           Some(ElseStatement::Block(block)) => {
-            let commands = self.compile_block(location, block)?;
-            code.extend(commands);
+            let commands = self.compile_block(context, block)?;
+            function_code.extend(commands);
             break;
           }
 
@@ -770,7 +825,7 @@ impl Compiler {
       code,
       if_statement.condition,
       if_statement.block,
-      location,
+      &mut if_context,
       false,
     )
   }
@@ -780,30 +835,28 @@ impl Compiler {
     code: &mut Vec<String>,
     condition: ast::Expression,
     body: Vec<Statement>,
-    location: &FunctionLocation,
+    context: &mut FunctionContext,
     is_child: bool,
   ) -> Result<()> {
-    let condition = self.compile_expression(condition, location, code, false)?;
+    let condition = self.compile_expression(condition, &context.location, code, false)?;
 
-    let check_code = match condition.to_condition(self, code, &location.module.namespace)? {
-      ConditionKind::Known(false) => {
-        return Ok(())
-      }
+    let check_code = match condition.to_condition(self, code, &context.location.module.namespace)? {
+      ConditionKind::Known(false) => return Ok(()),
       ConditionKind::Known(true) => {
-        let commands  = self.compile_block(location, body)?;
+        let commands: Vec<String> = self.compile_block(context, body)?;
         code.extend(commands);
         return Ok(());
       }
       ConditionKind::Check(check_code) => check_code,
     };
 
-    let commands = self.compile_block(location, body)?;
+    let commands = self.compile_block(context, body)?;
 
     let command = match commands.len() {
       0 => return Ok(()),
       1 => &commands[0],
       _ => {
-        let function = self.next_function("if", location.module.namespace.clone());
+        let function = self.next_function("if", context.location.module.namespace.clone());
         let fn_str = function.to_string();
         self.add_function_item(Location::blank(), function, commands)?;
         &format!("function {fn_str}")
@@ -822,15 +875,52 @@ impl Compiler {
     &mut self,
     code: &mut Vec<String>,
     value: Option<ast::Expression>,
-    location: &FunctionLocation,
+    context: &FunctionContext,
   ) -> Result<()> {
+    let has_value = value.is_some();
     if let Some(value) = value {
-      let expression = self.compile_expression(value, location, code, false)?;
-      let return_storage = StorageLocation::new(location.clone().flatten(), "return".to_string());
-      self.set_storage(code, &return_storage, &expression)?;
+      let expression = self.compile_expression(value, &context.location, code, false)?;
+
+      match context.return_type {
+        ReturnType::Storage => {
+          let return_storage =
+            StorageLocation::new(context.location.clone().flatten(), "return".to_string());
+          self.set_storage(code, &return_storage, &expression)?;
+        }
+        ReturnType::Scoreboard => {
+          let scoreboard = ScoreboardLocation::new(context.location.clone().flatten(), "return");
+          self.used_scoreboards.insert(scoreboard.scoreboard_string());
+          self.set_scoreboard(code, &scoreboard, &expression)?;
+        }
+        ReturnType::Direct => {
+          if context.is_nested {
+            self.set_scoreboard(
+              code,
+              &ScoreboardLocation::of_internal("should_return"),
+              &expression,
+            )?;
+          } else {
+            code.push(expression.to_return_command()?)
+          }
+        }
+      }
     }
 
-    code.push("return 418".to_string());
+    if context.return_type != ReturnType::Direct && context.is_nested {
+      self.set_scoreboard(
+        code,
+        &ScoreboardLocation::of_internal("should_return"),
+        &Expression::Integer(1, Location::blank()),
+      )?;
+    }
+
+    if has_value {
+      if context.return_type != ReturnType::Direct || context.is_nested {
+        code.push("return 0".to_string())
+      }
+    } else {
+      code.push("return fail".to_string());
+    }
 
     Ok(())
   }

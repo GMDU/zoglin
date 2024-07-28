@@ -64,7 +64,7 @@ fn load() {
   # $foo = 1
   # b = $foo
 
-  foo = <chocolate>add(1, 2)
+  $result = add(1, 2)
 
   # $.. = 10
 
@@ -77,8 +77,14 @@ fn load() {
   # &score("@s", :bar, 1)
 }
 
-fn %add() {
-
+fn %add($a, $b) {
+  if $a == 0 {
+    return $b
+  } else if $b == 0 {
+    return $a
+  } else {
+    return $a + $b
+  }
 }
 
 fn print(%text) {

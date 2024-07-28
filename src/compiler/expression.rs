@@ -328,6 +328,47 @@ impl Expression {
     })
   }
 
+  pub(super) fn to_return_command(&self) -> Result<String> {
+    Ok(match self {
+      Expression::Void(location) => {
+        return Err(raise_error(location.clone(), "Cannot return void"))
+      }
+      Expression::Byte(value, _) => format!("return {value}"),
+      Expression::Short(value, _) => format!("return {value}"),
+      Expression::Integer(value, _) => format!("return {value}"),
+      Expression::Long(value, _) => format!("return {}", *value as i32),
+      Expression::Float(value, _) => format!("return {}", value.floor() as i32),
+      Expression::Double(value, _) => format!("return {}", value.floor() as i32),
+      Expression::Boolean(b, _) => {
+        if *b {
+          format!("return 1")
+        } else {
+          format!("return 0")
+        }
+      }
+      Expression::String(_, location)
+      | Expression::Array { location, .. }
+      | Expression::ByteArray(_, location)
+      | Expression::IntArray(_, location)
+      | Expression::LongArray(_, location)
+      | Expression::Compound(_, location) => {
+        return Err(raise_error(
+          location.clone(),
+          "Can only directly return numeric values",
+        ))
+      }
+      Expression::Storage(storage, _) => {
+        format!("return run data get storage {}", storage.to_string())
+      }
+      Expression::Scoreboard(scoreboard, _) => format!(
+        "return run scoreboard players get {}",
+        scoreboard.to_string()
+      ),
+      Expression::Macro(name, _) => format!("$return $({name})"),
+      Expression::Condition(condition, _) => format!("return run execute {}", condition.to_string()),
+    })
+  }
+
   pub(super) fn numeric_value(&self) -> Option<i32> {
     Some(match self {
       Expression::Byte(b, _) => *b as i32,
@@ -487,7 +528,9 @@ fn array_to_storage(
         code.push(format!("data modify storage {storage} append {expr_code}"));
       }
       (name, StorageKind::Macro) => {
-        code.push(format!("$data modify storage {storage} append value $({name})"));
+        code.push(format!(
+          "$data modify storage {storage} append value $({name})"
+        ));
       }
       (expr_code, StorageKind::Store) => {
         let temp_storage = state.next_storage().to_string();

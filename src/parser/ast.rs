@@ -62,9 +62,17 @@ pub struct Parameter {
 #[derive(Debug)]
 pub struct Function {
   pub location: Location,
+  pub return_type: ReturnType,
   pub name: String,
   pub parameters: Vec<Parameter>,
   pub items: Vec<Statement>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum ReturnType {
+  Storage,
+  Scoreboard,
+  Direct,
 }
 
 #[derive(Debug)]

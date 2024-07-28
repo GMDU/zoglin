@@ -1,5 +1,6 @@
 use ast::{
-  ArrayType, Command, CommandPart, ElseStatement, KeyValue, Parameter, ParameterKind, StaticExpr,
+  ArrayType, Command, CommandPart, ElseStatement, KeyValue, Parameter, ParameterKind, ReturnType,
+  StaticExpr,
 };
 
 use self::ast::{
@@ -271,6 +272,19 @@ impl Parser {
 
   fn parse_function(&mut self) -> Result<Function> {
     self.expect(TokenKind::FunctionKeyword)?;
+
+    let return_type = match self.current().kind {
+      TokenKind::Dollar => {
+        self.consume();
+        ReturnType::Scoreboard
+      }
+      TokenKind::Percent => {
+        self.consume();
+        ReturnType::Direct
+      }
+      _ => ReturnType::Storage,
+    };
+
     let Token {
       value: name,
       location,
@@ -285,6 +299,7 @@ impl Parser {
 
     Ok(Function {
       name,
+      return_type,
       location,
       parameters: arguments,
       items,
