@@ -47,8 +47,6 @@ made so far.
   - Compile-time functions
   - Templates
   - Builtin functions
-- CLI
-  - watch ✅
 
 ## Namespaces
 Namespaces are defined using the `namespace` block.

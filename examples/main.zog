@@ -79,8 +79,16 @@ fn load() {
 
 fn %add($a, $b) {
   $result = $a
-  if $a == 0 {
-    return $b
+  if $a == 0 && $b == 2 {
+    return 2
+  }
+
+  if $a == 1 && $b == 2 {
+    return 3
+  }
+
+  if $a == 42 || $b == 42 {
+    return 42
   }
 
   while $b > 0 {

@@ -45,6 +45,8 @@ pub(super) enum Condition {
   GreaterEq(ScoreboardLocation, ScoreboardLocation),
   Eq(ScoreboardLocation, ScoreboardLocation),
   Match(ScoreboardLocation, String),
+  Check(String),
+  And(String, String),
   Inverted(Box<Condition>),
 }
 
@@ -95,6 +97,8 @@ impl Condition {
           score = score.to_string()
         )
       }
+      Condition::Check(code) => code.clone(),
+      Condition::And(a, b) => format!("{a} {b}"),
       Condition::Inverted(condition) => condition.do_to_string(!invert),
     }
   }
@@ -315,16 +319,26 @@ impl Expression {
         ))
       }
       Expression::Condition(condition, _) => ConditionKind::Check(condition.do_to_string(inverted)),
-      Expression::Scoreboard(scoreboard, _) => {
-        ConditionKind::Check(format!("{} score {} matches 0", if inverted {"if"} else {"unless"}, scoreboard.to_string()))
-      }
+      Expression::Scoreboard(scoreboard, _) => ConditionKind::Check(format!(
+        "{} score {} matches 0",
+        if inverted { "if" } else { "unless" },
+        scoreboard.to_string()
+      )),
       Expression::Storage(_, _) => {
         let scoreboard = compiler.copy_to_scoreboard(code, self, namespace)?;
-        ConditionKind::Check(format!("{} score {} matches 0", if inverted {"if"} else {"unless"}, scoreboard.to_string()))
+        ConditionKind::Check(format!(
+          "{} score {} matches 0",
+          if inverted { "if" } else { "unless" },
+          scoreboard.to_string()
+        ))
       }
       Expression::Macro(_, _) => {
         let scoreboard = compiler.copy_to_scoreboard(code, self, namespace)?;
-        ConditionKind::Check(format!("{} score {} matches 0", if inverted {"if"} else {"unless"}, scoreboard.to_string()))
+        ConditionKind::Check(format!(
+          "{} score {} matches 0",
+          if inverted { "if" } else { "unless" },
+          scoreboard.to_string()
+        ))
       }
     })
   }
@@ -366,7 +380,9 @@ impl Expression {
         scoreboard.to_string()
       ),
       Expression::Macro(name, _) => format!("$return $({name})"),
-      Expression::Condition(condition, _) => format!("return run execute {}", condition.to_string()),
+      Expression::Condition(condition, _) => {
+        format!("return run execute {}", condition.to_string())
+      }
     })
   }
 

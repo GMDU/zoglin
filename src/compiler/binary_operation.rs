@@ -2,6 +2,7 @@ use crate::parser::ast::{self, BinaryOperation, Operator};
 
 use crate::error::{raise_error, Location, Result};
 
+use super::expression::ConditionKind;
 use super::{
   expression::{Condition, Expression, ScoreKind, StorageKind},
   file_tree::{FunctionLocation, ScoreboardLocation, StorageLocation},
@@ -32,8 +33,8 @@ impl Compiler {
       }
       Operator::Equal => self.compile_equals(code, binary_operation, location),
       Operator::NotEqual => self.compile_not_equals(code, binary_operation, location),
-      Operator::LogicalAnd => todo!(),
-      Operator::LogicalOr => todo!(),
+      Operator::LogicalAnd => self.compile_logical_and(code, binary_operation, location),
+      Operator::LogicalOr => self.compile_logical_or(code, binary_operation, location),
       Operator::Assign => self.compile_assignment(binary_operation, location, code),
       Operator::OperatorAssign(_) => todo!(),
     }
@@ -54,7 +55,8 @@ impl Compiler {
         Ok(typ)
       }
       ast::Expression::ScoreboardVariable(variable) => {
-        let typ: Expression = self.compile_expression(*binary_operation.right, location, code, false)?;
+        let typ: Expression =
+          self.compile_expression(*binary_operation.right, location, code, false)?;
         let scoreboard = ScoreboardLocation::from_zoglin_resource(location.clone(), &variable);
         self.set_scoreboard(code, &scoreboard, &typ)?;
         self.used_scoreboards.insert(scoreboard.scoreboard_string());
@@ -585,6 +587,80 @@ impl Compiler {
         false,
         &location.module.namespace,
       ),
+    }
+  }
+
+  fn compile_logical_and(
+    &mut self,
+    code: &mut Vec<String>,
+    binary_operation: BinaryOperation,
+    location: &FunctionLocation,
+  ) -> Result<Expression> {
+    let left = self.compile_expression(*binary_operation.left, location, code, false)?;
+    let right = self.compile_expression(*binary_operation.right, location, code, false)?;
+
+    let left_condition = left.to_condition(self, code, &location.module.namespace, false)?;
+    let right_condition = right.to_condition(self, code, &location.module.namespace, false)?;
+
+    match (left_condition, right_condition) {
+      (ConditionKind::Known(false), _) | (_, ConditionKind::Known(false)) => {
+        Ok(Expression::Boolean(false, binary_operation.location))
+      }
+      (ConditionKind::Known(true), ConditionKind::Known(true)) => {
+        Ok(Expression::Boolean(true, binary_operation.location))
+      }
+      (ConditionKind::Known(true), ConditionKind::Check(other))
+      | (ConditionKind::Check(other), ConditionKind::Known(true)) => Ok(Expression::Condition(
+        Condition::Check(other),
+        binary_operation.location,
+      )),
+      (ConditionKind::Check(a), ConditionKind::Check(b)) => Ok(Expression::Condition(
+        Condition::And(a, b),
+        binary_operation.location,
+      )),
+    }
+  }
+
+  fn compile_logical_or(
+    &mut self,
+    code: &mut Vec<String>,
+    binary_operation: BinaryOperation,
+    location: &FunctionLocation,
+  ) -> Result<Expression> {
+    let left = self.compile_expression(*binary_operation.left, location, code, false)?;
+    let right = self.compile_expression(*binary_operation.right, location, code, false)?;
+
+    let left_condition = left.to_condition(self, code, &location.module.namespace, false)?;
+    let right_condition = right.to_condition(self, code, &location.module.namespace, false)?;
+
+    match (left_condition, right_condition) {
+      (ConditionKind::Known(true), _) | (_, ConditionKind::Known(true)) => {
+        Ok(Expression::Boolean(true, binary_operation.location))
+      }
+      (ConditionKind::Known(false), ConditionKind::Known(false)) => {
+        Ok(Expression::Boolean(false, binary_operation.location))
+      }
+      (ConditionKind::Known(false), ConditionKind::Check(other))
+      | (ConditionKind::Check(other), ConditionKind::Known(false)) => Ok(Expression::Condition(
+        Condition::Check(other),
+        binary_operation.location,
+      )),
+      (ConditionKind::Check(a), ConditionKind::Check(b)) => {
+        let scoreboard = self.next_scoreboard(&location.module.namespace);
+        code.push(format!(
+          "execute {a} run scoreboard players set {} 1",
+          scoreboard.to_string()
+        ));
+        code.push(format!(
+          "execute {b} run scoreboard players set {} 1",
+          scoreboard.to_string()
+        ));
+
+        Ok(Expression::Condition(
+          Condition::Match(scoreboard, "1".to_string()),
+          binary_operation.location,
+        ))
+      }
     }
   }
 
