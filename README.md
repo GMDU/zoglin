@@ -11,14 +11,14 @@ made so far.
 - CLI ✅
 - Namespaces ✅
 - Modules ✅
-- Functions (3/4)
+- Functions (4/4)
   - Function definition ✅
   - Function calling ✅
   - Functions with parameters (3/3)
     - Storage parameters ✅
     - Scoreboard parameters ✅
     - Macro parameters ✅
-  - Functions with return values
+  - Functions with return values ✅
 - Commands (2/2)
   - Commands in functions ✅
   - Inline expressions ✅
@@ -862,17 +862,6 @@ Example:
 &myproc = -> { say "My proc has run!" }
 func_with_callback(->(&result) { tellraw @a "#{&result}" })
 ```
-
-Byte, Short, Int, Long, Float, Double
-Boolean
-String
-Byte Array, Int Array, Long Array
-Array
-Compound
-
-Byte, Short, Int, Long, Float, Double,
-LeftSquare, RightSquare, TrueKeyword, FalseKeyword
-Semicolon, Comma,
 
 [*; a, b, c]
 

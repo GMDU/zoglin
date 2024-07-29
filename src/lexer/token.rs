@@ -26,6 +26,7 @@ pub enum TokenKind {
   AsKeyword,
   IfKeyword,
   ElseKeyword,
+  WhileKeyword,
   TrueKeyword,
   FalseKeyword,
   ReturnKeyword,

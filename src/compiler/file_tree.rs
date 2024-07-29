@@ -253,6 +253,13 @@ pub struct ResourceLocation {
 }
 
 impl ResourceLocation {
+  pub fn new(namespace: &str, modules: &[&str]) -> ResourceLocation {
+    ResourceLocation {
+      namespace: namespace.to_string(),
+      modules: modules.iter().map(|module| module.to_string()).collect(),
+    }
+  }
+
   pub fn from_zoglin_resource(
     base_location: &ResourceLocation,
     resource: &ast::ZoglinResource,
@@ -294,6 +301,10 @@ pub struct FunctionLocation {
 }
 
 impl FunctionLocation {
+  pub fn new(module: ResourceLocation, name: &str) -> FunctionLocation {
+    FunctionLocation{ module, name: name.to_string() }
+  }
+
   pub fn flatten(self) -> ResourceLocation {
     let mut result = self.module;
     result.modules.push(self.name);

@@ -21,6 +21,7 @@ const RESET: &str = "\x1b[0m";
 const RED: &str = "\x1b[31m";
 const YELLOW: &str = "\x1b[33m";
 
+#[derive(Debug)]
 pub struct Error {
   location: Option<Location>,
   message: String,

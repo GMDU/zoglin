@@ -9,7 +9,7 @@ use serde::Serialize;
 
 use crate::parser::ast::{
   self, ArrayType, Command, ElseStatement, File, FunctionCall, IfStatement, KeyValue,
-  ParameterKind, ReturnType, Statement, StaticExpr, ZoglinResource,
+  ParameterKind, ReturnType, Statement, StaticExpr, WhileLoop, ZoglinResource,
 };
 
 use crate::error::{raise_error, Location, Result};
@@ -21,6 +21,7 @@ use self::{
 mod binary_operation;
 mod expression;
 mod file_tree;
+mod internals;
 mod register;
 mod scope;
 
@@ -40,7 +41,7 @@ struct FunctionContext {
   location: FunctionLocation,
   return_type: ReturnType,
   is_nested: bool,
-  has_nested_blocks: bool,
+  has_nested_returns: bool,
 }
 
 #[derive(Serialize)]
@@ -378,18 +379,38 @@ impl Compiler {
         self.compile_expression(expression, &context.location, code, true)?;
       }
       Statement::IfStatement(if_statement) => {
-        self.compile_if_statement(code, if_statement, context)?;
-        let return_command = match context.return_type {
-          ReturnType::Storage => "return 0",
-          ReturnType::Scoreboard => "return 0",
-          ReturnType::Direct => {
-            "return run scoreboard players get $should_return zoglin.internal.vars"
-          }
-        };
-        code.push(format!("execute if score $should_return zoglin.internal.vars matches -2147483648..2147483647 run {return_command}"));
+        let mut sub_context = context.clone();
+        sub_context.has_nested_returns = false;
+        self.compile_if_statement(code, if_statement, &mut sub_context)?;
+        if sub_context.has_nested_returns {
+          context.has_nested_returns = true;
+          self.generate_nested_return(code, context.return_type);
+        }
+      }
+      Statement::WhileLoop(while_loop) => {
+        let mut sub_context = context.clone();
+        sub_context.has_nested_returns = false;
+        self.compile_while_loop(code, while_loop, &mut sub_context)?;
+        if sub_context.has_nested_returns {
+          context.has_nested_returns = true;
+          self.generate_nested_return(code, context.return_type);
+        }
       }
       Statement::Return(value) => self.compile_return(code, value, context)?,
     })
+  }
+
+  fn generate_nested_return(&mut self, code: &mut Vec<String>, return_type: ReturnType) {
+    let return_command = match return_type {
+      ReturnType::Storage | ReturnType::Scoreboard => {
+        "return run scoreboard players reset $should_return"
+      }
+      ReturnType::Direct => &format!(
+        "return run function {}",
+        self.reset_direct_return().to_string()
+      ),
+    };
+    code.push(format!("execute if score $should_return zoglin.internal.vars matches -2147483648..2147483647 run {return_command}"));
   }
 
   fn compile_ast_function(
@@ -405,16 +426,10 @@ impl Compiler {
       location: fn_location,
       return_type: function.return_type,
       is_nested: false,
-      has_nested_blocks: false,
+      has_nested_returns: false,
     };
 
-    let mut commands = self.compile_block(&mut context, function.items)?;
-    if context.has_nested_blocks {
-      commands.insert(
-        0,
-        "scoreboard players reset $should_return zoglin.internal.vars".to_string(),
-      );
-    }
+    let commands = self.compile_block(&mut context, function.items)?;
     self.add_function_item(function.location, context.location, commands)
   }
 
@@ -776,9 +791,8 @@ impl Compiler {
     if_statement: IfStatement,
     context: &mut FunctionContext,
   ) -> Result<()> {
-    let mut if_context = context.clone();
-    if_context.is_nested = true;
-    context.has_nested_blocks = true;
+    let was_nested = context.is_nested;
+    context.is_nested = true;
 
     if if_statement.child.is_some() {
       let if_function = self.next_function("if", context.location.module.namespace.clone());
@@ -792,7 +806,7 @@ impl Compiler {
           &mut function_code,
           if_statement.condition,
           if_statement.block,
-          &mut if_context,
+          context,
           true,
         )?;
         match if_statement.child {
@@ -819,15 +833,18 @@ impl Compiler {
         }),
       )?;
 
+      context.is_nested = was_nested;
       return Ok(());
     }
     self.compile_if_statement_without_child(
       code,
       if_statement.condition,
       if_statement.block,
-      &mut if_context,
+      context,
       false,
-    )
+    )?;
+    context.is_nested = was_nested;
+    Ok(())
   }
 
   fn compile_if_statement_without_child(
@@ -840,15 +857,16 @@ impl Compiler {
   ) -> Result<()> {
     let condition = self.compile_expression(condition, &context.location, code, false)?;
 
-    let check_code = match condition.to_condition(self, code, &context.location.module.namespace)? {
-      ConditionKind::Known(false) => return Ok(()),
-      ConditionKind::Known(true) => {
-        let commands: Vec<String> = self.compile_block(context, body)?;
-        code.extend(commands);
-        return Ok(());
-      }
-      ConditionKind::Check(check_code) => check_code,
-    };
+    let check_code =
+      match condition.to_condition(self, code, &context.location.module.namespace, false)? {
+        ConditionKind::Known(false) => return Ok(()),
+        ConditionKind::Known(true) => {
+          let commands: Vec<String> = self.compile_block(context, body)?;
+          code.extend(commands);
+          return Ok(());
+        }
+        ConditionKind::Check(check_code) => check_code,
+      };
 
     let commands = self.compile_block(context, body)?;
 
@@ -875,8 +893,12 @@ impl Compiler {
     &mut self,
     code: &mut Vec<String>,
     value: Option<ast::Expression>,
-    context: &FunctionContext,
+    context: &mut FunctionContext,
   ) -> Result<()> {
+    if context.is_nested {
+      context.has_nested_returns = true;
+    }
+
     let has_value = value.is_some();
     if let Some(value) = value {
       let expression = self.compile_expression(value, &context.location, code, false)?;
@@ -921,6 +943,59 @@ impl Compiler {
     } else {
       code.push("return fail".to_string());
     }
+
+    Ok(())
+  }
+
+  fn compile_while_loop(
+    &mut self,
+    code: &mut Vec<String>,
+    while_loop: WhileLoop,
+    context: &mut FunctionContext,
+  ) -> Result<()> {
+    let was_nested = context.is_nested;
+    context.is_nested = true;
+
+    let mut commands = Vec::new();
+
+    let condition = self.compile_expression(
+      while_loop.condition,
+      &context.location,
+      &mut commands,
+      false,
+    )?;
+
+    let fn_location: FunctionLocation;
+
+    match condition.to_condition(
+      self,
+      &mut commands,
+      &context.location.module.namespace,
+      true,
+    )? {
+      ConditionKind::Known(false) => {}
+      ConditionKind::Known(true) => {
+        fn_location = self.next_function("while", context.location.module.namespace.clone());
+
+        commands.extend(self.compile_block(context, while_loop.block)?);
+
+        commands.push(format!("function {}", fn_location.to_string()));
+        code.push(format!("function {}", fn_location.to_string()));
+        self.add_function_item(Location::blank(), fn_location, commands)?;
+      }
+
+      ConditionKind::Check(check_code) => {
+        fn_location = self.next_function("while", context.location.module.namespace.clone());
+        code.push(format!("function {}", fn_location.to_string()));
+        commands.push(format!("execute {check_code} run return 0"));
+
+        commands.extend(self.compile_block(context, while_loop.block)?);
+        commands.push(format!("function {}", fn_location.to_string()));
+        self.add_function_item(Location::blank(), fn_location, commands)?;
+      }
+    }
+
+    context.is_nested = was_nested;
 
     Ok(())
   }

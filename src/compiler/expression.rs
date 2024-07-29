@@ -282,6 +282,7 @@ impl Expression {
     compiler: &mut Compiler,
     code: &mut Vec<String>,
     namespace: &str,
+    inverted: bool,
   ) -> Result<ConditionKind> {
     Ok(match self {
       Expression::Void(location) => return Err(raise_error(location.clone(), "Cannot check void")),
@@ -313,17 +314,17 @@ impl Expression {
           "Cannot use compound as a condition",
         ))
       }
-      Expression::Condition(condition, _) => ConditionKind::Check(condition.to_string()),
+      Expression::Condition(condition, _) => ConditionKind::Check(condition.do_to_string(inverted)),
       Expression::Scoreboard(scoreboard, _) => {
-        ConditionKind::Check(format!("unless score {} matches 0", scoreboard.to_string()))
+        ConditionKind::Check(format!("{} score {} matches 0", if inverted {"if"} else {"unless"}, scoreboard.to_string()))
       }
       Expression::Storage(_, _) => {
         let scoreboard = compiler.copy_to_scoreboard(code, self, namespace)?;
-        ConditionKind::Check(format!("unless score {} matches 0", scoreboard.to_string()))
+        ConditionKind::Check(format!("{} score {} matches 0", if inverted {"if"} else {"unless"}, scoreboard.to_string()))
       }
       Expression::Macro(_, _) => {
         let scoreboard = compiler.copy_to_scoreboard(code, self, namespace)?;
-        ConditionKind::Check(format!("unless score {} matches 0", scoreboard.to_string()))
+        ConditionKind::Check(format!("{} score {} matches 0", if inverted {"if"} else {"unless"}, scoreboard.to_string()))
       }
     })
   }

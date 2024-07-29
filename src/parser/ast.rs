@@ -81,6 +81,7 @@ pub enum Statement {
   Comment(String),
   Expression(Expression),
   IfStatement(IfStatement),
+  WhileLoop(WhileLoop),
   Return(Option<Expression>),
 }
 
@@ -213,6 +214,12 @@ pub struct IfStatement {
   pub condition: Expression,
   pub block: Vec<Statement>,
   pub child: Option<ElseStatement>,
+}
+
+#[derive(Debug)]
+pub struct WhileLoop {
+  pub condition: Expression,
+  pub block: Vec<Statement>,
 }
 
 #[derive(Debug)]

@@ -78,13 +78,17 @@ fn load() {
 }
 
 fn %add($a, $b) {
+  $result = $a
   if $a == 0 {
     return $b
-  } else if $b == 0 {
-    return $a
-  } else {
-    return $a + $b
   }
+
+  while $b > 0 {
+    $result = $result + 1
+    $b = $b - 1
+  }
+
+  return $result
 }
 
 fn print(%text) {

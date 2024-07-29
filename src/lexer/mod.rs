@@ -69,6 +69,7 @@ static KEYWORD_REGISTRY: &[(&str, TokenKind)] = &[
   ("as", TokenKind::AsKeyword),
   ("if", TokenKind::IfKeyword),
   ("else", TokenKind::ElseKeyword),
+  ("while", TokenKind::WhileKeyword),
   ("true", TokenKind::TrueKeyword),
   ("false", TokenKind::FalseKeyword),
   ("return", TokenKind::ReturnKeyword),

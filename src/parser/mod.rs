@@ -1,6 +1,6 @@
 use ast::{
   ArrayType, Command, CommandPart, ElseStatement, KeyValue, Parameter, ParameterKind, ReturnType,
-  StaticExpr,
+  StaticExpr, WhileLoop,
 };
 
 use self::ast::{
@@ -314,6 +314,7 @@ impl Parser {
         Statement::Comment(comment)
       }
       TokenKind::IfKeyword => Statement::IfStatement(self.parse_if_statement()?),
+      TokenKind::WhileKeyword => Statement::WhileLoop(self.parse_while_loop()?),
       TokenKind::ReturnKeyword => Statement::Return(self.parse_return()?),
       _ => Statement::Expression(self.parse_expression()?),
     })
@@ -617,6 +618,14 @@ impl Parser {
       block,
       child,
     })
+  }
+
+  fn parse_while_loop(&mut self) -> Result<WhileLoop> {
+    self.consume();
+    let condition = self.parse_expression()?;
+    let block = self.parse_block()?;
+
+    Ok(WhileLoop { condition, block })
   }
 
   fn parse_list<T>(
