@@ -1,6 +1,6 @@
 use glob::glob;
 use serde::Serialize;
-use std::{fs, path::Path};
+use std::{fmt::Display, fs, path::Path};
 
 use crate::{
   error::{raise_error, raise_floating_error, Location, Result},
@@ -235,7 +235,7 @@ impl FileResource {
         Ok(path) => {
           let filename = path.file_name().expect("Path should be valid");
           if Path::new(&path).is_file() {
-            fs::copy(&path, &dir_path.join(filename)).map_err(raise_floating_error)?;
+            fs::copy(&path, dir_path.join(filename)).map_err(raise_floating_error)?;
           }
         }
         Err(e) => return Err(raise_floating_error(e)),
@@ -250,6 +250,12 @@ impl FileResource {
 pub struct ResourceLocation {
   pub namespace: String,
   pub modules: Vec<String>,
+}
+
+impl Display for ResourceLocation {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    write!(f, "{}:{}", self.namespace, self.modules.join("/"))
+  }
 }
 
 impl ResourceLocation {
@@ -280,10 +286,6 @@ impl ResourceLocation {
     location
   }
 
-  pub fn to_string(&self) -> String {
-    self.namespace.clone() + ":" + &self.modules.join("/")
-  }
-
   pub fn join(&self, suffix: &str) -> String {
     let mut prefix = self.to_string();
     if !self.modules.is_empty() {
@@ -300,19 +302,24 @@ pub struct FunctionLocation {
   pub name: String,
 }
 
+impl Display for FunctionLocation {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    write!(f, "{}", self.module.join(&self.name))
+  }
+}
+
 impl FunctionLocation {
   pub fn new(module: ResourceLocation, name: &str) -> FunctionLocation {
-    FunctionLocation{ module, name: name.to_string() }
+    FunctionLocation {
+      module,
+      name: name.to_string(),
+    }
   }
 
   pub fn flatten(self) -> ResourceLocation {
     let mut result = self.module;
     result.modules.push(self.name);
     result
-  }
-
-  pub fn to_string(&self) -> String {
-    self.module.join(&self.name)
   }
 
   pub fn from_zoglin_resource(
@@ -335,6 +342,12 @@ impl FunctionLocation {
 pub struct StorageLocation {
   pub storage: ResourceLocation,
   pub name: String,
+}
+
+impl Display for StorageLocation {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    write!(f, "{} {}", self.storage, self.name)
+  }
 }
 
 impl StorageLocation {
@@ -362,10 +375,6 @@ impl StorageLocation {
       name,
     }
   }
-
-  pub fn to_string(&self) -> String {
-    format!("{} {}", self.storage.to_string(), self.name)
-  }
 }
 
 #[derive(Clone, Debug)]
@@ -374,11 +383,13 @@ pub struct ScoreboardLocation {
   pub name: String,
 }
 
-impl ScoreboardLocation {
-  pub fn to_string(&self) -> String {
-    format!("{} {}", self.name, self.scoreboard.join("."))
+impl Display for ScoreboardLocation {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    write!(f, "{} {}", self.name, self.scoreboard.join("."))
   }
+}
 
+impl ScoreboardLocation {
   pub fn scoreboard_string(&self) -> String {
     self.scoreboard.join(".")
   }

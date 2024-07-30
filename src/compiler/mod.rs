@@ -367,7 +367,7 @@ impl Compiler {
     context: &mut FunctionContext,
     code: &mut Vec<String>,
   ) -> Result<()> {
-    Ok(match statement {
+    match statement {
       Statement::Command(command) => {
         let result = self.compile_command(code, command, &context.location)?;
         code.push(result);
@@ -397,7 +397,8 @@ impl Compiler {
         }
       }
       Statement::Return(value) => self.compile_return(code, value, context)?,
-    })
+    }
+    Ok(())
   }
 
   fn generate_nested_return(&mut self, code: &mut Vec<String>, return_type: ReturnType) {
@@ -405,10 +406,7 @@ impl Compiler {
       ReturnType::Storage | ReturnType::Scoreboard => {
         "return run scoreboard players reset $should_return"
       }
-      ReturnType::Direct => &format!(
-        "return run function {}",
-        self.reset_direct_return().to_string()
-      ),
+      ReturnType::Direct => &format!("return run function {}", self.reset_direct_return()),
     };
     code.push(format!("execute if score $should_return zoglin.internal.vars matches -2147483648..2147483647 run {return_command}"));
   }
@@ -509,10 +507,7 @@ impl Compiler {
           ReturnType::Storage => {
             let storage = StorageLocation::new(definition.location.flatten(), "return".to_string());
             if !ignored {
-              code.push(format!(
-                "data modify storage {} set value false",
-                storage.to_string(),
-              ))
+              code.push(format!("data modify storage {storage} set value false",))
             }
             code.push(command);
             Expression::Storage(storage, location)
@@ -520,10 +515,7 @@ impl Compiler {
           ReturnType::Scoreboard => {
             let scoreboard = ScoreboardLocation::new(definition.location.flatten(), "return");
             if !ignored {
-              code.push(format!(
-                "scoreboard players set {} 0",
-                scoreboard.to_string()
-              ))
+              code.push(format!("scoreboard players set {scoreboard} 0",))
             }
             code.push(command);
             Expression::Scoreboard(scoreboard, location)
@@ -531,9 +523,7 @@ impl Compiler {
           ReturnType::Direct => {
             let scoreboard = self.next_scoreboard(&fn_location.module.namespace);
             code.push(format!(
-              "execute store result score {} run {}",
-              scoreboard.to_string(),
-              command
+              "execute store result score {scoreboard} run {command}",
             ));
             Expression::Scoreboard(scoreboard, location)
           }
@@ -739,10 +729,10 @@ impl Compiler {
     let command = if has_macro_args {
       format!(
         "function {} with storage zoglin:internal/vars macro_args",
-        function_definition.location.to_string()
+        function_definition.location
       )
     } else {
-      format!("function {}", function_definition.location.to_string())
+      format!("function {}", function_definition.location)
     };
     Ok((command, function_definition))
   }
@@ -797,7 +787,7 @@ impl Compiler {
     if if_statement.child.is_some() {
       let if_function = self.next_function("if", context.location.module.namespace.clone());
 
-      code.push(format!("function {}", if_function.to_string()));
+      code.push(format!("function {if_function}"));
       let mut function_code = Vec::new();
 
       let mut if_statement = if_statement;
@@ -979,18 +969,18 @@ impl Compiler {
 
         commands.extend(self.compile_block(context, while_loop.block)?);
 
-        commands.push(format!("function {}", fn_location.to_string()));
-        code.push(format!("function {}", fn_location.to_string()));
+        commands.push(format!("function {fn_location}"));
+        code.push(format!("function {fn_location}"));
         self.add_function_item(Location::blank(), fn_location, commands)?;
       }
 
       ConditionKind::Check(check_code) => {
         fn_location = self.next_function("while", context.location.module.namespace.clone());
-        code.push(format!("function {}", fn_location.to_string()));
+        code.push(format!("function {fn_location}"));
         commands.push(format!("execute {check_code} run return 0"));
 
         commands.extend(self.compile_block(context, while_loop.block)?);
-        commands.push(format!("function {}", fn_location.to_string()));
+        commands.push(format!("function {fn_location}"));
         self.add_function_item(Location::blank(), fn_location, commands)?;
       }
     }

@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt::Display};
 
 use regex::Regex;
 
@@ -50,52 +50,31 @@ pub(super) enum Condition {
   Inverted(Box<Condition>),
 }
 
-impl Condition {
-  fn to_string(&self) -> String {
-    self.do_to_string(false)
+impl Display for Condition {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    write!(f, "{}", self.do_to_string(false))
   }
+}
 
+impl Condition {
   fn do_to_string(&self, invert: bool) -> String {
     let check_str = if invert { "unless" } else { "if" };
     match self {
-      Condition::Less(a, b) => format!(
-        "{check_str} score {a} < {b}",
-        a = a.to_string(),
-        b = b.to_string()
-      ),
+      Condition::Less(a, b) => format!("{check_str} score {a} < {b}",),
       Condition::LessEq(a, b) => {
-        format!(
-          "{check_str} score {a} <= {b}",
-          a = a.to_string(),
-          b = b.to_string()
-        )
+        format!("{check_str} score {a} <= {b}",)
       }
       Condition::Greater(a, b) => {
-        format!(
-          "{check_str} score {a} > {b}",
-          a = a.to_string(),
-          b = b.to_string()
-        )
+        format!("{check_str} score {a} > {b}",)
       }
       Condition::GreaterEq(a, b) => {
-        format!(
-          "{check_str} score {a} >= {b}",
-          a = a.to_string(),
-          b = b.to_string()
-        )
+        format!("{check_str} score {a} >= {b}",)
       }
       Condition::Eq(a, b) => {
-        format!(
-          "{check_str} score {a} = {b}",
-          a = a.to_string(),
-          b = b.to_string()
-        )
+        format!("{check_str} score {a} = {b}",)
       }
       Condition::Match(score, range) => {
-        format!(
-          "{check_str} score {score} matches {range}",
-          score = score.to_string()
-        )
+        format!("{check_str} score {score} matches {range}",)
       }
       Condition::Check(code) => code.clone(),
       Condition::And(a, b) => format!("{a} {b}"),
@@ -201,19 +180,13 @@ impl Expression {
         }
         (format!("from storage {storage}"), StorageKind::Modify)
       }
-      Expression::Storage(location, _) => (
-        format!("from storage {}", location.to_string()),
-        StorageKind::Modify,
-      ),
-      Expression::Scoreboard(location, _) => (
-        format!("scoreboard players get {}", location.to_string()),
+      Expression::Storage(storage, _) => (format!("from storage {storage}",), StorageKind::Modify),
+      Expression::Scoreboard(scoreboard, _) => (
+        format!("scoreboard players get {scoreboard}",),
         StorageKind::Store,
       ),
       Expression::Macro(name, _) => (name.clone(), StorageKind::Macro),
-      Expression::Condition(condition, _) => (
-        format!("execute {}", condition.to_string()),
-        StorageKind::Store,
-      ),
+      Expression::Condition(condition, _) => (format!("execute {}", condition), StorageKind::Store),
     })
   }
 
@@ -265,19 +238,17 @@ impl Expression {
           "Cannot assign compound to a scoreboard variable",
         ))
       }
-      Expression::Storage(location, _) => (
-        format!("data get storage {}", location.to_string()),
-        ScoreKind::Indirect,
-      ),
-      Expression::Scoreboard(location, _) => (
-        format!("= {}", location.to_string()),
+      Expression::Storage(storage, _) => {
+        (format!("data get storage {storage}"), ScoreKind::Indirect)
+      }
+      Expression::Scoreboard(scoreboard, _) => (
+        format!("= {scoreboard}"),
         ScoreKind::Direct("operation".to_string()),
       ),
       Expression::Macro(name, _) => (name.clone(), ScoreKind::Macro),
-      Expression::Condition(condition, _) => (
-        format!("execute {}", condition.to_string()),
-        ScoreKind::Indirect,
-      ),
+      Expression::Condition(condition, _) => {
+        (format!("execute {}", condition), ScoreKind::Indirect)
+      }
     })
   }
 
@@ -320,24 +291,21 @@ impl Expression {
       }
       Expression::Condition(condition, _) => ConditionKind::Check(condition.do_to_string(inverted)),
       Expression::Scoreboard(scoreboard, _) => ConditionKind::Check(format!(
-        "{} score {} matches 0",
+        "{} score {scoreboard} matches 0",
         if inverted { "if" } else { "unless" },
-        scoreboard.to_string()
       )),
       Expression::Storage(_, _) => {
         let scoreboard = compiler.copy_to_scoreboard(code, self, namespace)?;
         ConditionKind::Check(format!(
-          "{} score {} matches 0",
+          "{} score {scoreboard} matches 0",
           if inverted { "if" } else { "unless" },
-          scoreboard.to_string()
         ))
       }
       Expression::Macro(_, _) => {
         let scoreboard = compiler.copy_to_scoreboard(code, self, namespace)?;
         ConditionKind::Check(format!(
-          "{} score {} matches 0",
+          "{} score {scoreboard} matches 0",
           if inverted { "if" } else { "unless" },
-          scoreboard.to_string()
         ))
       }
     })
@@ -356,9 +324,9 @@ impl Expression {
       Expression::Double(value, _) => format!("return {}", value.floor() as i32),
       Expression::Boolean(b, _) => {
         if *b {
-          format!("return 1")
+          "return 1".to_string()
         } else {
-          format!("return 0")
+          "return 0".to_string()
         }
       }
       Expression::String(_, location)
@@ -373,15 +341,14 @@ impl Expression {
         ))
       }
       Expression::Storage(storage, _) => {
-        format!("return run data get storage {}", storage.to_string())
+        format!("return run data get storage {storage}")
       }
-      Expression::Scoreboard(scoreboard, _) => format!(
-        "return run scoreboard players get {}",
-        scoreboard.to_string()
-      ),
+      Expression::Scoreboard(scoreboard, _) => {
+        format!("return run scoreboard players get {scoreboard}")
+      }
       Expression::Macro(name, _) => format!("$return $({name})"),
       Expression::Condition(condition, _) => {
-        format!("return run execute {}", condition.to_string())
+        format!("return run execute {}", condition)
       }
     })
   }
@@ -508,7 +475,7 @@ impl Expression {
   }
 }
 
-fn compare_expr_array(l_values: &Vec<Expression>, r_values: &Vec<Expression>) -> Option<bool> {
+fn compare_expr_array(l_values: &[Expression], r_values: &[Expression]) -> Option<bool> {
   if l_values.len() != r_values.len() {
     Some(false)
   } else {

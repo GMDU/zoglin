@@ -100,8 +100,7 @@ impl Compiler {
       (num, other) | (other, num) if num.numeric_value().is_some() => {
         let scoreboard = self.copy_to_scoreboard(code, &other, &location.module.namespace)?;
         code.push(format!(
-          "scoreboard players add {} {}",
-          scoreboard.to_string(),
+          "scoreboard players add {scoreboard} {}",
           num.numeric_value().expect("Numeric value exists"),
         ));
         Ok(Expression::Scoreboard(
@@ -150,8 +149,7 @@ impl Compiler {
       (other, num) if num.numeric_value().is_some() => {
         let scoreboard = self.copy_to_scoreboard(code, &other, &location.module.namespace)?;
         code.push(format!(
-          "scoreboard players remove {} {}",
-          scoreboard.to_string(),
+          "scoreboard players remove {scoreboard} {}",
           num.numeric_value().expect("Numeric value exists"),
         ));
         Ok(Expression::Scoreboard(
@@ -648,12 +646,10 @@ impl Compiler {
       (ConditionKind::Check(a), ConditionKind::Check(b)) => {
         let scoreboard = self.next_scoreboard(&location.module.namespace);
         code.push(format!(
-          "execute {a} run scoreboard players set {} 1",
-          scoreboard.to_string()
+          "execute {a} run scoreboard players set {scoreboard} 1",
         ));
         code.push(format!(
-          "execute {b} run scoreboard players set {} 1",
-          scoreboard.to_string()
+          "execute {b} run scoreboard players set {scoreboard} 1",
         ));
 
         Ok(Expression::Condition(
@@ -675,12 +671,9 @@ impl Compiler {
   ) -> Result<Expression> {
     let right_storage = self.move_to_storage(code, right)?;
     let temp_storage = self.copy_to_storage(code, &left)?;
-    let condition_scoreboard: ScoreboardLocation = self.next_scoreboard(namespace);
+    let condition_scoreboard = self.next_scoreboard(namespace);
     code.push(format!(
-      "execute store success score {score} run data modify storage {temp} set from storage {storage}",
-      score = condition_scoreboard.to_string(),
-      temp = temp_storage.to_string(),
-      storage = right_storage.to_string()
+      "execute store success score {condition_scoreboard} run data modify storage {temp_storage} set from storage {right_storage}",
     ));
     Ok(Expression::Condition(
       Condition::Match(
@@ -703,10 +696,7 @@ impl Compiler {
     let left_scoreboard = self.copy_to_scoreboard(code, &left, namespace)?;
     let right_scoreboard = self.move_to_scoreboard(code, right, namespace)?;
     code.push(format!(
-      "scoreboard players operation {} {}= {}",
-      left_scoreboard.to_string(),
-      operator,
-      right_scoreboard.to_string()
+      "scoreboard players operation {left_scoreboard} {operator}= {right_scoreboard}"
     ));
     Ok(Expression::Scoreboard(left_scoreboard, location))
   }
@@ -776,20 +766,13 @@ impl Compiler {
     let (conversion_code, kind) = value.to_score()?;
     match kind {
       ScoreKind::Direct(operation) => code.push(format!(
-        "scoreboard players {} {} {}",
-        operation,
-        scoreboard.to_string(),
-        conversion_code
+        "scoreboard players {operation} {scoreboard} {conversion_code}",
       )),
       ScoreKind::Macro => code.push(format!(
-        "$scoreboard players set {} $({})",
-        scoreboard.to_string(),
-        conversion_code
+        "$scoreboard players set {scoreboard} $({conversion_code})",
       )),
       ScoreKind::Indirect => code.push(format!(
-        "execute store result score {} run {}",
-        scoreboard.to_string(),
-        conversion_code
+        "execute store result score {scoreboard} run {conversion_code}",
       )),
     }
     Ok(())
@@ -828,15 +811,12 @@ impl Compiler {
     match kind {
       StorageKind::Modify => code.push(format!(
         "data modify storage {storage} set {conversion_code}",
-        storage = storage.to_string()
       )),
       StorageKind::Macro => code.push(format!(
         "$data modify storage {storage} set value $({conversion_code})",
-        storage = storage.to_string()
       )),
       StorageKind::Store => code.push(format!(
         "execute store result storage {storage} int 1 run {conversion_code}",
-        storage = storage.to_string()
       )),
     }
     Ok(())
