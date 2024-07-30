@@ -526,6 +526,7 @@ impl Parser {
         Ok(StaticExpr::MacroVariable(name))
       }
       TokenKind::FunctionKeyword => {
+        self.consume();
         let resource = self.parse_zoglin_resource()?;
         Ok(StaticExpr::ResourceRef {
           resource,

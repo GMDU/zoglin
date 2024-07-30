@@ -42,6 +42,8 @@ made so far.
   - Scoreboard variables ✅
   - Scoreboard selectors
   - Compile-time variables
+- Array indexing
+- Object indexing
 - Compile-time (0/4)
   - Compile-time statements (`if`, `for`, etc.)
   - Compile-time functions

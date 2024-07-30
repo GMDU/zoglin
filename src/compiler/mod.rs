@@ -648,7 +648,7 @@ impl Compiler {
       } => Ok((
         self
           .resolve_zoglin_resource(resource, &location.module)?
-          .location()
+          .fn_location()
           .to_string(),
         false,
       )),
