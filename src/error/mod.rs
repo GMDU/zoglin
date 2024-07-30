@@ -1,18 +1,21 @@
+use std::rc::Rc;
+
 #[derive(Debug, Clone)]
 pub struct Location {
   pub line: usize,
   pub column: usize,
-  pub file: String,
-  pub root: String,
+  pub file: Rc<str>,
+  pub root: Rc<str>,
 }
 
 impl Location {
   pub fn blank() -> Location {
+    let name: Rc<str> = Rc::from("");
     Location {
       line: 0,
       column: 0,
-      file: String::new(),
-      root: String::new(),
+      file: name.clone(),
+      root: name,
     }
   }
 }

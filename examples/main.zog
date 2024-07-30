@@ -1,5 +1,5 @@
 namespace diamond
-# include "setup"
+include "setup"
 
 # fn foo() {
 #   a = 10
@@ -55,7 +55,7 @@ fn foo($a, $b) {
   value = %c
 }
 
-fn load() {
+fn load1() {
   foo(1, 2)
   # foo:bar/baz = 10
   # apples = 2

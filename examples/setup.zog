@@ -42,7 +42,7 @@ module jump {
     }
 
     fn bar() {
-      schedule function &{fn player} 10t
+      schedule function &{player} 10t
     }
   }
 }

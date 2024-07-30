@@ -8,13 +8,17 @@ use self::ast::{
   ResourceContent, Statement, ZoglinResource,
 };
 use crate::{
-  error::{raise_error, raise_warning, Result},
+  error::{raise_error, raise_warning, Location, Result},
   lexer::token::{Token, TokenKind},
 };
 
 pub mod ast;
 mod binary_operation;
-mod json;
+
+fn json5_to_json(text: &str, location: Location) -> Result<String> {
+  let map: serde_json::Value = json5::from_str(text).map_err(|e| raise_error(location, e))?;
+  Ok(serde_json::to_string_pretty(&map).expect("Json is valid, it was just parsed"))
+}
 
 pub struct Parser {
   tokens: Vec<Token>,
@@ -57,48 +61,46 @@ impl Parser {
     kinds.contains(&self.current_including(kinds).kind)
   }
 
-  fn current(&self) -> Token {
+  fn current(&self) -> &Token {
     self.peek(0)
   }
 
-  fn peek(&self, mut offset: usize) -> Token {
+  fn peek(&self, mut offset: usize) -> &Token {
     while self.should_skip(offset, &[]) {
       offset += 1;
     }
-    self.tokens[self.position + offset].clone()
+    &self.tokens[self.position + offset]
   }
 
-  fn current_including(&self, kinds: &[TokenKind]) -> Token {
+  fn current_including(&self, kinds: &[TokenKind]) -> &Token {
     let mut offset = 0;
     while self.should_skip(offset, kinds) {
       offset += 1;
     }
-    self.tokens[self.position + offset].clone()
+    &self.tokens[self.position + offset]
   }
 
-  fn consume(&mut self) -> Token {
-    let current = self.current();
+  fn consume(&mut self) -> &Token {
     while self.should_skip(0, &[]) {
       self.position += 1;
     }
     self.position += 1;
-    current
+    &self.tokens[self.position - 1]
   }
 
-  fn consume_including(&mut self, kinds: &[TokenKind]) -> Token {
-    let current = self.current_including(kinds);
+  fn consume_including(&mut self, kinds: &[TokenKind]) -> &Token {
     while self.should_skip(0, kinds) {
       self.position += 1;
     }
     self.position += 1;
-    current
+    &self.tokens[self.position - 1]
   }
 
-  fn expect(&mut self, kind: TokenKind) -> Result<Token> {
+  fn expect(&mut self, kind: TokenKind) -> Result<&Token> {
     let next = self.consume();
     if next.kind != kind {
       return Err(raise_error(
-        next.location,
+        next.location.clone(),
         format!("Expected {:?}, got {:?}", kind, next.kind),
       ));
     }
@@ -106,8 +108,12 @@ impl Parser {
   }
 
   fn parse_namespace(&mut self) -> Result<Vec<Namespace>> {
-    let file = self.expect(TokenKind::NamespaceKeyword)?.location.file;
-    let name = self.expect(TokenKind::Identifier)?.value;
+    let file = self
+      .expect(TokenKind::NamespaceKeyword)?
+      .location
+      .file
+      .clone();
+    let name = self.expect(TokenKind::Identifier)?.value.clone();
 
     if self.current().kind == TokenKind::LeftBrace {
       return Ok(vec![self.parse_block_namespace(name)?]);
@@ -132,13 +138,13 @@ impl Parser {
     Ok(namespaces)
   }
 
-  fn is_namespace_end(&mut self, file: &String) -> bool {
+  fn is_namespace_end(&mut self, file: &str) -> bool {
     let next = self.current_including(&[TokenKind::EndOfInclude, TokenKind::EndOfFile]);
     if next.kind == TokenKind::EndOfFile {
       return true;
     }
     if next.kind == TokenKind::EndOfInclude {
-      if next.location.file == *file {
+      if &*next.location.file == file {
         return true;
       }
       self.consume_including(&[TokenKind::EndOfInclude]);
@@ -169,7 +175,7 @@ impl Parser {
       TokenKind::FunctionKeyword => Item::Function(self.parse_function()?),
       _ => {
         return Err(raise_error(
-          self.current().location,
+          self.current().location.clone(),
           format!("Unexpected token kind: {:?}", self.current().kind),
         ))
       }
@@ -178,7 +184,7 @@ impl Parser {
 
   fn parse_module(&mut self) -> Result<Module> {
     self.expect(TokenKind::ModuleKeyword)?;
-    let name = self.expect(TokenKind::Identifier)?.value;
+    let name = self.expect(TokenKind::Identifier)?.value.clone();
     self.expect(TokenKind::LeftBrace)?;
 
     let mut items = Vec::new();
@@ -196,7 +202,7 @@ impl Parser {
     let mut alias = None;
     if self.current().kind == TokenKind::AsKeyword {
       self.consume();
-      alias = Some(self.expect(TokenKind::Identifier)?.value);
+      alias = Some(self.expect(TokenKind::Identifier)?.value.clone());
     }
     Ok(Import { path, alias })
   }
@@ -204,19 +210,22 @@ impl Parser {
   fn parse_resource(&mut self) -> Result<Resource> {
     let is_asset = self.consume().kind == TokenKind::AssetKeyword;
     let kind = self.parse_resource_path()?;
-    let location = self.current().location;
+    let location = self.current().location.clone();
 
     let content: ResourceContent = if self.current().kind == TokenKind::Identifier {
-      let name = self.expect(TokenKind::Identifier)?.value;
+      let name = self.expect(TokenKind::Identifier)?.value.clone();
       let token = self.expect(TokenKind::Json)?;
 
-      ResourceContent::Text(name, json::from_json5(&token.value, token.location)?)
+      ResourceContent::Text(name, json5_to_json(&token.value, token.location.clone())?)
     } else {
       let token = self.expect(TokenKind::String)?;
       let (base_path, path) = if token.value.starts_with('/') {
-        (token.location.root, token.value[1..].to_string())
+        (
+          token.location.root.to_string(),
+          token.value[1..].to_string(),
+        )
       } else {
-        (token.location.file, token.value)
+        (token.location.file.to_string(), token.value.clone())
       };
       ResourceContent::File(path, base_path)
     };
@@ -241,10 +250,10 @@ impl Parser {
 
   fn parse_resource_path(&mut self) -> Result<String> {
     if self.current().kind == TokenKind::Dot {
-      return Ok(self.consume().value);
+      return Ok(self.consume().value.clone());
     }
 
-    let mut text = self.expect(TokenKind::Identifier)?.value;
+    let mut text = self.expect(TokenKind::Identifier)?.value.clone();
     while self.current().kind == TokenKind::ForwardSlash {
       text.push('/');
       self.consume();
@@ -266,7 +275,7 @@ impl Parser {
       TokenKind::Ampersand => todo!(),
       _ => ParameterKind::Storage,
     };
-    let name = self.expect(TokenKind::Identifier)?.value;
+    let name = self.expect(TokenKind::Identifier)?.value.clone();
     Ok(Parameter { name, kind })
   }
 
@@ -289,7 +298,7 @@ impl Parser {
       value: name,
       location,
       kind: _,
-    } = self.expect(TokenKind::Identifier)?;
+    } = self.expect(TokenKind::Identifier)?.clone();
 
     self.expect(TokenKind::LeftParen)?;
 
@@ -310,7 +319,7 @@ impl Parser {
     Ok(match self.current_including(&[TokenKind::Comment]).kind {
       TokenKind::CommandBegin => Statement::Command(self.parse_command()?),
       TokenKind::Comment => {
-        let comment = self.consume_including(&[TokenKind::Comment]).value;
+        let comment = self.consume_including(&[TokenKind::Comment]).value.clone();
         Statement::Comment(comment)
       }
       TokenKind::IfKeyword => Statement::IfStatement(self.parse_if_statement()?),
@@ -326,7 +335,7 @@ impl Parser {
 
     while self.current().kind != TokenKind::CommandEnd {
       match self.current().kind {
-        TokenKind::CommandString => parts.push(CommandPart::Literal(self.consume().value)),
+        TokenKind::CommandString => parts.push(CommandPart::Literal(self.consume().value.clone())),
         _ => parts.push(CommandPart::Expression(self.parse_static_expr()?)),
       }
     }
@@ -352,7 +361,7 @@ impl Parser {
             format!("Value {} is too large for a byte.", current.value),
           )
         })?;
-        Expression::Byte(value, current.location)
+        Expression::Byte(value, current.location.clone())
       }
       TokenKind::Short => {
         let value = current.value.parse().map_err(|_| {
@@ -361,10 +370,10 @@ impl Parser {
             format!("Value {} is too large for a short.", current.value),
           )
         })?;
-        Expression::Short(value, current.location)
+        Expression::Short(value, current.location.clone())
       }
       TokenKind::Integer => match current.value.parse() {
-        Ok(value) => Expression::Integer(value, current.location),
+        Ok(value) => Expression::Integer(value, current.location.clone()),
         Err(_) => {
           let value = current.value.parse().map_err(|_| {
             raise_error(
@@ -374,7 +383,7 @@ impl Parser {
           })?;
 
           raise_warning(current.location.clone(), format!("Value {} is too large for an int, automatically converting to a long. If this is intentional, suffix it with 'l'.", current.value));
-          Expression::Long(value, current.location)
+          Expression::Long(value, current.location.clone())
         }
       },
       TokenKind::Long => {
@@ -384,7 +393,7 @@ impl Parser {
             format!("Value {} is too large for a long", current.value),
           )
         })?;
-        Expression::Long(value, current.location)
+        Expression::Long(value, current.location.clone())
       }
       TokenKind::Float => {
         let value = current.value.parse().map_err(|_| {
@@ -393,7 +402,7 @@ impl Parser {
             format!("Value {} is too large for a float.", current.value),
           )
         })?;
-        Expression::Float(value, current.location)
+        Expression::Float(value, current.location.clone())
       }
       TokenKind::Double => {
         let value = current.value.parse().map_err(|_| {
@@ -402,7 +411,7 @@ impl Parser {
             format!("Value {} is too large for a double.", current.value),
           )
         })?;
-        Expression::Double(value, current.location)
+        Expression::Double(value, current.location.clone())
       }
       _ => unreachable!(),
     })
@@ -412,17 +421,17 @@ impl Parser {
     let token = self.consume();
     Ok(Expression::Boolean(
       token.kind == TokenKind::TrueKeyword,
-      token.location,
+      token.location.clone(),
     ))
   }
 
   fn parse_string(&mut self) -> Result<Expression> {
-    let token = self.consume();
+    let token = self.consume().clone();
     Ok(Expression::String(token.value, token.location))
   }
 
   fn parse_array(&mut self) -> Result<Expression> {
-    let location = self.expect(TokenKind::LeftSquare)?.location;
+    let location = self.expect(TokenKind::LeftSquare)?.location.clone();
 
     let array_type = if self.peek(1).kind == TokenKind::Semicolon
       && self.current().kind == TokenKind::Identifier
@@ -433,7 +442,7 @@ impl Parser {
         "L" | "l" => ArrayType::Long,
         _ => {
           return Err(raise_error(
-            self.current().location,
+            self.current().location.clone(),
             format!("\"{}\" is not a valid array type.", self.current().value),
           ))
         }
@@ -464,13 +473,13 @@ impl Parser {
   }
 
   fn parse_compound(&mut self) -> Result<Expression> {
-    let location = self.expect(TokenKind::LeftBrace)?.location;
+    let location = self.expect(TokenKind::LeftBrace)?.location.clone();
     let mut key_values = Vec::new();
 
     while !self.eof() && self.current().kind != TokenKind::LeftBrace {
       if self.current().kind != TokenKind::Identifier && self.current().kind != TokenKind::String {
         return Err(raise_error(
-          self.current().location,
+          self.current().location.clone(),
           "Expected compound key.",
         ));
       }
@@ -479,7 +488,7 @@ impl Parser {
         value: key,
         location,
         kind: _,
-      } = self.consume();
+      } = self.consume().clone();
       self.expect(TokenKind::Colon)?;
       let value = self.parse_expression()?;
       key_values.push(KeyValue {
@@ -522,7 +531,7 @@ impl Parser {
     match self.current().kind {
       TokenKind::Percent => {
         self.consume();
-        let name = self.expect(TokenKind::Identifier)?.value;
+        let name = self.expect(TokenKind::Identifier)?.value.clone();
         Ok(StaticExpr::MacroVariable(name))
       }
       TokenKind::FunctionKeyword => {
@@ -558,7 +567,7 @@ impl Parser {
   fn parse_zoglin_resource(&mut self) -> Result<ZoglinResource> {
     let mut resource = ZoglinResource {
       namespace: None,
-      location: self.current().location,
+      location: self.current().location.clone(),
       modules: Vec::new(),
       name: String::new(),
     };
@@ -569,7 +578,7 @@ impl Parser {
       resource.namespace = Some(String::new());
     }
     loop {
-      let identifier = self.expect(TokenKind::Identifier)?.value;
+      let identifier = self.expect(TokenKind::Identifier)?.value.clone();
       match self.current().kind {
         TokenKind::Colon => {
           self.consume();

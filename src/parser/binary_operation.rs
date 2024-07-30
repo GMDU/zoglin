@@ -72,7 +72,7 @@ impl Parser {
       Dollar => Parser::parse_scoreboard_variable,
       Percent => |parser: &mut Parser| {
         parser.consume();
-        let name = parser.expect(TokenKind::Identifier)?;
+        let name = parser.expect(TokenKind::Identifier)?.clone();
         Ok(Expression::MacroVariable(name.value, name.location))
       },
       _ => return None,
@@ -101,7 +101,7 @@ impl Parser {
 
   pub fn parse_sub_expression(&mut self, min_precedence: u8) -> Result<Expression> {
     let function = Parser::lookup_prefix(self.current().kind).ok_or(raise_error(
-      self.current().location,
+      self.current().location.clone(),
       format!("Expected expression, got {:?}.", self.current().kind),
     ))?;
     let mut left = function(self)?;
@@ -120,7 +120,7 @@ impl Parser {
       location,
       kind,
       value: _,
-    } = self.consume();
+    } = self.consume().clone();
     let operator = Parser::match_operator(kind);
     let precedence = Parser::match_precedence(kind);
     let right = self.parse_sub_expression(precedence.1)?;

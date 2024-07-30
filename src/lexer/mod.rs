@@ -4,12 +4,12 @@ use crate::error::{raise_error, raise_floating_error, raise_warning, Location, R
 
 use self::commands::COMMANDS;
 use glob::glob;
-use std::{collections::HashSet, fs, path::Path};
+use std::{collections::HashSet, fs, path::Path, rc::Rc};
 use token::{Token, TokenKind};
 
 pub struct Lexer {
-  file: String,
-  root: String,
+  file: Rc<str>,
+  root: Rc<str>,
   src: String,
   pub dependent_files: HashSet<String>,
   position: usize,
@@ -78,9 +78,10 @@ static KEYWORD_REGISTRY: &[(&str, TokenKind)] = &[
 impl Lexer {
   pub fn new(file: &str) -> Result<Lexer> {
     let contents = fs::read_to_string(file).map_err(raise_floating_error)?;
+    let file: Rc<str> = Rc::from(file);
     Ok(Lexer {
-      file: file.to_string(),
-      root: file.to_string(),
+      file: file.clone(),
+      root: file.clone(),
       src: contents,
       position: 0,
       is_newline: true,
@@ -96,8 +97,8 @@ impl Lexer {
     include_chain.push(file.to_string());
     let contents = fs::read_to_string(file).map_err(raise_floating_error)?;
     Ok(Lexer {
-      file: file.to_string(),
-      root: root_path.to_string(),
+      file: Rc::from(file),
+      root: Rc::from(root_path),
       src: contents,
       position: 0,
       is_newline: true,
@@ -111,7 +112,7 @@ impl Lexer {
 
   pub fn tokenise(&mut self) -> Result<Vec<Token>> {
     let mut tokens = Vec::new();
-    self.dependent_files.insert(self.file.clone());
+    self.dependent_files.insert(self.file.to_string());
     loop {
       let next = self.next_token()?;
       if next.kind == TokenKind::IncludeKeyword {
@@ -413,12 +414,12 @@ impl Lexer {
       path.push_str(".zog");
     }
     let relative_path = if let Some(stripped) = path.strip_prefix('/') {
-      Path::new(&self.root)
+      Path::new(&*self.root)
         .parent()
         .expect("Path should be valid")
         .join(stripped)
     } else {
-      Path::new(&self.file)
+      Path::new(&*self.file)
         .parent()
         .expect("Path should be valid")
         .join(path)

@@ -2,7 +2,6 @@ use crate::error;
 use error::Location;
 
 #[derive(Debug, Clone)]
-
 pub struct Token {
   pub kind: TokenKind,
   pub value: String,
