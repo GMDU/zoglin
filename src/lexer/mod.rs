@@ -148,16 +148,16 @@ impl Lexer {
     let position = self.position;
     let line = self.line;
     let column = self.column;
-    let mut value = String::new();
+    let mut value = None;
 
     if self.current() == '\0' {
       kind = TokenKind::EndOfFile;
-      value.push('\0');
+      value = Some("\0".to_string());
     } else if self.current() == '{' && self.next_brace_json {
       kind = TokenKind::Json;
       self.next_brace_json = false;
       if !self.tokenise_json() {
-        value = self.src[position + 1..self.position - 1].to_string();
+        value = Some(self.src[position + 1..self.position - 1].to_string());
       }
     } else if self.current() == '/' && self.is_newline {
       self.consume();
@@ -170,10 +170,12 @@ impl Lexer {
     } else if let Some(punctuation) = self.parse_punctuation() {
       kind = punctuation;
     } else if self.current().is_ascii_digit() {
-      (kind, value) = self.parse_number();
+      let (number_kind, number_value) = self.parse_number();
+      kind = number_kind;
+      value = Some(number_value);
     } else if self.current() == '"' || self.current() == '\'' {
       kind = TokenKind::String;
-      value = self.tokenise_string();
+      value = Some(self.tokenise_string());
       self.next_brace_json = false;
     } else if valid_identifier_start(self.current()) {
       kind = self.tokenise_identifier(position, line, column);
@@ -189,9 +191,7 @@ impl Lexer {
     }
 
     self.is_newline = false;
-    if value.is_empty() {
-      value = self.src[position..self.position].to_string();
-    }
+    let value = value.unwrap_or(self.src[position..self.position].to_string());
 
     Ok(Token {
       kind,
