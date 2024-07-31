@@ -100,10 +100,8 @@ pub enum CommandPart {
 pub enum StaticExpr {
   MacroVariable(String),
   FunctionCall(FunctionCall),
-  ResourceRef {
-    resource: ZoglinResource,
-    is_fn: bool,
-  },
+  ResourceRef { resource: ZoglinResource },
+  FunctionRef { path: Option<ZoglinResource> },
 }
 
 #[derive(Debug)]

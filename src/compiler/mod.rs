@@ -632,22 +632,20 @@ impl Compiler {
       StaticExpr::FunctionCall(call) => {
         Ok((self.compile_function_call(code, call, location)?.0, false))
       }
-      StaticExpr::ResourceRef {
-        resource,
-        is_fn: true,
-      } => Ok((
-        self
-          .resolve_zoglin_resource(resource, &location.module)?
-          .fn_location()
-          .to_string(),
+      StaticExpr::FunctionRef { path } => Ok((
+        if let Some(path) = path {
+          self
+            .resolve_zoglin_resource(path, &location.module)?
+            .fn_location()
+            .to_string()
+        } else {
+          location.to_string()
+        },
         false,
       )),
       StaticExpr::MacroVariable(name) => Ok((format!("$({name})"), true)),
 
-      StaticExpr::ResourceRef {
-        resource,
-        is_fn: false,
-      } => Ok((
+      StaticExpr::ResourceRef { resource } => Ok((
         ResourceLocation::from_zoglin_resource(&location.module, &resource).to_string(),
         false,
       )),

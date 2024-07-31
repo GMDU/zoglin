@@ -536,11 +536,11 @@ impl Parser {
       }
       TokenKind::FunctionKeyword => {
         self.consume();
-        let resource = self.parse_zoglin_resource()?;
-        Ok(StaticExpr::ResourceRef {
-          resource,
-          is_fn: true,
-        })
+        let path = match self.current().kind {
+          TokenKind::CommandString => None,
+          _ => Some(self.parse_zoglin_resource()?),
+        };
+        Ok(StaticExpr::FunctionRef { path })
       }
       _ => {
         let resource: ZoglinResource = self.parse_zoglin_resource()?;
@@ -549,10 +549,7 @@ impl Parser {
             self.parse_function_call(resource)?,
           ));
         }
-        Ok(StaticExpr::ResourceRef {
-          resource,
-          is_fn: false,
-        })
+        Ok(StaticExpr::ResourceRef { resource })
       }
     }
   }

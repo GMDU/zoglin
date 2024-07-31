@@ -1,5 +1,5 @@
 namespace diamond
-include "setup"
+# include "setup"
 
 # fn foo() {
 #   a = 10
@@ -51,6 +51,8 @@ fn foo($a, $b) {
   if $c > 0 {
     say C is positive!
   }
+
+  say &{fn}&{fn}
 
   value = %c
 }
