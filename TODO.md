@@ -1,5 +1,4 @@
-## Before initial release
-- Array indexing
+## Before initial 
 - Member access (`a.b`)
 - String indexing (`str[1..2]`)
 - Simple compile-time functions

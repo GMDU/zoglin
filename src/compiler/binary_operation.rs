@@ -1,10 +1,9 @@
 use crate::parser::ast::{self, BinaryOperation, Operator};
 
-use crate::error::{raise_error, Location, Result};
+use crate::error::{raise_error, Result};
 
-use super::expression::ConditionKind;
 use super::{
-  expression::{Condition, Expression, ScoreKind, StorageKind},
+  expression::{Condition, ConditionKind, Expression, ExpressionKind, ScoreKind, StorageKind},
   file_tree::{FunctionLocation, ScoreboardLocation, StorageLocation},
   Compiler,
 };
@@ -78,45 +77,46 @@ impl Compiler {
   ) -> Result<Expression> {
     let left = self.compile_expression(*binary_operation.left, location, code, false)?;
     let right = self.compile_expression(*binary_operation.right, location, code, false)?;
+    let needs_macro = left.needs_macro || right.needs_macro;
 
-    match (left, right) {
-      (Expression::Void(location), _) | (_, Expression::Void(location)) => Err(raise_error(
-        location,
+    match (&left.kind, &right.kind) {
+      (ExpressionKind::Void, _) | (_, ExpressionKind::Void) => Err(raise_error(
+        left.location,
         "Cannot add type void to another value.",
       )),
-      (Expression::Boolean(_, location), _) | (_, Expression::Boolean(_, location)) => {
-        Err(raise_error(location, "Cannot perform plus with boolean."))
-      }
-      (Expression::String(_, location), _) | (_, Expression::String(_, location)) => {
-        Err(raise_error(location, "Cannot perform plus with string."))
-      }
+      (ExpressionKind::Boolean(_), _) | (_, ExpressionKind::Boolean(_)) => Err(raise_error(
+        left.location,
+        "Cannot perform plus with boolean.",
+      )),
+      (ExpressionKind::String(_), _) | (_, ExpressionKind::String(_)) => Err(raise_error(
+        left.location,
+        "Cannot perform plus with string.",
+      )),
       (left, right) if left.numeric_value().is_some() && right.numeric_value().is_some() => {
-        Ok(Expression::Integer(
+        Ok(ExpressionKind::Integer(
           left.numeric_value().expect("Numeric value exists")
             + right.numeric_value().expect("Numeric value exists"),
-          binary_operation.location,
         ))
       }
-      (num, other) | (other, num) if num.numeric_value().is_some() => {
-        let scoreboard = self.copy_to_scoreboard(code, &other, &location.module.namespace)?;
+      (num, _) if num.numeric_value().is_some() => {
+        let scoreboard = self.copy_to_scoreboard(code, &right, &location.module.namespace)?;
         code.push(format!(
           "scoreboard players add {scoreboard} {}",
           num.numeric_value().expect("Numeric value exists"),
         ));
-        Ok(Expression::Scoreboard(
-          scoreboard,
-          binary_operation.location,
-        ))
+        Ok(ExpressionKind::Scoreboard(scoreboard))
       }
-      (left, right) => self.compile_basic_operator(
-        left,
-        right,
-        binary_operation.location,
-        '+',
-        code,
-        &location.module.namespace,
-      ),
+      (_, num) if num.numeric_value().is_some() => {
+        let scoreboard = self.copy_to_scoreboard(code, &left, &location.module.namespace)?;
+        code.push(format!(
+          "scoreboard players add {scoreboard} {}",
+          num.numeric_value().expect("Numeric value exists"),
+        ));
+        Ok(ExpressionKind::Scoreboard(scoreboard))
+      }
+      _ => self.compile_basic_operator(left, right, '+', code, &location.module.namespace),
     }
+    .map(|kind| Expression::with_macro(kind, binary_operation.location, needs_macro))
   }
 
   fn compile_minus(
@@ -127,45 +127,38 @@ impl Compiler {
   ) -> Result<Expression> {
     let left = self.compile_expression(*binary_operation.left, location, code, false)?;
     let right = self.compile_expression(*binary_operation.right, location, code, false)?;
+    let needs_macro = left.needs_macro || right.needs_macro;
 
-    match (left, right) {
-      (Expression::Void(location), _) | (_, Expression::Void(location)) => Err(raise_error(
-        location,
+    match (&left.kind, &right.kind) {
+      (ExpressionKind::Void, _) | (_, ExpressionKind::Void) => Err(raise_error(
+        left.location,
         "Cannot perform subtraction with void.",
       )),
-      (Expression::Boolean(_, location), _) | (_, Expression::Boolean(_, location)) => Err(
-        raise_error(location, "Cannot perform subtraction with boolean."),
-      ),
-      (Expression::String(_, location), _) | (_, Expression::String(_, location)) => Err(
-        raise_error(location, "Cannot perform subtraction with string."),
-      ),
+      (ExpressionKind::Boolean(_), _) | (_, ExpressionKind::Boolean(_)) => Err(raise_error(
+        left.location,
+        "Cannot perform subtraction with boolean.",
+      )),
+      (ExpressionKind::String(_), _) | (_, ExpressionKind::String(_)) => Err(raise_error(
+        left.location,
+        "Cannot perform subtraction with string.",
+      )),
       (left, right) if left.numeric_value().is_some() && right.numeric_value().is_some() => {
-        Ok(Expression::Integer(
+        Ok(ExpressionKind::Integer(
           left.numeric_value().expect("Numeric value exists")
             - right.numeric_value().expect("Numeric value exists"),
-          binary_operation.location,
         ))
       }
-      (other, num) if num.numeric_value().is_some() => {
-        let scoreboard = self.copy_to_scoreboard(code, &other, &location.module.namespace)?;
+      (_, num) if num.numeric_value().is_some() => {
+        let scoreboard = self.copy_to_scoreboard(code, &left, &location.module.namespace)?;
         code.push(format!(
           "scoreboard players remove {scoreboard} {}",
           num.numeric_value().expect("Numeric value exists"),
         ));
-        Ok(Expression::Scoreboard(
-          scoreboard,
-          binary_operation.location,
-        ))
+        Ok(ExpressionKind::Scoreboard(scoreboard))
       }
-      (left, right) => self.compile_basic_operator(
-        left,
-        right,
-        binary_operation.location,
-        '-',
-        code,
-        &location.module.namespace,
-      ),
+      _ => self.compile_basic_operator(left, right, '-', code, &location.module.namespace),
     }
+    .map(|kind| Expression::with_macro(kind, binary_operation.location, needs_macro))
   }
 
   fn compile_multiply(
@@ -176,34 +169,30 @@ impl Compiler {
   ) -> Result<Expression> {
     let left = self.compile_expression(*binary_operation.left, location, code, false)?;
     let right = self.compile_expression(*binary_operation.right, location, code, false)?;
+    let needs_macro = left.needs_macro || right.needs_macro;
 
-    match (left, right) {
-      (Expression::Void(location), _) | (_, Expression::Void(location)) => Err(raise_error(
-        location,
+    match (&left.kind, &right.kind) {
+      (ExpressionKind::Void, _) | (_, ExpressionKind::Void) => Err(raise_error(
+        left.location,
         "Cannot perform multiplication with void.",
       )),
-      (Expression::Boolean(_, location), _) | (_, Expression::Boolean(_, location)) => Err(
-        raise_error(location, "Cannot perform multiplication with boolean."),
-      ),
-      (Expression::String(_, location), _) | (_, Expression::String(_, location)) => Err(
-        raise_error(location, "Cannot perform multiplication with string."),
-      ),
+      (ExpressionKind::Boolean(_), _) | (_, ExpressionKind::Boolean(_)) => Err(raise_error(
+        left.location,
+        "Cannot perform multiplication with boolean.",
+      )),
+      (ExpressionKind::String(_), _) | (_, ExpressionKind::String(_)) => Err(raise_error(
+        left.location,
+        "Cannot perform multiplication with string.",
+      )),
       (left, right) if left.numeric_value().is_some() && right.numeric_value().is_some() => {
-        Ok(Expression::Integer(
+        Ok(ExpressionKind::Integer(
           left.numeric_value().expect("Numeric value exists")
             * right.numeric_value().expect("Numeric value exists"),
-          binary_operation.location,
         ))
       }
-      (left, right) => self.compile_basic_operator(
-        left,
-        right,
-        binary_operation.location,
-        '*',
-        code,
-        &location.module.namespace,
-      ),
+      _ => self.compile_basic_operator(left, right, '*', code, &location.module.namespace),
     }
+    .map(|kind| Expression::with_macro(kind, binary_operation.location, needs_macro))
   }
 
   fn compile_divide(
@@ -214,33 +203,30 @@ impl Compiler {
   ) -> Result<Expression> {
     let left = self.compile_expression(*binary_operation.left, location, code, false)?;
     let right = self.compile_expression(*binary_operation.right, location, code, false)?;
+    let needs_macro = left.needs_macro || right.needs_macro;
 
-    match (left, right) {
-      (Expression::Void(location), _) | (_, Expression::Void(location)) => {
-        Err(raise_error(location, "Cannot perform division with void."))
-      }
-      (Expression::Boolean(_, location), _) | (_, Expression::Boolean(_, location)) => Err(
-        raise_error(location, "Cannot perform division with boolean."),
-      ),
-      (Expression::String(_, location), _) | (_, Expression::String(_, location)) => Err(
-        raise_error(location, "Cannot perform division with string."),
-      ),
+    match (&left.kind, &right.kind) {
+      (ExpressionKind::Void, _) | (_, ExpressionKind::Void) => Err(raise_error(
+        left.location,
+        "Cannot perform division with void.",
+      )),
+      (ExpressionKind::Boolean(_), _) | (_, ExpressionKind::Boolean(_)) => Err(raise_error(
+        left.location,
+        "Cannot perform division with boolean.",
+      )),
+      (ExpressionKind::String(_), _) | (_, ExpressionKind::String(_)) => Err(raise_error(
+        left.location,
+        "Cannot perform division with string.",
+      )),
       (left, right) if left.numeric_value().is_some() && right.numeric_value().is_some() => {
-        Ok(Expression::Integer(
+        Ok(ExpressionKind::Integer(
           left.numeric_value().expect("Numeric value exists")
             / right.numeric_value().expect("Numeric value exists"),
-          binary_operation.location,
         ))
       }
-      (left, right) => self.compile_basic_operator(
-        left,
-        right,
-        binary_operation.location,
-        '/',
-        code,
-        &location.module.namespace,
-      ),
+      _ => self.compile_basic_operator(left, right, '/', code, &location.module.namespace),
     }
+    .map(|kind| Expression::with_macro(kind, binary_operation.location, needs_macro))
   }
 
   fn compile_modulo(
@@ -251,33 +237,30 @@ impl Compiler {
   ) -> Result<Expression> {
     let left = self.compile_expression(*binary_operation.left, location, code, false)?;
     let right = self.compile_expression(*binary_operation.right, location, code, false)?;
+    let needs_macro = left.needs_macro || right.needs_macro;
 
-    match (left, right) {
-      (Expression::Void(location), _) | (_, Expression::Void(location)) => {
-        Err(raise_error(location, "Cannot perform modulo with void."))
-      }
-      (Expression::Boolean(_, location), _) | (_, Expression::Boolean(_, location)) => {
-        Err(raise_error(location, "Cannot perform modulo with boolean."))
-      }
-      (Expression::String(_, location), _) | (_, Expression::String(_, location)) => {
-        Err(raise_error(location, "Cannot perform modulo with string."))
-      }
+    match (&left.kind, &right.kind) {
+      (ExpressionKind::Void, _) | (_, ExpressionKind::Void) => Err(raise_error(
+        left.location,
+        "Cannot perform modulo with void.",
+      )),
+      (ExpressionKind::Boolean(_), _) | (_, ExpressionKind::Boolean(_)) => Err(raise_error(
+        left.location,
+        "Cannot perform modulo with boolean.",
+      )),
+      (ExpressionKind::String(_), _) | (_, ExpressionKind::String(_)) => Err(raise_error(
+        left.location,
+        "Cannot perform modulo with string.",
+      )),
       (left, right) if left.numeric_value().is_some() && right.numeric_value().is_some() => {
-        Ok(Expression::Integer(
+        Ok(ExpressionKind::Integer(
           left.numeric_value().expect("Numeric value exists")
             % right.numeric_value().expect("Numeric value exists"),
-          binary_operation.location,
         ))
       }
-      (left, right) => self.compile_basic_operator(
-        left,
-        right,
-        binary_operation.location,
-        '%',
-        code,
-        &location.module.namespace,
-      ),
+      _ => self.compile_basic_operator(left, right, '%', code, &location.module.namespace),
     }
+    .map(|kind| Expression::with_macro(kind, binary_operation.location, needs_macro))
   }
 
   fn compile_less_than(
@@ -288,53 +271,45 @@ impl Compiler {
   ) -> Result<Expression> {
     let left = self.compile_expression(*binary_operation.left, location, code, false)?;
     let right = self.compile_expression(*binary_operation.right, location, code, false)?;
+    let needs_macro = left.needs_macro || right.needs_macro;
 
-    match (left, right) {
-      (Expression::Void(location), _) | (_, Expression::Void(location)) => {
-        Err(raise_error(location, "Cannot compare with void."))
+    match (&left.kind, &right.kind) {
+      (ExpressionKind::Void, _) | (_, ExpressionKind::Void) => {
+        Err(raise_error(left.location, "Cannot compare with void."))
       }
-      (Expression::Boolean(_, location), _) | (_, Expression::Boolean(_, location)) => {
-        Err(raise_error(location, "Cannot compare with boolean."))
+      (ExpressionKind::Boolean(_), _) | (_, ExpressionKind::Boolean(_)) => {
+        Err(raise_error(left.location, "Cannot compare with boolean."))
       }
-      (Expression::String(_, location), _) | (_, Expression::String(_, location)) => {
-        Err(raise_error(location, "Cannot compare with string."))
+      (ExpressionKind::String(_), _) | (_, ExpressionKind::String(_)) => {
+        Err(raise_error(left.location, "Cannot compare with string."))
       }
       (left, right) if left.numeric_value().is_some() && right.numeric_value().is_some() => {
-        Ok(Expression::Boolean(
+        Ok(ExpressionKind::Boolean(
           left.numeric_value().expect("Numeric value exists")
             < right.numeric_value().expect("Numeric value exists"),
-          binary_operation.location,
         ))
       }
-      (num, other) if num.numeric_value().is_some() => self.compile_match_comparison(
+      (num, _) if num.numeric_value().is_some() => self.compile_match_comparison(
         code,
-        other,
-        binary_operation.location,
+        right,
         format!(
           "{}..",
           num.numeric_value().expect("Numeric value exists") + 1
         ),
         &location.module.namespace,
       ),
-      (other, num) if num.numeric_value().is_some() => self.compile_match_comparison(
+      (_, num) if num.numeric_value().is_some() => self.compile_match_comparison(
         code,
-        other,
-        binary_operation.location,
+        left,
         format!(
           "..{}",
           num.numeric_value().expect("Numeric value exists") - 1
         ),
         &location.module.namespace,
       ),
-      (left, right) => self.compile_comparison_operator(
-        code,
-        left,
-        right,
-        binary_operation.location,
-        "<",
-        &location.module.namespace,
-      ),
+      _ => self.compile_comparison_operator(code, left, right, "<", &location.module.namespace),
     }
+    .map(|kind| Expression::with_macro(kind, binary_operation.location, needs_macro))
   }
 
   fn compile_greater_than(
@@ -345,53 +320,45 @@ impl Compiler {
   ) -> Result<Expression> {
     let left = self.compile_expression(*binary_operation.left, location, code, false)?;
     let right = self.compile_expression(*binary_operation.right, location, code, false)?;
+    let needs_macro = left.needs_macro || right.needs_macro;
 
-    match (left, right) {
-      (Expression::Void(location), _) | (_, Expression::Void(location)) => {
-        Err(raise_error(location, "Cannot compare with void."))
+    match (&left.kind, &right.kind) {
+      (ExpressionKind::Void, _) | (_, ExpressionKind::Void) => {
+        Err(raise_error(left.location, "Cannot compare with void."))
       }
-      (Expression::Boolean(_, location), _) | (_, Expression::Boolean(_, location)) => {
-        Err(raise_error(location, "Cannot compare with boolean."))
+      (ExpressionKind::Boolean(_), _) | (_, ExpressionKind::Boolean(_)) => {
+        Err(raise_error(left.location, "Cannot compare with boolean."))
       }
-      (Expression::String(_, location), _) | (_, Expression::String(_, location)) => {
-        Err(raise_error(location, "Cannot compare with string."))
+      (ExpressionKind::String(_), _) | (_, ExpressionKind::String(_)) => {
+        Err(raise_error(left.location, "Cannot compare with string."))
       }
       (left, right) if left.numeric_value().is_some() && right.numeric_value().is_some() => {
-        Ok(Expression::Boolean(
+        Ok(ExpressionKind::Boolean(
           left.numeric_value().expect("Numeric value exists")
             > right.numeric_value().expect("Numeric value exists"),
-          binary_operation.location,
         ))
       }
-      (num, other) if num.numeric_value().is_some() => self.compile_match_comparison(
+      (num, _) if num.numeric_value().is_some() => self.compile_match_comparison(
         code,
-        other,
-        binary_operation.location,
+        right,
         format!(
           "..{}",
           num.numeric_value().expect("Numeric value exists") - 1
         ),
         &location.module.namespace,
       ),
-      (other, num) if num.numeric_value().is_some() => self.compile_match_comparison(
+      (_, num) if num.numeric_value().is_some() => self.compile_match_comparison(
         code,
-        other,
-        binary_operation.location,
+        left,
         format!(
           "{}..",
           num.numeric_value().expect("Numeric value exists") + 1
         ),
         &location.module.namespace,
       ),
-      (left, right) => self.compile_comparison_operator(
-        code,
-        left,
-        right,
-        binary_operation.location,
-        ">",
-        &location.module.namespace,
-      ),
+      _ => self.compile_comparison_operator(code, left, right, ">", &location.module.namespace),
     }
+    .map(|kind| Expression::with_macro(kind, binary_operation.location, needs_macro))
   }
 
   fn compile_less_than_equals(
@@ -402,47 +369,39 @@ impl Compiler {
   ) -> Result<Expression> {
     let left = self.compile_expression(*binary_operation.left, location, code, false)?;
     let right = self.compile_expression(*binary_operation.right, location, code, false)?;
+    let needs_macro = left.needs_macro || right.needs_macro;
 
-    match (left, right) {
-      (Expression::Void(location), _) | (_, Expression::Void(location)) => {
-        Err(raise_error(location, "Cannot compare with void."))
+    match (&left.kind, &right.kind) {
+      (ExpressionKind::Void, _) | (_, ExpressionKind::Void) => {
+        Err(raise_error(left.location, "Cannot compare with void."))
       }
-      (Expression::String(_, location), _) | (_, Expression::String(_, location)) => {
-        Err(raise_error(location, "Cannot compare with string."))
+      (ExpressionKind::String(_), _) | (_, ExpressionKind::String(_)) => {
+        Err(raise_error(left.location, "Cannot compare with string."))
       }
-      (Expression::Boolean(_, location), _) | (_, Expression::Boolean(_, location)) => {
-        Err(raise_error(location, "Cannot compare with boolean."))
+      (ExpressionKind::Boolean(_), _) | (_, ExpressionKind::Boolean(_)) => {
+        Err(raise_error(left.location, "Cannot compare with boolean."))
       }
       (left, right) if left.numeric_value().is_some() && right.numeric_value().is_some() => {
-        Ok(Expression::Boolean(
+        Ok(ExpressionKind::Boolean(
           left.numeric_value().expect("Numeric value exists")
             <= right.numeric_value().expect("Numeric value exists"),
-          binary_operation.location,
         ))
       }
-      (num, other) if num.numeric_value().is_some() => self.compile_match_comparison(
+      (num, _) if num.numeric_value().is_some() => self.compile_match_comparison(
         code,
-        other,
-        binary_operation.location,
+        right,
         format!("{}..", num.numeric_value().expect("Numeric value exists")),
         &location.module.namespace,
       ),
-      (other, num) if num.numeric_value().is_some() => self.compile_match_comparison(
+      (_, num) if num.numeric_value().is_some() => self.compile_match_comparison(
         code,
-        other,
-        binary_operation.location,
+        left,
         format!("..{}", num.numeric_value().expect("Numeric value exists")),
         &location.module.namespace,
       ),
-      (left, right) => self.compile_comparison_operator(
-        code,
-        left,
-        right,
-        binary_operation.location,
-        "<=",
-        &location.module.namespace,
-      ),
+      _ => self.compile_comparison_operator(code, left, right, "<=", &location.module.namespace),
     }
+    .map(|kind| Expression::with_macro(kind, binary_operation.location, needs_macro))
   }
 
   fn compile_greater_than_equals(
@@ -453,47 +412,39 @@ impl Compiler {
   ) -> Result<Expression> {
     let left = self.compile_expression(*binary_operation.left, location, code, false)?;
     let right = self.compile_expression(*binary_operation.right, location, code, false)?;
+    let needs_macro = left.needs_macro || right.needs_macro;
 
-    match (left, right) {
-      (Expression::Void(location), _) | (_, Expression::Void(location)) => {
-        Err(raise_error(location, "Cannot compare with void."))
+    match (&left.kind, &right.kind) {
+      (ExpressionKind::Void, _) | (_, ExpressionKind::Void) => {
+        Err(raise_error(left.location, "Cannot compare with void."))
       }
-      (Expression::Boolean(_, location), _) | (_, Expression::Boolean(_, location)) => {
-        Err(raise_error(location, "Cannot compare with boolean."))
+      (ExpressionKind::Boolean(_), _) | (_, ExpressionKind::Boolean(_)) => {
+        Err(raise_error(left.location, "Cannot compare with boolean."))
       }
-      (Expression::String(_, location), _) | (_, Expression::String(_, location)) => {
-        Err(raise_error(location, "Cannot compare with string."))
+      (ExpressionKind::String(_), _) | (_, ExpressionKind::String(_)) => {
+        Err(raise_error(left.location, "Cannot compare with string."))
       }
       (left, right) if left.numeric_value().is_some() && right.numeric_value().is_some() => {
-        Ok(Expression::Boolean(
+        Ok(ExpressionKind::Boolean(
           left.numeric_value().expect("Numeric value exists")
             >= right.numeric_value().expect("Numeric value exists"),
-          binary_operation.location,
         ))
       }
-      (num, other) if num.numeric_value().is_some() => self.compile_match_comparison(
+      (num, _) if num.numeric_value().is_some() => self.compile_match_comparison(
         code,
-        other,
-        binary_operation.location,
+        right,
         format!("..{}", num.numeric_value().expect("Numeric value exists")),
         &location.module.namespace,
       ),
-      (other, num) if num.numeric_value().is_some() => self.compile_match_comparison(
+      (_, num) if num.numeric_value().is_some() => self.compile_match_comparison(
         code,
-        other,
-        binary_operation.location,
+        left,
         format!("{}..", num.numeric_value().expect("Numeric value exists")),
         &location.module.namespace,
       ),
-      (left, right) => self.compile_comparison_operator(
-        code,
-        left,
-        right,
-        binary_operation.location,
-        ">=",
-        &location.module.namespace,
-      ),
+      _ => self.compile_comparison_operator(code, left, right, ">=", &location.module.namespace),
     }
+    .map(|kind| Expression::with_macro(kind, binary_operation.location, needs_macro))
   }
 
   fn compile_equals(
@@ -504,42 +455,30 @@ impl Compiler {
   ) -> Result<Expression> {
     let left = self.compile_expression(*binary_operation.left, location, code, false)?;
     let right = self.compile_expression(*binary_operation.right, location, code, false)?;
+    let needs_macro = left.needs_macro || right.needs_macro;
 
     if let Some(equal) = left.equal(&right) {
-      return Ok(Expression::Boolean(equal, binary_operation.location));
+      return Ok(Expression::new(
+        ExpressionKind::Boolean(equal),
+        binary_operation.location,
+      ));
     }
 
-    match (left, right) {
-      (Expression::Void(location), _) | (_, Expression::Void(location)) => {
-        Err(raise_error(location, "Cannot compare with void."))
+    match (&left.kind, &right.kind) {
+      (ExpressionKind::Void, _) | (_, ExpressionKind::Void) => {
+        Err(raise_error(left.location, "Cannot compare with void."))
       }
-      (storage @ Expression::Storage(_, _), other)
-      | (other, storage @ Expression::Storage(_, _)) => self.storage_comparison(
-        code,
-        binary_operation.location,
-        other,
-        storage,
-        true,
-        &location.module.namespace,
-      ),
-      (left, right) if left.to_type().is_numeric() && right.to_type().is_numeric() => self
-        .compile_comparison_operator(
-          code,
-          left,
-          right,
-          binary_operation.location,
-          "=",
-          &location.module.namespace,
-        ),
-      (left, right) => self.storage_comparison(
-        code,
-        binary_operation.location,
-        left,
-        right,
-        true,
-        &location.module.namespace,
-      ),
+      (ExpressionKind::Storage(_), _) | (_, ExpressionKind::Storage(_)) => {
+        self.storage_comparison(code, left, right, true, &location.module.namespace)
+      }
+      (left_kind, right_kind)
+        if left_kind.to_type().is_numeric() && right_kind.to_type().is_numeric() =>
+      {
+        self.compile_comparison_operator(code, left, right, "=", &location.module.namespace)
+      }
+      _ => self.storage_comparison(code, left, right, true, &location.module.namespace),
     }
+    .map(|kind| Expression::with_macro(kind, binary_operation.location, needs_macro))
   }
 
   fn compile_not_equals(
@@ -550,42 +489,30 @@ impl Compiler {
   ) -> Result<Expression> {
     let left = self.compile_expression(*binary_operation.left, location, code, false)?;
     let right = self.compile_expression(*binary_operation.right, location, code, false)?;
+    let needs_macro = left.needs_macro || right.needs_macro;
 
     if let Some(equal) = left.equal(&right) {
-      return Ok(Expression::Boolean(!equal, binary_operation.location));
+      return Ok(Expression::new(
+        ExpressionKind::Boolean(!equal),
+        binary_operation.location,
+      ));
     }
 
-    match (left, right) {
-      (Expression::Void(location), _) | (_, Expression::Void(location)) => {
-        Err(raise_error(location, "Cannot compare with void."))
+    match (&left.kind, &right.kind) {
+      (ExpressionKind::Void, _) | (_, ExpressionKind::Void) => {
+        Err(raise_error(left.location, "Cannot compare with void."))
       }
-      (storage @ Expression::Storage(_, _), other)
-      | (other, storage @ Expression::Storage(_, _)) => self.storage_comparison(
-        code,
-        binary_operation.location,
-        other,
-        storage,
-        false,
-        &location.module.namespace,
-      ),
-      (left, right) if left.to_type().is_numeric() && right.to_type().is_numeric() => self
-        .compile_comparison_operator(
-          code,
-          left,
-          right,
-          binary_operation.location,
-          "!=",
-          &location.module.namespace,
-        ),
-      (left, right) => self.storage_comparison(
-        code,
-        binary_operation.location,
-        left,
-        right,
-        false,
-        &location.module.namespace,
-      ),
+      (ExpressionKind::Storage(_), _) | (_, ExpressionKind::Storage(_)) => {
+        self.storage_comparison(code, left, right, false, &location.module.namespace)
+      }
+      (left_kind, right_kind)
+        if left_kind.to_type().is_numeric() && right_kind.to_type().is_numeric() =>
+      {
+        self.compile_comparison_operator(code, left, right, "!=", &location.module.namespace)
+      }
+      _ => self.storage_comparison(code, left, right, false, &location.module.namespace),
     }
+    .map(|kind| Expression::with_macro(kind, binary_operation.location, needs_macro))
   }
 
   fn compile_logical_and(
@@ -596,27 +523,25 @@ impl Compiler {
   ) -> Result<Expression> {
     let left = self.compile_expression(*binary_operation.left, location, code, false)?;
     let right = self.compile_expression(*binary_operation.right, location, code, false)?;
+    let needs_macro = left.needs_macro || right.needs_macro;
 
     let left_condition = left.to_condition(self, code, &location.module.namespace, false)?;
     let right_condition = right.to_condition(self, code, &location.module.namespace, false)?;
 
     match (left_condition, right_condition) {
       (ConditionKind::Known(false), _) | (_, ConditionKind::Known(false)) => {
-        Ok(Expression::Boolean(false, binary_operation.location))
+        Ok(ExpressionKind::Boolean(false))
       }
-      (ConditionKind::Known(true), ConditionKind::Known(true)) => {
-        Ok(Expression::Boolean(true, binary_operation.location))
-      }
+      (ConditionKind::Known(true), ConditionKind::Known(true)) => Ok(ExpressionKind::Boolean(true)),
       (ConditionKind::Known(true), ConditionKind::Check(other))
-      | (ConditionKind::Check(other), ConditionKind::Known(true)) => Ok(Expression::Condition(
-        Condition::Check(other),
-        binary_operation.location,
-      )),
-      (ConditionKind::Check(a), ConditionKind::Check(b)) => Ok(Expression::Condition(
-        Condition::And(a, b),
-        binary_operation.location,
-      )),
+      | (ConditionKind::Check(other), ConditionKind::Known(true)) => {
+        Ok(ExpressionKind::Condition(Condition::Check(other)))
+      }
+      (ConditionKind::Check(a), ConditionKind::Check(b)) => {
+        Ok(ExpressionKind::Condition(Condition::And(a, b)))
+      }
     }
+    .map(|kind| Expression::with_macro(kind, binary_operation.location, needs_macro))
   }
 
   fn compile_logical_or(
@@ -627,22 +552,22 @@ impl Compiler {
   ) -> Result<Expression> {
     let left = self.compile_expression(*binary_operation.left, location, code, false)?;
     let right = self.compile_expression(*binary_operation.right, location, code, false)?;
+    let needs_macro = left.needs_macro || right.needs_macro;
 
     let left_condition = left.to_condition(self, code, &location.module.namespace, false)?;
     let right_condition = right.to_condition(self, code, &location.module.namespace, false)?;
 
     match (left_condition, right_condition) {
       (ConditionKind::Known(true), _) | (_, ConditionKind::Known(true)) => {
-        Ok(Expression::Boolean(true, binary_operation.location))
+        Ok(ExpressionKind::Boolean(true))
       }
       (ConditionKind::Known(false), ConditionKind::Known(false)) => {
-        Ok(Expression::Boolean(false, binary_operation.location))
+        Ok(ExpressionKind::Boolean(false))
       }
       (ConditionKind::Known(false), ConditionKind::Check(other))
-      | (ConditionKind::Check(other), ConditionKind::Known(false)) => Ok(Expression::Condition(
-        Condition::Check(other),
-        binary_operation.location,
-      )),
+      | (ConditionKind::Check(other), ConditionKind::Known(false)) => {
+        Ok(ExpressionKind::Condition(Condition::Check(other)))
+      }
       (ConditionKind::Check(a), ConditionKind::Check(b)) => {
         let scoreboard = self.next_scoreboard(&location.module.namespace);
         code.push(format!(
@@ -652,53 +577,49 @@ impl Compiler {
           "execute {b} run scoreboard players set {scoreboard} 1",
         ));
 
-        Ok(Expression::Condition(
-          Condition::Match(scoreboard, "1".to_string()),
-          binary_operation.location,
-        ))
+        Ok(ExpressionKind::Condition(Condition::Match(
+          scoreboard,
+          "1".to_string(),
+        )))
       }
     }
+    .map(|kind| Expression::with_macro(kind, binary_operation.location, needs_macro))
   }
 
   fn storage_comparison(
     &mut self,
     code: &mut Vec<String>,
-    location: Location,
     left: Expression,
     right: Expression,
     check_equality: bool,
     namespace: &str,
-  ) -> Result<Expression> {
+  ) -> Result<ExpressionKind> {
     let right_storage = self.move_to_storage(code, right)?;
     let temp_storage = self.copy_to_storage(code, &left)?;
     let condition_scoreboard = self.next_scoreboard(namespace);
     code.push(format!(
       "execute store success score {condition_scoreboard} run data modify storage {temp_storage} set from storage {right_storage}",
     ));
-    Ok(Expression::Condition(
-      Condition::Match(
-        condition_scoreboard,
-        if check_equality { "0" } else { "1" }.to_string(),
-      ),
-      location,
-    ))
+    Ok(ExpressionKind::Condition(Condition::Match(
+      condition_scoreboard,
+      if check_equality { "0" } else { "1" }.to_string(),
+    )))
   }
 
   fn compile_basic_operator(
     &mut self,
     left: Expression,
     right: Expression,
-    location: Location,
     operator: char,
     code: &mut Vec<String>,
     namespace: &str,
-  ) -> Result<Expression> {
+  ) -> Result<ExpressionKind> {
     let left_scoreboard = self.copy_to_scoreboard(code, &left, namespace)?;
     let right_scoreboard = self.move_to_scoreboard(code, right, namespace)?;
     code.push(format!(
       "scoreboard players operation {left_scoreboard} {operator}= {right_scoreboard}"
     ));
-    Ok(Expression::Scoreboard(left_scoreboard, location))
+    Ok(ExpressionKind::Scoreboard(left_scoreboard))
   }
 
   fn compile_comparison_operator(
@@ -706,31 +627,29 @@ impl Compiler {
     code: &mut Vec<String>,
     left: Expression,
     right: Expression,
-    location: Location,
     operator: &str,
     namespace: &str,
-  ) -> Result<Expression> {
+  ) -> Result<ExpressionKind> {
     let left_scoreboard = self.move_to_scoreboard(code, left, namespace)?;
     let right_scoreboard = self.move_to_scoreboard(code, right, namespace)?;
-    Ok(Expression::Condition(
-      Condition::from_operator(operator, left_scoreboard, right_scoreboard),
-      location,
-    ))
+    Ok(ExpressionKind::Condition(Condition::from_operator(
+      operator,
+      left_scoreboard,
+      right_scoreboard,
+    )))
   }
 
   fn compile_match_comparison(
     &mut self,
     code: &mut Vec<String>,
     value: Expression,
-    location: Location,
     range: String,
     namespace: &str,
-  ) -> Result<Expression> {
+  ) -> Result<ExpressionKind> {
     let scoreboard = self.move_to_scoreboard(code, value, namespace)?;
-    Ok(Expression::Condition(
-      Condition::Match(scoreboard, range),
-      location,
-    ))
+    Ok(ExpressionKind::Condition(Condition::Match(
+      scoreboard, range,
+    )))
   }
 
   pub(super) fn copy_to_scoreboard(
@@ -750,7 +669,7 @@ impl Compiler {
     value: Expression,
     namespace: &str,
   ) -> Result<ScoreboardLocation> {
-    if let Expression::Scoreboard(scoreboard, _) = value {
+    if let ExpressionKind::Scoreboard(scoreboard) = value.kind {
       Ok(scoreboard)
     } else {
       self.copy_to_scoreboard(code, &value, namespace)
@@ -768,11 +687,14 @@ impl Compiler {
       ScoreKind::Direct(operation) => code.push(format!(
         "scoreboard players {operation} {scoreboard} {conversion_code}",
       )),
-      ScoreKind::Macro => code.push(format!(
-        "$scoreboard players set {scoreboard} $({conversion_code})",
+      ScoreKind::DirectMacro(operation) => code.push(format!(
+        "$scoreboard players {operation} {scoreboard} {conversion_code}",
       )),
       ScoreKind::Indirect => code.push(format!(
         "execute store result score {scoreboard} run {conversion_code}",
+      )),
+      ScoreKind::IndirectMacro => code.push(format!(
+        "$execute store result score {scoreboard} run {conversion_code}",
       )),
     }
     Ok(())
@@ -794,7 +716,7 @@ impl Compiler {
     code: &mut Vec<String>,
     value: Expression,
   ) -> Result<StorageLocation> {
-    if let Expression::Storage(location, _) = value {
+    if let ExpressionKind::Storage(location) = value.kind {
       Ok(location)
     } else {
       self.copy_to_storage(code, &value)
@@ -812,11 +734,14 @@ impl Compiler {
       StorageKind::Modify => code.push(format!(
         "data modify storage {storage} set {conversion_code}",
       )),
-      StorageKind::Macro => code.push(format!(
-        "$data modify storage {storage} set value $({conversion_code})",
+      StorageKind::MacroModify => code.push(format!(
+        "$data modify storage {storage} set {conversion_code}",
       )),
       StorageKind::Store => code.push(format!(
         "execute store result storage {storage} int 1 run {conversion_code}",
+      )),
+      StorageKind::MacroStore => code.push(format!(
+        "$execute store result storage {storage} int 1 run {conversion_code}",
       )),
     }
     Ok(())

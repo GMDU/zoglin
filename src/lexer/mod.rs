@@ -179,7 +179,7 @@ impl Lexer {
       value = Some(self.tokenise_string());
       self.next_brace_json = false;
     } else if valid_identifier_start(self.current()) {
-      kind = self.tokenise_identifier(position, line, column);
+      kind = self.tokenise_identifier(position, line, column)?;
     } else {
       return Err(raise_error(
         self.location(line, column),
@@ -234,12 +234,25 @@ impl Lexer {
     exact
   }
 
-  fn tokenise_identifier(&mut self, position: usize, line: usize, column: usize) -> TokenKind {
+  fn tokenise_identifier(
+    &mut self,
+    position: usize,
+    line: usize,
+    column: usize,
+  ) -> Result<TokenKind> {
     let mut kind = TokenKind::Identifier;
     while valid_identifier_body(self.current()) {
       self.consume();
     }
     let identifier_value: &str = &self.src[position..self.position];
+
+    if identifier_value.starts_with("__") {
+      return Err(raise_error(
+        self.location(line, column),
+        "Double-underscore identifiers are reserved for internal use",
+      ));
+    }
+
     let keyword = KEYWORD_REGISTRY
       .iter()
       .find(|(text, _)| *text == identifier_value);
@@ -254,7 +267,7 @@ impl Lexer {
       self.line = line;
       self.column = column;
     }
-    kind
+    Ok(kind)
   }
 
   fn skip_whitespace(&mut self) {

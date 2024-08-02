@@ -121,6 +121,7 @@ pub enum Expression {
   ScoreboardVariable(ZoglinResource),
   MacroVariable(String, Location),
   BinaryOperation(BinaryOperation),
+  Index(Index),
 }
 
 impl Expression {
@@ -144,8 +145,15 @@ impl Expression {
       | Expression::ScoreboardVariable(ZoglinResource { location, .. })
       | Expression::MacroVariable(_, location)
       | Expression::BinaryOperation(BinaryOperation { location, .. }) => location.clone(),
+      Expression::Index(index) => index.left.location(),
     }
   }
+}
+
+#[derive(Debug)]
+pub struct Index {
+  pub left: Box<Expression>,
+  pub index: Box<Expression>,
 }
 
 #[derive(Debug)]

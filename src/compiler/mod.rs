@@ -2,13 +2,13 @@ use std::collections::HashSet;
 use std::mem::take;
 use std::{collections::HashMap, path::Path};
 
-use expression::{verify_types, ConditionKind, Expression};
+use expression::{verify_types, ConditionKind, Expression, ExpressionKind};
 use file_tree::{FunctionLocation, ScoreboardLocation, StorageLocation};
 use scope::{FunctionDefinition, ItemDefinition};
 use serde::Serialize;
 
 use crate::parser::ast::{
-  self, ArrayType, Command, ElseStatement, File, FunctionCall, IfStatement, KeyValue,
+  self, ArrayType, Command, ElseStatement, File, FunctionCall, IfStatement, Index, KeyValue,
   ParameterKind, ReturnType, Statement, StaticExpr, WhileLoop, ZoglinResource,
 };
 
@@ -510,7 +510,11 @@ impl Compiler {
               code.push(format!("data modify storage {storage} set value false",))
             }
             code.push(command);
-            Expression::Storage(storage, location)
+            Expression {
+              location,
+              kind: ExpressionKind::Storage(storage),
+              needs_macro: false,
+            }
           }
           ReturnType::Scoreboard => {
             let scoreboard = ScoreboardLocation::new(definition.location.flatten(), "return");
@@ -518,43 +522,69 @@ impl Compiler {
               code.push(format!("scoreboard players set {scoreboard} 0",))
             }
             code.push(command);
-            Expression::Scoreboard(scoreboard, location)
+            Expression {
+              location,
+              kind: ExpressionKind::Scoreboard(scoreboard),
+              needs_macro: false,
+            }
           }
           ReturnType::Direct => {
             let scoreboard = self.next_scoreboard(&fn_location.module.namespace);
             code.push(format!(
               "execute store result score {scoreboard} run {command}",
             ));
-            Expression::Scoreboard(scoreboard, location)
+            Expression {
+              location,
+              kind: ExpressionKind::Scoreboard(scoreboard),
+              needs_macro: false,
+            }
           }
         }
       }
-      ast::Expression::Byte(b, location) => Expression::Byte(b, location),
-      ast::Expression::Short(s, location) => Expression::Short(s, location),
-      ast::Expression::Integer(i, location) => Expression::Integer(i, location),
-      ast::Expression::Long(l, location) => Expression::Long(l, location),
-      ast::Expression::Float(f, location) => Expression::Float(f, location),
-      ast::Expression::Double(d, location) => Expression::Double(d, location),
-      ast::Expression::Boolean(b, location) => Expression::Boolean(b, location),
-      ast::Expression::String(s, location) => Expression::String(s, location),
+      ast::Expression::Byte(b, location) => Expression::new(ExpressionKind::Byte(b), location),
+      ast::Expression::Short(s, location) => Expression::new(ExpressionKind::Short(s), location),
+      ast::Expression::Integer(i, location) => {
+        Expression::new(ExpressionKind::Integer(i), location)
+      }
+      ast::Expression::Long(l, location) => Expression::new(ExpressionKind::Long(l), location),
+      ast::Expression::Float(f, location) => Expression::new(ExpressionKind::Float(f), location),
+      ast::Expression::Double(d, location) => Expression::new(ExpressionKind::Double(d), location),
+      ast::Expression::Boolean(b, location) => {
+        Expression::new(ExpressionKind::Boolean(b), location)
+      }
+      ast::Expression::String(s, location) => Expression::new(ExpressionKind::String(s), location),
       ast::Expression::Array(typ, a, location) => {
         self.compile_array(code, typ, a, location, fn_location)?
       }
       ast::Expression::Compound(key_values, location) => {
         self.compile_compound(code, key_values, location, fn_location)?
       }
-      ast::Expression::Variable(variable) => Expression::Storage(
-        StorageLocation::from_zoglin_resource(fn_location.clone(), &variable),
+      ast::Expression::Variable(variable) => Expression::new(
+        ExpressionKind::Storage(StorageLocation::from_zoglin_resource(
+          fn_location.clone(),
+          &variable,
+        )),
         variable.location,
       ),
-      ast::Expression::ScoreboardVariable(variable) => Expression::Scoreboard(
-        ScoreboardLocation::from_zoglin_resource(fn_location.clone(), &variable),
+      ast::Expression::ScoreboardVariable(variable) => Expression::new(
+        ExpressionKind::Scoreboard(ScoreboardLocation::from_zoglin_resource(
+          fn_location.clone(),
+          &variable,
+        )),
         variable.location,
       ),
-      ast::Expression::MacroVariable(name, location) => Expression::Macro(name, location),
+      ast::Expression::MacroVariable(name, location) => Expression::with_macro(
+        ExpressionKind::Macro(StorageLocation::new(
+          fn_location.clone().flatten(),
+          format!("__{name}"),
+        )),
+        location,
+        true,
+      ),
       ast::Expression::BinaryOperation(binary_operation) => {
         self.compile_binary_operation(binary_operation, fn_location, code)?
       }
+      ast::Expression::Index(index) => self.compile_index(code, index, fn_location)?,
     })
   }
 
@@ -580,16 +610,17 @@ impl Compiler {
     };
     let data_type = verify_types(&types, typ, err_msg)?;
 
-    Ok(match typ {
-      ArrayType::Any => Expression::Array {
+    let kind = match typ {
+      ArrayType::Any => ExpressionKind::Array {
         values: types,
-        location,
         data_type,
       },
-      ArrayType::Byte => Expression::ByteArray(types, location),
-      ArrayType::Int => Expression::IntArray(types, location),
-      ArrayType::Long => Expression::LongArray(types, location),
-    })
+      ArrayType::Byte => ExpressionKind::ByteArray(types),
+      ArrayType::Int => ExpressionKind::IntArray(types),
+      ArrayType::Long => ExpressionKind::LongArray(types),
+    };
+
+    Ok(Expression::new(kind, location))
   }
 
   fn compile_compound(
@@ -618,7 +649,7 @@ impl Compiler {
       }
     }
 
-    Ok(Expression::Compound(types, location))
+    Ok(Expression::new(ExpressionKind::Compound(types), location))
   }
 
   // Returns whether the expression requires a macro command
@@ -685,10 +716,7 @@ impl Compiler {
       .arguments
       .iter()
       .any(|param| param.kind == ParameterKind::Macro);
-
-    if has_macro_args {
-      code.push("data remove storage zoglin:internal/vars macro_args".to_string());
-    }
+    let parameter_storage = function_definition.location.clone().flatten();
 
     for (parameter, argument) in take(&mut function_definition.arguments)
       .into_iter()
@@ -697,27 +725,16 @@ impl Compiler {
       let expr = self.compile_expression(argument, location, code, false)?;
       match parameter.kind {
         ParameterKind::Storage => {
-          let storage = StorageLocation {
-            storage: function_definition.location.clone().flatten(),
-            name: parameter.name,
-          };
+          let storage = StorageLocation::new(parameter_storage.clone(), parameter.name);
           self.set_storage(code, &storage, &expr)?;
         }
         ParameterKind::Scoreboard => {
-          let scoreboard = ScoreboardLocation::new(
-            function_definition.location.clone().flatten(),
-            &parameter.name,
-          );
+          let scoreboard = ScoreboardLocation::new(parameter_storage.clone(), &parameter.name);
           self.set_scoreboard(code, &scoreboard, &expr)?;
         }
         ParameterKind::Macro => {
-          let storage = StorageLocation {
-            storage: ResourceLocation {
-              namespace: "zoglin".to_string(),
-              modules: vec!["internal".to_string(), "vars".to_string()],
-            },
-            name: format!("macro_args.{}", parameter.name),
-          };
+          let storage =
+            StorageLocation::new(parameter_storage.clone(), format!("__{}", parameter.name));
           self.set_storage(code, &storage, &expr)?;
         }
         ParameterKind::CompileTime => todo!(),
@@ -726,7 +743,7 @@ impl Compiler {
 
     let command = if has_macro_args {
       format!(
-        "function {} with storage zoglin:internal/vars macro_args",
+        "function {} with storage {parameter_storage}",
         function_definition.location
       )
     } else {
@@ -920,7 +937,7 @@ impl Compiler {
       self.set_scoreboard(
         code,
         &ScoreboardLocation::of_internal("should_return"),
-        &Expression::Integer(1, Location::blank()),
+        &Expression::new(ExpressionKind::Integer(1), Location::blank()),
       )?;
     }
 
@@ -986,5 +1003,103 @@ impl Compiler {
     context.is_nested = was_nested;
 
     Ok(())
+  }
+
+  fn compile_index(
+    &mut self,
+    code: &mut Vec<String>,
+    index: Index,
+    fn_location: &FunctionLocation,
+  ) -> Result<Expression> {
+    let location = index.left.location();
+    let left = self.compile_expression(*index.left, fn_location, code, false)?;
+    let index = self.compile_expression(*index.index, fn_location, code, false)?;
+
+    match left.kind {
+      ExpressionKind::Void
+      | ExpressionKind::Byte(_)
+      | ExpressionKind::Short(_)
+      | ExpressionKind::Integer(_)
+      | ExpressionKind::Long(_)
+      | ExpressionKind::Float(_)
+      | ExpressionKind::Double(_)
+      | ExpressionKind::Boolean(_)
+      | ExpressionKind::String(_)
+      | ExpressionKind::Compound(_)
+      | ExpressionKind::Scoreboard(_)
+      | ExpressionKind::Condition(_) => {
+        Err(raise_error(left.location, "Can only index into arrays."))
+      }
+
+      ExpressionKind::ByteArray(values)
+      | ExpressionKind::IntArray(values)
+      | ExpressionKind::LongArray(values)
+      | ExpressionKind::Array { values, .. }
+        if index.kind.numeric_value().is_some() =>
+      {
+        let numeric = index.kind.numeric_value().expect("Numeric value exists");
+        let numeric = if numeric > 0 {
+          numeric as usize
+        } else if -numeric as usize > values.len() {
+          return Err(raise_error(location, "Index out of bounds."));
+        } else {
+          (values.len() as i32 + numeric) as usize
+        };
+
+        values
+          .into_iter()
+          .nth(numeric)
+          .ok_or(raise_error(location, "Index out of bound."))
+      }
+
+      ExpressionKind::Storage(mut storage) | ExpressionKind::Macro(mut storage)
+        if index.kind.numeric_value().is_some() =>
+      {
+        let index = index.kind.numeric_value().expect("Numeric value exists");
+        storage.name = format!("{}[{index}]", storage.name);
+        Ok(Expression::new(ExpressionKind::Storage(storage), location))
+      }
+
+      ExpressionKind::ByteArray(_)
+      | ExpressionKind::IntArray(_)
+      | ExpressionKind::LongArray(_)
+      | ExpressionKind::Array { .. }
+      | ExpressionKind::Storage(_)
+      | ExpressionKind::Macro(_) => self.compile_dynamic_index(code, left, index, location),
+    }
+  }
+
+  fn compile_dynamic_index(
+    &mut self,
+    code: &mut Vec<String>,
+    left: Expression,
+    index: Expression,
+    location: Location,
+  ) -> Result<Expression> {
+    if let ExpressionKind::Macro(index) = index.kind {
+      let mut storage = self.move_to_storage(code, left)?;
+      storage.name = format!("{}[$({})]", storage.name, index.name);
+      return Ok(Expression::with_macro(ExpressionKind::Storage(storage), location, true));
+    }
+
+    let dynamic_index = self.dynamic_index();
+    let storage = dynamic_index.clone().flatten();
+    let fn_command = format!("function {dynamic_index} with storage {storage}");
+
+    self.set_storage(
+      code,
+      &StorageLocation::new(storage.clone(), "target".to_string()),
+      &left,
+    )?;
+    self.set_storage(
+      code,
+      &StorageLocation::new(storage.clone(), "__index".to_string()),
+      &index,
+    )?;
+    code.push(fn_command);
+    Ok(Expression::new(
+      ExpressionKind::Storage(StorageLocation::new(storage, "return".to_string())),
+      location,
+    ))
   }
 }
