@@ -12,12 +12,14 @@ use super::{
   Compiler,
 };
 
+#[derive(Clone)]
 pub struct Expression {
   pub location: Location,
   pub needs_macro: bool,
   pub kind: ExpressionKind,
 }
 
+#[derive(Clone)]
 pub enum ExpressionKind {
   Void,
   Byte(i8),
@@ -43,6 +45,7 @@ pub enum ExpressionKind {
   Condition(Condition),
 }
 
+#[derive(Clone)]
 pub enum Condition {
   Less(ScoreboardLocation, ScoreboardLocation),
   LessEq(ScoreboardLocation, ScoreboardLocation),
@@ -286,7 +289,10 @@ impl Expression {
         format!("= {scoreboard}"),
         ScoreKind::Direct("operation".to_string()),
       ),
-      ExpressionKind::Macro(storage) => (format!("$({})", storage.name), ScoreKind::DirectMacro("set".to_string())),
+      ExpressionKind::Macro(storage) => (
+        format!("$({})", storage.name),
+        ScoreKind::DirectMacro("set".to_string()),
+      ),
       ExpressionKind::Condition(condition) => {
         (format!("execute {}", condition), ScoreKind::Indirect)
       }
@@ -402,6 +408,22 @@ impl Expression {
   }
 }
 
+#[allow(dead_code)]
+pub enum NbtValue {
+  Byte(i8),
+  Short(i16),
+  Int(i32),
+  Long(i64),
+  Float(f32),
+  Double(f64),
+  ByteArray(Vec<i8>),
+  IntArray(Vec<i32>),
+  LongArray(Vec<i64>),
+  String(String),
+  List(Vec<NbtValue>),
+  Compound(HashMap<String, NbtValue>),
+}
+
 impl ExpressionKind {
   pub fn numeric_value(&self) -> Option<i32> {
     Some(match self {
@@ -411,6 +433,66 @@ impl ExpressionKind {
       ExpressionKind::Long(l) => *l as i32,
       ExpressionKind::Float(f) => f.floor() as i32,
       ExpressionKind::Double(d) => d.floor() as i32,
+      _ => return None,
+    })
+  }
+
+  pub fn compile_time_value(&self) -> Option<NbtValue> {
+    if !self.compile_time_known() {
+      return None;
+    }
+
+    Some(match self {
+      ExpressionKind::Void => return None,
+      ExpressionKind::Byte(b) => NbtValue::Byte(*b),
+      ExpressionKind::Short(s) => NbtValue::Short(*s),
+      ExpressionKind::Integer(i) => NbtValue::Int(*i),
+      ExpressionKind::Long(l) => NbtValue::Long(*l),
+      ExpressionKind::Float(f) => NbtValue::Float(*f),
+      ExpressionKind::Double(d) => NbtValue::Double(*d),
+      ExpressionKind::Boolean(b) => NbtValue::Byte(*b as i8),
+      ExpressionKind::String(s) => NbtValue::String(s.clone()),
+      ExpressionKind::Array { values, .. } => NbtValue::List(
+        values
+          .iter()
+          .map(|value| {
+            value
+              .kind
+              .compile_time_value()
+              .expect("Value is comptime-known")
+          })
+          .collect(),
+      ),
+      ExpressionKind::ByteArray(values) => NbtValue::ByteArray(
+        values
+          .iter()
+          .map(|value| value.kind.numeric_value().expect("Value is comptime-known") as i8)
+          .collect(),
+      ),
+      ExpressionKind::IntArray(values) => NbtValue::IntArray(
+        values
+          .iter()
+          .map(|value| value.kind.numeric_value().expect("Value is comptime-known"))
+          .collect(),
+      ),
+      ExpressionKind::LongArray(values) => NbtValue::LongArray(
+        values
+          .iter()
+          .map(|value| value.kind.numeric_value().expect("Value is comptime-known") as i64)
+          .collect(),
+      ),
+      ExpressionKind::Compound(values) => NbtValue::Compound(values
+        .iter()
+        .map(|(key, value)| {
+          (
+            key.clone(),
+            value
+              .kind
+              .compile_time_value()
+              .expect("Value is comptime-known"),
+          )
+        })
+        .collect()),
       _ => return None,
     })
   }

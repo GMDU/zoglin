@@ -879,9 +879,12 @@ These functions are built in to the Zoglin compiler and allow programmers to do 
 - `@warning`
 - `@metadata`
 - `@zoglin`
+- `@score`
+- `@condition`
+- `@registry`
 
 ## Standard library functions
 These are planned functions to be included in the Zoglin standard library.
 
 - `print`
-- `&score`
+- `&remove`

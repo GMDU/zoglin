@@ -2,7 +2,7 @@ use crate::error::Result;
 use crate::lexer::token::Token;
 use crate::{error::raise_error, lexer::token::TokenKind};
 
-use super::ast::{BinaryOperation, Index};
+use super::ast::{BinaryOperation, Index, Member, MemberKind};
 use super::{
   ast::{Expression, Operator},
   Parser,
@@ -39,7 +39,7 @@ impl Parser {
 
   fn match_precedence(kind: TokenKind) -> (u8, u8) {
     match kind {
-      TokenKind::LeftSquare => (9, 9),
+      TokenKind::LeftSquare | TokenKind::Dot => (9, 9),
       TokenKind::DoubleStar => (8, 7),
       TokenKind::ForwardSlash | TokenKind::Star | TokenKind::Percent => (7, 7),
       TokenKind::Plus | TokenKind::Minus => (6, 6),
@@ -143,6 +143,29 @@ impl Parser {
     }))
   }
 
+  fn parse_member_expr(&mut self, left: Expression) -> Result<Expression> {
+    self.consume();
+    let member = match self.current().kind {
+      TokenKind::Identifier => MemberKind::Literal(self.consume().value.clone()),
+      TokenKind::LeftSquare => {
+        self.consume();
+        let expr = self.parse_expression()?;
+        self.expect(TokenKind::RightSquare)?;
+        MemberKind::Dynamic(expr)
+      }
+      _ => {
+        return Err(raise_error(
+          self.current().location.clone(),
+          "Expected an identifier or square-bracket after member access operator.",
+        ))
+      }
+    };
+    Ok(Expression::Member(Member {
+      left: Box::new(left),
+      member: Box::new(member),
+    }))
+  }
+
   fn lookup_infix(kind: TokenKind) -> Option<InfixFn> {
     let function = match kind {
       TokenKind::Plus
@@ -168,6 +191,7 @@ impl Parser {
       | TokenKind::ForwardSlashEquals
       | TokenKind::PercentEquals => Parser::parse_binary_operation,
       TokenKind::LeftSquare => Parser::parse_index_expr,
+      TokenKind::Dot => Parser::parse_member_expr,
       _ => return None,
     };
     Some(function)

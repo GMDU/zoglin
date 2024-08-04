@@ -2,14 +2,14 @@ use std::collections::HashSet;
 use std::mem::take;
 use std::{collections::HashMap, path::Path};
 
-use expression::{verify_types, ConditionKind, Expression, ExpressionKind};
+use expression::{verify_types, ConditionKind, Expression, ExpressionKind, NbtValue};
 use file_tree::{FunctionLocation, ScoreboardLocation, StorageLocation};
 use scope::{FunctionDefinition, ItemDefinition};
 use serde::Serialize;
 
 use crate::parser::ast::{
   self, ArrayType, Command, ElseStatement, File, FunctionCall, IfStatement, Index, KeyValue,
-  ParameterKind, ReturnType, Statement, StaticExpr, WhileLoop, ZoglinResource,
+  Member, ParameterKind, ReturnType, Statement, StaticExpr, WhileLoop, ZoglinResource,
 };
 
 use crate::error::{raise_error, Location, Result};
@@ -585,6 +585,7 @@ impl Compiler {
         self.compile_binary_operation(binary_operation, fn_location, code)?
       }
       ast::Expression::Index(index) => self.compile_index(code, index, fn_location)?,
+      ast::Expression::Member(member) => self.compile_member(code, member, fn_location)?,
     })
   }
 
@@ -1079,7 +1080,11 @@ impl Compiler {
     if let ExpressionKind::Macro(index) = index.kind {
       let mut storage = self.move_to_storage(code, left)?;
       storage.name = format!("{}[$({})]", storage.name, index.name);
-      return Ok(Expression::with_macro(ExpressionKind::Storage(storage), location, true));
+      return Ok(Expression::with_macro(
+        ExpressionKind::Storage(storage),
+        location,
+        true,
+      ));
     }
 
     let dynamic_index = self.dynamic_index();
@@ -1095,6 +1100,110 @@ impl Compiler {
       code,
       &StorageLocation::new(storage.clone(), "__index".to_string()),
       &index,
+    )?;
+    code.push(fn_command);
+    Ok(Expression::new(
+      ExpressionKind::Storage(StorageLocation::new(storage, "return".to_string())),
+      location,
+    ))
+  }
+
+  fn compile_member(
+    &mut self,
+    code: &mut Vec<String>,
+    member: Member,
+    fn_location: &FunctionLocation,
+  ) -> Result<Expression> {
+    let location = member.left.location();
+    let left = self.compile_expression(*member.left, fn_location, code, false)?;
+    let member = match *member.member {
+      ast::MemberKind::Literal(lit) => {
+        Expression::new(ExpressionKind::String(lit), location.clone())
+      }
+      ast::MemberKind::Dynamic(expr) => self.compile_expression(expr, fn_location, code, false)?,
+    };
+    let member_value = match member.kind.compile_time_value() {
+      Some(value) => match value {
+        NbtValue::String(s) => Some(s),
+        _ => return Err(raise_error(location, "Can only use strings as members")),
+      },
+      None => None,
+    };
+
+    match left.kind {
+      ExpressionKind::Void
+      | ExpressionKind::Byte(_)
+      | ExpressionKind::Short(_)
+      | ExpressionKind::Integer(_)
+      | ExpressionKind::Long(_)
+      | ExpressionKind::Float(_)
+      | ExpressionKind::Double(_)
+      | ExpressionKind::Boolean(_)
+      | ExpressionKind::String(_)
+      | ExpressionKind::Scoreboard(_)
+      | ExpressionKind::Array { .. }
+      | ExpressionKind::ByteArray(_)
+      | ExpressionKind::IntArray(_)
+      | ExpressionKind::LongArray(_)
+      | ExpressionKind::Condition(_) => Err(raise_error(
+        left.location,
+        "Can only access members on compounds.",
+      )),
+
+      ExpressionKind::Compound(map) if member_value.is_some() => {
+        let member = member_value.expect("Value is some");
+        map
+          .get(&member)
+          .ok_or(raise_error(
+            location,
+            format!("Key '{member}' does not exist"),
+          ))
+          .cloned()
+      }
+
+      ExpressionKind::Storage(mut storage) | ExpressionKind::Macro(mut storage)
+        if member_value.is_some() =>
+      {
+        storage.name = format!("{}.{}", storage.name, member_value.expect("Value is some"));
+        Ok(Expression::new(ExpressionKind::Storage(storage), location))
+      }
+
+      ExpressionKind::Compound(_) | ExpressionKind::Storage(_) | ExpressionKind::Macro(_) => {
+        self.compile_dynamic_member(code, left, member, location)
+      }
+    }
+  }
+
+  fn compile_dynamic_member(
+    &mut self,
+    code: &mut Vec<String>,
+    left: Expression,
+    member: Expression,
+    location: Location,
+  ) -> Result<Expression> {
+    if let ExpressionKind::Macro(member) = member.kind {
+      let mut storage = self.move_to_storage(code, left)?;
+      storage.name = format!("{}.\"$({})\"", storage.name, member.name);
+      return Ok(Expression::with_macro(
+        ExpressionKind::Storage(storage),
+        location,
+        true,
+      ));
+    }
+
+    let dynamic_member = self.dynamic_member();
+    let storage = dynamic_member.clone().flatten();
+    let fn_command = format!("function {dynamic_member} with storage {storage}");
+
+    self.set_storage(
+      code,
+      &StorageLocation::new(storage.clone(), "target".to_string()),
+      &left,
+    )?;
+    self.set_storage(
+      code,
+      &StorageLocation::new(storage.clone(), "__member".to_string()),
+      &member,
     )?;
     code.push(fn_command);
     Ok(Expression::new(

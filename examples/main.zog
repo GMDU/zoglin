@@ -2,18 +2,12 @@ namespace diamond
 # include "setup"
 
 fn load() {
-  a = [1, 2, 3][1]
-  b = [1, 2, 3]
-  c = b[2]
-  d = 0
-  e = b[d]
-  index(b, d)
+  a = {a: 1, b: 2}
+  b = {a: 1}.a
+  c = a.b
+  key = "a"
 }
 
-fn index(value, %index) {
-  return value[%index]
-}
-
-fn first(%value) {
-  return %value[0]
+fn a(%value) {
+  return %value.a
 }

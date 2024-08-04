@@ -9,10 +9,12 @@ use super::{
 
 static RESET_DIRECT_RETURN: OnceLock<FunctionLocation> = OnceLock::new();
 static DYNAMIC_INDEX: OnceLock<FunctionLocation> = OnceLock::new();
+static DYNAMIC_MEMBER: OnceLock<FunctionLocation> = OnceLock::new();
+
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 impl Compiler {
-  pub(super) fn reset_direct_return(&mut self) -> &FunctionLocation {
+  pub fn reset_direct_return(&mut self) -> &FunctionLocation {
     RESET_DIRECT_RETURN.get_or_init(|| {
       let location = FunctionLocation::new(
         ResourceLocation::new("zoglin", &["internal", VERSION]),
@@ -33,7 +35,7 @@ impl Compiler {
     })
   }
 
-  pub(super) fn dynamic_index(&mut self) -> &FunctionLocation {
+  pub fn dynamic_index(&mut self) -> &FunctionLocation {
     DYNAMIC_INDEX.get_or_init(|| {
       let location = FunctionLocation::new(
         ResourceLocation::new("zoglin", &["internal", VERSION]),
@@ -45,7 +47,28 @@ impl Compiler {
           location.clone(),
           vec![
             format!(
-              "$data modify storage zoglin:internal/{VERSION}/dynamic_index return set from storage zoglin:internal/{VERSION}/dynamic_index target[$(index)]"
+              "$data modify storage zoglin:internal/{VERSION}/dynamic_index return set from storage zoglin:internal/{VERSION}/dynamic_index target[$(__index)]"
+            ),
+          ],
+        )
+        .expect("Function should not already be defined");
+      location
+    })
+  }
+
+  pub fn dynamic_member(&mut self) -> &FunctionLocation {
+    DYNAMIC_MEMBER.get_or_init(|| {
+      let location = FunctionLocation::new(
+        ResourceLocation::new("zoglin", &["internal", VERSION]),
+        "dynamic_member",
+      );
+      self
+        .add_function_item(
+          Location::blank(),
+          location.clone(),
+          vec![
+            format!(
+              "$data modify storage zoglin:internal/{VERSION}/dynamic_member return set from storage zoglin:internal/{VERSION}/dynamic_member target.\"$(__member)\""
             ),
           ],
         )
