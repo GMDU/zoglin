@@ -3,6 +3,7 @@ pub mod token;
 use crate::error::{raise_error, raise_floating_error, raise_warning, Location, Result};
 
 use self::commands::COMMANDS;
+use commands::{KEYWORD_REGISTRY, OPERATOR_REGISTRY};
 use glob::glob;
 use std::{collections::HashSet, fs, path::Path, rc::Rc};
 use token::{Token, TokenKind};
@@ -19,61 +20,6 @@ pub struct Lexer {
   column: usize,
   include_chain: Vec<String>,
 }
-
-static OPERATOR_REGISTRY: &[(&str, TokenKind)] = &[
-  ("(", TokenKind::LeftParen),
-  (")", TokenKind::RightParen),
-  ("[", TokenKind::LeftSquare),
-  ("]", TokenKind::RightSquare),
-  ("{", TokenKind::LeftBrace),
-  ("}", TokenKind::RightBrace),
-  ("/", TokenKind::ForwardSlash),
-  (":", TokenKind::Colon),
-  (".", TokenKind::Dot),
-  (";", TokenKind::Semicolon),
-  (",", TokenKind::Comma),
-  ("+", TokenKind::Plus),
-  ("-", TokenKind::Minus),
-  ("*", TokenKind::Star),
-  ("%", TokenKind::Percent),
-  ("**", TokenKind::DoubleStar),
-  ("<<", TokenKind::LeftShift),
-  (">>", TokenKind::RightShift),
-  ("<", TokenKind::LessThan),
-  (">", TokenKind::GreaterThan),
-  ("<=", TokenKind::LessThanEquals),
-  (">=", TokenKind::GreaterThanEquals),
-  ("==", TokenKind::DoubleEquals),
-  ("!=", TokenKind::BangEquals),
-  ("&", TokenKind::Ampersand),
-  ("&&", TokenKind::DoubleAmpersand),
-  ("||", TokenKind::DoublePipe),
-  ("!", TokenKind::Bang),
-  ("=", TokenKind::Equals),
-  ("+=", TokenKind::PlusEquals),
-  ("-=", TokenKind::MinusEquals),
-  ("*=", TokenKind::StarEquals),
-  ("/=", TokenKind::ForwardSlashEquals),
-  ("%=", TokenKind::PercentEquals),
-  ("$", TokenKind::Dollar),
-];
-
-static KEYWORD_REGISTRY: &[(&str, TokenKind)] = &[
-  ("namespace", TokenKind::NamespaceKeyword),
-  ("module", TokenKind::ModuleKeyword),
-  ("fn", TokenKind::FunctionKeyword),
-  ("res", TokenKind::ResourceKeyword),
-  ("asset", TokenKind::AssetKeyword),
-  ("include", TokenKind::IncludeKeyword),
-  ("import", TokenKind::ImportKeyword),
-  ("as", TokenKind::AsKeyword),
-  ("if", TokenKind::IfKeyword),
-  ("else", TokenKind::ElseKeyword),
-  ("while", TokenKind::WhileKeyword),
-  ("true", TokenKind::TrueKeyword),
-  ("false", TokenKind::FalseKeyword),
-  ("return", TokenKind::ReturnKeyword),
-];
 
 impl Lexer {
   pub fn new(file: &str) -> Result<Lexer> {
@@ -390,7 +336,8 @@ impl Lexer {
         self.consume();
         kind = TokenKind::Double
       }
-      '.' => {
+      // So that 1.. gets parsed a (1).. rather than (1.).
+      '.' if self.peek(1) != '.' => {
         str_value.push(self.consume());
         kind = TokenKind::Double;
 

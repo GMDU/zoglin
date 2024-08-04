@@ -122,6 +122,7 @@ pub enum Expression {
   MacroVariable(String, Location),
   BinaryOperation(BinaryOperation),
   Index(Index),
+  RangeIndex(RangeIndex),
   Member(Member),
 }
 
@@ -147,6 +148,7 @@ impl Expression {
       | Expression::MacroVariable(_, location)
       | Expression::BinaryOperation(BinaryOperation { location, .. }) => location.clone(),
       Expression::Index(index) => index.left.location(),
+      Expression::RangeIndex(index) => index.left.location(),
       Expression::Member(member) => member.left.location(),
     }
   }
@@ -156,6 +158,13 @@ impl Expression {
 pub struct Index {
   pub left: Box<Expression>,
   pub index: Box<Expression>,
+}
+
+#[derive(Debug)]
+pub struct RangeIndex {
+  pub left: Box<Expression>,
+  pub start: Option<Box<Expression>>,
+  pub end: Option<Box<Expression>>,
 }
 
 #[derive(Debug)]

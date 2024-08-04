@@ -9,7 +9,7 @@ use serde::Serialize;
 
 use crate::parser::ast::{
   self, ArrayType, Command, ElseStatement, File, FunctionCall, IfStatement, Index, KeyValue,
-  Member, ParameterKind, ReturnType, Statement, StaticExpr, WhileLoop, ZoglinResource,
+  Member, ParameterKind, RangeIndex, ReturnType, Statement, StaticExpr, WhileLoop, ZoglinResource,
 };
 
 use crate::error::{raise_error, Location, Result};
@@ -585,6 +585,7 @@ impl Compiler {
         self.compile_binary_operation(binary_operation, fn_location, code)?
       }
       ast::Expression::Index(index) => self.compile_index(code, index, fn_location)?,
+      ast::Expression::RangeIndex(index) => self.compile_range_index(code, index, fn_location)?,
       ast::Expression::Member(member) => self.compile_member(code, member, fn_location)?,
     })
   }
@@ -1026,6 +1027,7 @@ impl Compiler {
       | ExpressionKind::Double(_)
       | ExpressionKind::Boolean(_)
       | ExpressionKind::String(_)
+      | ExpressionKind::SubString(_, _, _)
       | ExpressionKind::Compound(_)
       | ExpressionKind::Scoreboard(_)
       | ExpressionKind::Condition(_) => {
@@ -1108,6 +1110,189 @@ impl Compiler {
     ))
   }
 
+  fn compile_range_index(
+    &mut self,
+    code: &mut Vec<String>,
+    index: RangeIndex,
+    fn_location: &FunctionLocation,
+  ) -> Result<Expression> {
+    let location = index.left.location();
+    let left = self.compile_expression(*index.left, fn_location, code, false)?;
+    let start = if let Some(start) = index.start {
+      self.compile_expression(*start, fn_location, code, false)?
+    } else {
+      Expression::new(ExpressionKind::Integer(0), location.clone())
+    };
+    let end = if let Some(end) = index.end {
+      Some(self.compile_expression(*end, fn_location, code, false)?)
+    } else {
+      None
+    };
+
+    let range_is_const = start.kind.numeric_value().is_some()
+      && !end
+        .as_ref()
+        .is_some_and(|e| e.kind.numeric_value().is_none());
+
+    match left.kind {
+      ExpressionKind::Void
+      | ExpressionKind::Byte(_)
+      | ExpressionKind::Short(_)
+      | ExpressionKind::Integer(_)
+      | ExpressionKind::Long(_)
+      | ExpressionKind::Float(_)
+      | ExpressionKind::Double(_)
+      | ExpressionKind::Boolean(_)
+      | ExpressionKind::Compound(_)
+      | ExpressionKind::Scoreboard(_)
+      | ExpressionKind::Array { .. }
+      | ExpressionKind::ByteArray(_)
+      | ExpressionKind::IntArray(_)
+      | ExpressionKind::LongArray(_)
+      | ExpressionKind::Condition(_) => {
+        Err(raise_error(left.location, "Can only range index strings."))
+      }
+
+      ExpressionKind::String(s) if range_is_const => {
+        let start = start.kind.numeric_value().expect("Value is some");
+        if start < 0 {
+          return Err(raise_error(location, "Range index out of bounds."));
+        }
+        let start = start as usize;
+
+        let end = end
+          .and_then(|e| e.kind.numeric_value())
+          .unwrap_or(s.len() as i32);
+
+        let end = if end > 0 {
+          end as usize
+        } else if -end as usize > s.len() {
+          return Err(raise_error(location, "Range index out of bounds."));
+        } else {
+          (s.len() as i32 + end) as usize
+        };
+
+        if start >= s.len() || end > s.len() {
+          return Err(raise_error(location, "Range index out of bounds."));
+        }
+
+        if end <= start {
+          return Err(raise_error(
+            location,
+            "Start must come before end in range index.",
+          ));
+        }
+
+        Ok(Expression::new(
+          ExpressionKind::String(s[start..end].to_string()),
+          location,
+        ))
+      }
+
+      ExpressionKind::SubString(storage, sub_start, sub_end) if range_is_const => {
+        let start = start.kind.numeric_value().expect("Value is some");
+        if start < 0 {
+          return Err(raise_error(location, "Range index out of bounds."));
+        }
+
+        let end = end.and_then(|e| e.kind.numeric_value());
+
+        if let Some(end) = end {
+          if end >= 0 && end <= start {
+            return Err(raise_error(
+              location,
+              "Start must come before end in range index.",
+            ));
+          }
+        }
+
+        let end = match (end, sub_end) {
+          (None, None) => None,
+          (None, Some(end)) | (Some(end), None) => Some(end),
+          (Some(a), Some(b)) => Some(a + b),
+        };
+
+        Ok(Expression::new(
+          ExpressionKind::SubString(storage, start + sub_start, end),
+          location,
+        ))
+      }
+
+      ExpressionKind::Storage(storage) | ExpressionKind::Macro(storage) if range_is_const => {
+        let start = start.kind.numeric_value().expect("Value is some");
+        if start < 0 {
+          return Err(raise_error(location, "Range index out of bounds."));
+        }
+
+        let end = end.and_then(|e| e.kind.numeric_value());
+
+        if let Some(end) = end {
+          if end >= 0 && end <= start {
+            return Err(raise_error(
+              location,
+              "Start must come before end in range index.",
+            ));
+          }
+        }
+
+        Ok(Expression::new(
+          ExpressionKind::SubString(storage, start, end),
+          location,
+        ))
+      }
+
+      ExpressionKind::String(_)
+      | ExpressionKind::Storage(_)
+      | ExpressionKind::Macro(_)
+      | ExpressionKind::SubString(_, _, _) => {
+        self.compile_dynamic_range_index(code, left, start, end, location)
+      }
+    }
+  }
+
+  // TODO: Handle case where one of the indices is static
+  // TODO: Handle case where both start and end are macros
+  fn compile_dynamic_range_index(
+    &mut self,
+    code: &mut Vec<String>,
+    left: Expression,
+    start: Expression,
+    end: Option<Expression>,
+    location: Location,
+  ) -> Result<Expression> {
+    let dynamic_index = if end.is_some() {
+      self.dynamic_range_index()
+    } else {
+      self.dynamic_range_index_no_end()
+    };
+
+    let storage = dynamic_index.clone().flatten();
+    let fn_command = format!("function {dynamic_index} with storage {storage}");
+
+    self.set_storage(
+      code,
+      &StorageLocation::new(storage.clone(), "target".to_string()),
+      &left,
+    )?;
+    self.set_storage(
+      code,
+      &StorageLocation::new(storage.clone(), "__start".to_string()),
+      &start,
+    )?;
+    if let Some(end) = end {
+      self.set_storage(
+        code,
+        &StorageLocation::new(storage.clone(), "__end".to_string()),
+        &end,
+      )?;
+    }
+    code.push(fn_command);
+    Ok(Expression::new(
+      ExpressionKind::Storage(StorageLocation::new(storage, "return".to_string())),
+      location,
+    ))
+  }
+
   fn compile_member(
     &mut self,
     code: &mut Vec<String>,
@@ -1140,6 +1325,7 @@ impl Compiler {
       | ExpressionKind::Double(_)
       | ExpressionKind::Boolean(_)
       | ExpressionKind::String(_)
+      | ExpressionKind::SubString(_, _, _)
       | ExpressionKind::Scoreboard(_)
       | ExpressionKind::Array { .. }
       | ExpressionKind::ByteArray(_)

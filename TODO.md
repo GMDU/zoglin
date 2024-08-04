@@ -1,5 +1,5 @@
 ## Before initial alpha
-- String indexing (`str[1..2]`)
+- Prefix operators
 - Simple compile-time functions
 - `@score` & `@condition` builtins
 - Default argument values

@@ -2,7 +2,7 @@ use crate::error::Result;
 use crate::lexer::token::Token;
 use crate::{error::raise_error, lexer::token::TokenKind};
 
-use super::ast::{BinaryOperation, Index, Member, MemberKind};
+use super::ast::{BinaryOperation, Index, Member, MemberKind, RangeIndex};
 use super::{
   ast::{Expression, Operator},
   Parser,
@@ -135,11 +135,47 @@ impl Parser {
 
   fn parse_index_expr(&mut self, left: Expression) -> Result<Expression> {
     self.consume();
+    if self.current().kind == TokenKind::DoubleDot {
+      return self.parse_range_index(left, None);
+    }
+
     let index = self.parse_expression()?;
+    if self.current().kind == TokenKind::DoubleDot {
+      return self.parse_range_index(left, Some(index));
+    }
+
     self.expect(TokenKind::RightSquare)?;
     Ok(Expression::Index(Index {
       left: Box::new(left),
       index: Box::new(index),
+    }))
+  }
+
+  fn parse_range_index(
+    &mut self,
+    left: Expression,
+    start: Option<Expression>,
+  ) -> Result<Expression> {
+    let location = self.consume().location.clone();
+
+    let end = if self.current().kind == TokenKind::RightSquare {
+      None
+    } else {
+      Some(self.parse_expression()?)
+    };
+
+    if end.is_none() && start.is_none() {
+      return Err(raise_error(
+        location,
+        "Range indexing must have a start or an end",
+      ));
+    }
+
+    self.expect(TokenKind::RightSquare)?;
+    Ok(Expression::RangeIndex(RangeIndex {
+      left: Box::new(left),
+      start: start.map(Box::new),
+      end: end.map(Box::new),
     }))
   }
 

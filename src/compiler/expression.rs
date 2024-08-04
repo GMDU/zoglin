@@ -40,6 +40,7 @@ pub enum ExpressionKind {
   Compound(HashMap<String, Expression>),
 
   Storage(StorageLocation),
+  SubString(StorageLocation, i32, Option<i32>),
   Scoreboard(ScoreboardLocation),
   Macro(StorageLocation),
   Condition(Condition),
@@ -212,7 +213,18 @@ impl Expression {
         }
         (format!("from storage {storage}"), StorageKind::Modify)
       }
-      ExpressionKind::Storage(storage) => (format!("from storage {storage}",), StorageKind::Modify),
+      ExpressionKind::Storage(storage) => (format!("from storage {storage}"), StorageKind::Modify),
+      ExpressionKind::SubString(storage, start, end) => (
+        format!(
+          "string storage {storage} {start}{}",
+          if let Some(end) = end {
+            format!(" {end}")
+          } else {
+            String::new()
+          }
+        ),
+        StorageKind::Modify,
+      ),
       ExpressionKind::Scoreboard(scoreboard) => (
         format!("scoreboard players get {scoreboard}",),
         StorageKind::Store,
@@ -261,7 +273,7 @@ impl Expression {
         if *b { "1" } else { "0" }.to_string(),
         ScoreKind::Direct("set".to_string()),
       ),
-      ExpressionKind::String(_) => {
+      ExpressionKind::String(_) | ExpressionKind::SubString(_, _, _) => {
         return Err(raise_error(
           self.location.clone(),
           "Cannot assign string to a scoreboard variable",
@@ -322,7 +334,7 @@ impl Expression {
       ExpressionKind::Float(f) => ConditionKind::Known(*f != 0.0),
       ExpressionKind::Double(d) => ConditionKind::Known(*d != 0.0),
       ExpressionKind::Boolean(b) => ConditionKind::Known(*b),
-      ExpressionKind::String(_) => {
+      ExpressionKind::String(_) | ExpressionKind::SubString(_, _, _) => {
         return Err(raise_error(
           self.location.clone(),
           "Cannot use string as a condition",
@@ -384,6 +396,7 @@ impl Expression {
         }
       }
       ExpressionKind::String(_)
+      | ExpressionKind::SubString(_, _, _)
       | ExpressionKind::Array { .. }
       | ExpressionKind::ByteArray(_)
       | ExpressionKind::IntArray(_)
@@ -481,18 +494,20 @@ impl ExpressionKind {
           .map(|value| value.kind.numeric_value().expect("Value is comptime-known") as i64)
           .collect(),
       ),
-      ExpressionKind::Compound(values) => NbtValue::Compound(values
-        .iter()
-        .map(|(key, value)| {
-          (
-            key.clone(),
-            value
-              .kind
-              .compile_time_value()
-              .expect("Value is comptime-known"),
-          )
-        })
-        .collect()),
+      ExpressionKind::Compound(values) => NbtValue::Compound(
+        values
+          .iter()
+          .map(|(key, value)| {
+            (
+              key.clone(),
+              value
+                .kind
+                .compile_time_value()
+                .expect("Value is comptime-known"),
+            )
+          })
+          .collect(),
+      ),
       _ => return None,
     })
   }
@@ -510,6 +525,7 @@ impl ExpressionKind {
       ExpressionKind::Scoreboard(_) => NbtType::Numeric,
       ExpressionKind::Boolean(_) => NbtType::Byte,
       ExpressionKind::String(_) => NbtType::String,
+      ExpressionKind::SubString(_, _, _) => NbtType::String,
       ExpressionKind::Array { .. } => NbtType::List,
       ExpressionKind::ByteArray(_) => NbtType::ByteArray,
       ExpressionKind::IntArray(_) => NbtType::IntArray,
@@ -537,6 +553,7 @@ impl ExpressionKind {
       | ExpressionKind::LongArray(values) => values.iter().all(|e| e.kind.compile_time_known()),
       ExpressionKind::Compound(map) => map.iter().all(|(_, e)| e.kind.compile_time_known()),
       ExpressionKind::Storage(_)
+      | ExpressionKind::SubString(_, _, _)
       | ExpressionKind::Scoreboard(_)
       | ExpressionKind::Condition(_)
       | ExpressionKind::Macro(_) => false,

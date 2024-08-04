@@ -2,10 +2,7 @@ namespace diamond
 # include "setup"
 
 fn load() {
-  a = {a: 1, b: 2}
-  b = {a: 1}.a
-  c = a.b
-  key = "a"
+  str = "Hello"
 }
 
 fn a(%value) {

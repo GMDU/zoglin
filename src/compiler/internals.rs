@@ -9,6 +9,8 @@ use super::{
 
 static RESET_DIRECT_RETURN: OnceLock<FunctionLocation> = OnceLock::new();
 static DYNAMIC_INDEX: OnceLock<FunctionLocation> = OnceLock::new();
+static DYNAMIC_RANGE_INDEX: OnceLock<FunctionLocation> = OnceLock::new();
+static DYNAMIC_RANGE_INDEX_NO_END: OnceLock<FunctionLocation> = OnceLock::new();
 static DYNAMIC_MEMBER: OnceLock<FunctionLocation> = OnceLock::new();
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -48,6 +50,48 @@ impl Compiler {
           vec![
             format!(
               "$data modify storage zoglin:internal/{VERSION}/dynamic_index return set from storage zoglin:internal/{VERSION}/dynamic_index target[$(__index)]"
+            ),
+          ],
+        )
+        .expect("Function should not already be defined");
+      location
+    })
+  }
+
+  pub fn dynamic_range_index(&mut self) -> &FunctionLocation {
+    DYNAMIC_RANGE_INDEX.get_or_init(|| {
+      let location = FunctionLocation::new(
+        ResourceLocation::new("zoglin", &["internal", VERSION]),
+        "dynamic_range_index",
+      );
+      self
+        .add_function_item(
+          Location::blank(),
+          location.clone(),
+          vec![
+            format!(
+              "$data modify storage zoglin:internal/{VERSION}/dynamic_range_index return set string storage zoglin:internal/{VERSION}/dynamic_range_index target $(__start) $(__end)"
+            ),
+          ],
+        )
+        .expect("Function should not already be defined");
+      location
+    })
+  }
+
+  pub fn dynamic_range_index_no_end(&mut self) -> &FunctionLocation {
+    DYNAMIC_RANGE_INDEX_NO_END.get_or_init(|| {
+      let location = FunctionLocation::new(
+        ResourceLocation::new("zoglin", &["internal", VERSION]),
+        "dynamic_range_index_no_end",
+      );
+      self
+        .add_function_item(
+          Location::blank(),
+          location.clone(),
+          vec![
+            format!(
+              "$data modify storage zoglin:internal/{VERSION}/dynamic_range_index_no_end return set string storage zoglin:internal/{VERSION}/dynamic_range_index_no_end target $(__start)"
             ),
           ],
         )

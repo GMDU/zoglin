@@ -47,6 +47,7 @@ pub enum TokenKind {
   ForwardSlash,
   Colon,
   Dot,
+  DoubleDot,
   Semicolon,
   Comma,
   Plus,
