@@ -584,6 +584,9 @@ impl Compiler {
       ast::Expression::BinaryOperation(binary_operation) => {
         self.compile_binary_operation(binary_operation, fn_location, code)?
       }
+      ast::Expression::UnaryExpression(unary_expression) => {
+        self.compile_unary_expression(unary_expression, fn_location, code)?
+      }
       ast::Expression::Index(index) => self.compile_index(code, index, fn_location)?,
       ast::Expression::RangeIndex(index) => self.compile_range_index(code, index, fn_location)?,
       ast::Expression::Member(member) => self.compile_member(code, member, fn_location)?,

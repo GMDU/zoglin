@@ -1,4 +1,4 @@
-use crate::parser::ast::{self, BinaryOperation, Operator};
+use crate::parser::ast::{self, BinaryOperation, Operator, UnaryExpression, UnaryOperator};
 
 use crate::error::{raise_error, Result};
 
@@ -650,6 +650,104 @@ impl Compiler {
     Ok(ExpressionKind::Condition(Condition::Match(
       scoreboard, range,
     )))
+  }
+
+  pub fn compile_unary_expression(
+    &mut self,
+    unary_expression: UnaryExpression,
+    location: &FunctionLocation,
+    code: &mut Vec<String>,
+  ) -> Result<Expression> {
+    match unary_expression.operator {
+      UnaryOperator::LogicalNot => self.compile_logical_not(unary_expression, location, code),
+      UnaryOperator::Negation => self.compile_negation(unary_expression, location, code),
+    }
+  }
+
+  fn compile_logical_not(
+    &mut self,
+    unary_expression: UnaryExpression,
+    location: &FunctionLocation,
+    code: &mut Vec<String>,
+  ) -> Result<Expression> {
+    let operand = self.compile_expression(*unary_expression.operand, location, code, false)?;
+    let needs_macro = operand.needs_macro;
+
+    let condition = operand.to_condition(self, code, &location.module.namespace, true)?;
+
+    let kind = match condition {
+      ConditionKind::Known(b) => ExpressionKind::Boolean(!b),
+      ConditionKind::Check(condition) => ExpressionKind::Condition(Condition::Check(condition)),
+    };
+
+    Ok(Expression::with_macro(
+      kind,
+      unary_expression.location,
+      needs_macro,
+    ))
+  }
+
+  fn compile_negation(
+    &mut self,
+    unary_expression: UnaryExpression,
+    location: &FunctionLocation,
+    code: &mut Vec<String>,
+  ) -> Result<Expression> {
+    let operand = self.compile_expression(*unary_expression.operand, location, code, false)?;
+    let needs_macro = operand.needs_macro;
+
+    let kind = match &operand.kind {
+      ExpressionKind::Void
+      | ExpressionKind::String(_)
+      | ExpressionKind::Array { .. }
+      | ExpressionKind::ByteArray(_)
+      | ExpressionKind::IntArray(_)
+      | ExpressionKind::LongArray(_)
+      | ExpressionKind::Compound(_)
+      | ExpressionKind::SubString(_, _, _)
+      | ExpressionKind::Condition(_)
+      | ExpressionKind::Boolean(_) => {
+        return Err(raise_error(
+          unary_expression.location,
+          "Can only negate numbers",
+        ))
+      }
+
+      ExpressionKind::Byte(b) => ExpressionKind::Byte(-*b),
+      ExpressionKind::Short(s) => ExpressionKind::Short(-*s),
+      ExpressionKind::Integer(i) => ExpressionKind::Integer(-*i),
+      ExpressionKind::Long(l) => ExpressionKind::Long(-*l),
+      ExpressionKind::Float(f) => ExpressionKind::Float(-*f),
+      ExpressionKind::Double(d) => ExpressionKind::Double(-*d),
+
+      ExpressionKind::Storage(storage) => {
+        let temp_storage = self.next_storage();
+        code.push(format!(
+          "{}execute store result storage {temp_storage} int -1 run data get storage {storage}",
+          if needs_macro { "$" } else { "" }
+        ));
+        ExpressionKind::Storage(temp_storage)
+      }
+
+      ExpressionKind::Scoreboard(scoreboard) => {
+        let temp_storage = self.next_storage();
+        code.push(format!(
+          "{}execute store result storage {temp_storage} int -1 run scoreboard players get {scoreboard}",
+          if needs_macro { "$" } else { "" }
+        ));
+        ExpressionKind::Storage(temp_storage)
+      }
+
+      ExpressionKind::Macro(_) => {
+        let temp_storage = self.copy_to_storage(code, &operand)?;
+        code.push(format!(
+          "execute store result storage {temp_storage} int -1 run data get storage {temp_storage}"
+        ));
+        ExpressionKind::Storage(temp_storage)
+      }
+    };
+
+    Ok(Expression::new(kind, unary_expression.location))
   }
 
   pub(super) fn copy_to_scoreboard(

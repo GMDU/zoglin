@@ -121,6 +121,7 @@ pub enum Expression {
   ScoreboardVariable(ZoglinResource),
   MacroVariable(String, Location),
   BinaryOperation(BinaryOperation),
+  UnaryExpression(UnaryExpression),
   Index(Index),
   RangeIndex(RangeIndex),
   Member(Member),
@@ -146,7 +147,8 @@ impl Expression {
       | Expression::Variable(ZoglinResource { location, .. })
       | Expression::ScoreboardVariable(ZoglinResource { location, .. })
       | Expression::MacroVariable(_, location)
-      | Expression::BinaryOperation(BinaryOperation { location, .. }) => location.clone(),
+      | Expression::BinaryOperation(BinaryOperation { location, .. })
+      | Expression::UnaryExpression(UnaryExpression { location, .. }) => location.clone(),
       Expression::Index(index) => index.left.location(),
       Expression::RangeIndex(index) => index.left.location(),
       Expression::Member(member) => member.left.location(),
@@ -236,6 +238,19 @@ pub enum Operator {
   LogicalOr,
   Assign,
   OperatorAssign(Box<Operator>),
+}
+
+#[derive(Debug)]
+pub struct UnaryExpression {
+  pub location: Location,
+  pub operator: UnaryOperator,
+  pub operand: Box<Expression>,
+}
+
+#[derive(Debug, Clone)]
+pub enum UnaryOperator {
+  LogicalNot,
+  Negation,
 }
 
 #[derive(Debug)]

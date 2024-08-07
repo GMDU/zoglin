@@ -1,10 +1,10 @@
 namespace diamond
 # include "setup"
 
-fn load() {
-  str = "Hello"
-}
-
-fn a(%value) {
-  return %value.a
+fn load(%a) {
+  a = -1
+  b = -a
+  $a = 1
+  c = -$a
+  d = -%a
 }
