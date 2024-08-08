@@ -1,10 +1,15 @@
 namespace diamond
 # include "setup"
 
-fn load(%a) {
-  a = -1
-  b = -a
-  $a = 1
-  c = -$a
-  d = -%a
+fn load() {
+  &msg = "Hello"
+  say &{&msg}
+  &msg = "Hi"
+  say &{&msg}
+  conditon = true
+  if conditon {
+    &msg = "Bye"
+    say &{&msg}
+  }
+  say &{&msg}
 }

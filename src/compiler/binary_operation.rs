@@ -54,13 +54,21 @@ impl Compiler {
         Ok(typ)
       }
       ast::Expression::ScoreboardVariable(variable) => {
-        let typ: Expression =
-          self.compile_expression(*binary_operation.right, location, code, false)?;
+        let typ = self.compile_expression(*binary_operation.right, location, code, false)?;
         let scoreboard = ScoreboardLocation::from_zoglin_resource(location.clone(), &variable);
         self.set_scoreboard(code, &scoreboard, &typ)?;
         self.used_scoreboards.insert(scoreboard.scoreboard_string());
 
         Ok(typ)
+      }
+      ast::Expression::ComptimeVariable(name, _) => {
+        let expr = self.compile_expression(*binary_operation.right, location, code, false)?;
+        self
+          .comptime_scopes
+          .last_mut()
+          .expect("The must be at least one scope")
+          .insert(name, expr.clone());
+        Ok(expr)
       }
       _ => Err(raise_error(
         binary_operation.left.location(),

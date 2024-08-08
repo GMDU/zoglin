@@ -96,6 +96,11 @@ impl Parser {
         let name = parser.expect(TokenKind::Identifier)?.clone();
         Ok(Expression::MacroVariable(name.value, name.location))
       },
+      Ampersand => |parser: &mut Parser| {
+        parser.consume();
+        let name = parser.expect(TokenKind::Identifier)?.clone();
+        Ok(Expression::ComptimeVariable(name.value, name.location))
+      },
       Minus | Bang => Parser::parse_prefix_expression,
       _ => return None,
     };

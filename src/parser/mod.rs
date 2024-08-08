@@ -534,6 +534,11 @@ impl Parser {
         let name = self.expect(TokenKind::Identifier)?.value.clone();
         Ok(StaticExpr::MacroVariable(name))
       }
+      TokenKind::Ampersand => {
+        self.consume();
+        let name = self.expect(TokenKind::Identifier)?.value.clone();
+        Ok(StaticExpr::ComptimeVariable(name))
+      }
       TokenKind::FunctionKeyword => {
         self.consume();
         let path = match self.current().kind {

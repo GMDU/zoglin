@@ -12,7 +12,7 @@ use crate::parser::ast::{
   Member, ParameterKind, RangeIndex, ReturnType, Statement, StaticExpr, WhileLoop, ZoglinResource,
 };
 
-use crate::error::{raise_error, Location, Result};
+use crate::error::{raise_error, raise_floating_error, Location, Result};
 
 use self::{
   file_tree::{FileResource, FileTree, Function, Item, Namespace, ResourceLocation, TextResource},
@@ -30,6 +30,7 @@ pub struct Compiler {
   tick_functions: Vec<String>,
   load_functions: Vec<String>,
   scopes: Vec<Scope>,
+  comptime_scopes: Vec<HashMap<String, Expression>>,
   current_scope: usize,
   counters: HashMap<String, usize>,
   namespaces: HashMap<String, Namespace>,
@@ -92,6 +93,15 @@ impl Compiler {
       }
 
       index = scope.parent;
+    }
+    None
+  }
+
+  fn lookup_comptime(&self, name: &str) -> Option<Expression> {
+    for scope in self.comptime_scopes.iter().rev() {
+      if let Some(value) = scope.get(name) {
+        return Some(value.clone());
+      }
     }
     None
   }
@@ -270,6 +280,7 @@ impl Compiler {
       .insert(0, format!("zoglin:generated/{}/load", namespace.name));
 
     self.enter_scope(&namespace.name);
+    self.comptime_scopes.push(HashMap::new());
 
     let resource: ResourceLocation = ResourceLocation {
       namespace: namespace.name.clone(),
@@ -281,6 +292,7 @@ impl Compiler {
     }
 
     self.exit_scope();
+    self.comptime_scopes.pop();
 
     let load_function = Item::Function(Function {
       name: "load".to_string(),
@@ -312,6 +324,7 @@ impl Compiler {
 
   fn compile_module(&mut self, module: ast::Module, mut location: ResourceLocation) -> Result<()> {
     self.enter_scope(&module.name);
+    self.comptime_scopes.push(HashMap::new());
 
     location.modules.push(module.name);
 
@@ -320,6 +333,7 @@ impl Compiler {
     }
 
     self.exit_scope();
+    self.comptime_scopes.pop();
     Ok(())
   }
 
@@ -378,20 +392,24 @@ impl Compiler {
       Statement::IfStatement(if_statement) => {
         let mut sub_context = context.clone();
         sub_context.has_nested_returns = false;
+        self.comptime_scopes.push(HashMap::new());
         self.compile_if_statement(code, if_statement, &mut sub_context)?;
         if sub_context.has_nested_returns {
           context.has_nested_returns = true;
           self.generate_nested_return(code, context.return_type);
         }
+        self.comptime_scopes.pop();
       }
       Statement::WhileLoop(while_loop) => {
-        let mut sub_context = context.clone();
+        let mut sub_context: FunctionContext = context.clone();
         sub_context.has_nested_returns = false;
+        self.comptime_scopes.push(HashMap::new());
         self.compile_while_loop(code, while_loop, &mut sub_context)?;
         if sub_context.has_nested_returns {
           context.has_nested_returns = true;
           self.generate_nested_return(code, context.return_type);
         }
+        self.comptime_scopes.pop();
       }
       Statement::Return(value) => self.compile_return(code, value, context)?,
     }
@@ -423,8 +441,10 @@ impl Compiler {
       is_nested: false,
       has_nested_returns: false,
     };
+    self.comptime_scopes.push(HashMap::new());
 
     let commands = self.compile_block(&mut context, function.items)?;
+    self.comptime_scopes.pop();
     self.add_function_item(function.location, context.location, commands)
   }
 
@@ -578,6 +598,16 @@ impl Compiler {
         location,
         true,
       ),
+      ast::Expression::ComptimeVariable(name, location) => {
+        if let Some(value) = self.lookup_comptime(&name) {
+          return Ok(value.clone());
+        } else {
+          return Err(raise_error(
+            location,
+            format!("The compile-time variable {name} is not in scope."),
+          ));
+        }
+      }
       ast::Expression::BinaryOperation(binary_operation) => {
         self.compile_binary_operation(binary_operation, fn_location, code)?
       }
@@ -677,6 +707,25 @@ impl Compiler {
         false,
       )),
       StaticExpr::MacroVariable(name) => Ok((format!("$({name})"), true)),
+      StaticExpr::ComptimeVariable(name) => {
+        if let Some(value) = self
+          .lookup_comptime(&name)
+        {
+          value
+            .kind
+            .to_comptime_string(true)
+            .ok_or(raise_floating_error(
+              // TODO: Add location
+              "This value cannot be statically resolved.",
+            ))
+            .map(|value| (value, false))
+        } else {
+          Err(raise_floating_error(
+            // TODO: Add a location here
+            format!("The compile-time variable {name} is not in scope."),
+          ))
+        }
+      }
 
       StaticExpr::ResourceRef { resource } => Ok((
         ResourceLocation::from_zoglin_resource(&location.module, &resource).to_string(),

@@ -566,6 +566,101 @@ impl ExpressionKind {
       | ExpressionKind::Macro(_) => false,
     }
   }
+
+  /*pub fn comptime_compatible(&self, top_level: bool) -> bool {
+    match self {
+      ExpressionKind::Void => false,
+      ExpressionKind::Byte(_)
+      | ExpressionKind::Short(_)
+      | ExpressionKind::Integer(_)
+      | ExpressionKind::Long(_)
+      | ExpressionKind::Float(_)
+      | ExpressionKind::Double(_)
+      | ExpressionKind::Boolean(_)
+      | ExpressionKind::String(_) => true,
+      ExpressionKind::Array { values, .. }
+      | ExpressionKind::ByteArray(values)
+      | ExpressionKind::IntArray(values)
+      | ExpressionKind::LongArray(values) => {
+        values.iter().all(|v| v.kind.comptime_compatible(false))
+      }
+      ExpressionKind::Compound(map) => map.values().all(|v| v.kind.comptime_compatible(false)),
+      ExpressionKind::SubString(_, _, _) => false,
+      ExpressionKind::Storage(_) |
+      ExpressionKind::Scoreboard(_) |
+      ExpressionKind::Condition(_) => top_level,
+      ExpressionKind::Macro(_) => false,
+    }
+  }*/
+
+  pub fn to_comptime_string(&self, top_level: bool) -> Option<String> {
+    Some(match self {
+      ExpressionKind::Void => return None,
+      ExpressionKind::Byte(b) => format!("{b}b"),
+      ExpressionKind::Short(s) => format!("{s}s"),
+      ExpressionKind::Integer(i) => i.to_string(),
+      ExpressionKind::Long(l) => format!("{l}l"),
+      ExpressionKind::Float(f) => format!("{f}f"),
+      ExpressionKind::Double(d) => format!("{d}d"),
+      ExpressionKind::Boolean(b) => b.to_string(),
+      ExpressionKind::String(s) => s.clone(),
+      ExpressionKind::Array { values, .. } => return array_to_string(values, ""),
+      ExpressionKind::ByteArray(values) => return array_to_string(values, "B; "),
+      ExpressionKind::IntArray(values) => return array_to_string(values, "I; "),
+      ExpressionKind::LongArray(values) => return array_to_string(values, "L; "),
+      ExpressionKind::Compound(values) => {
+        let value_strings: Vec<_> = values
+          .iter()
+          .filter_map(|(key, value)| {
+            value
+              .kind
+              .to_comptime_string(false)
+              .map(|s| format!("{key}: {s}"))
+          })
+          .collect();
+
+        if value_strings.len() != values.len() {
+          return None;
+        }
+        format!("{{{}}}", value_strings.join(", "))
+      }
+      ExpressionKind::Storage(storage) => {
+        if top_level {
+          storage.to_string()
+        } else {
+          return None;
+        }
+      }
+      ExpressionKind::SubString(_, _, _) => return None,
+      ExpressionKind::Scoreboard(scoreboard) => {
+        if top_level {
+          scoreboard.to_string()
+        } else {
+          return None;
+        }
+      }
+      ExpressionKind::Macro(_) => return None,
+      ExpressionKind::Condition(c) => {
+        if top_level {
+          c.to_string()
+        } else {
+          return None;
+        }
+      }
+    })
+  }
+}
+
+fn array_to_string(values: &[Expression], prefix: &str) -> Option<String> {
+  let value_strings: Vec<_> = values
+    .iter()
+    .filter_map(|value| value.kind.to_comptime_string(false))
+    .collect();
+
+  if value_strings.len() != values.len() {
+    return None;
+  }
+  Some(format!("[{prefix}{}]", value_strings.join(", ")))
 }
 
 impl Expression {

@@ -99,6 +99,7 @@ pub enum CommandPart {
 #[derive(Debug)]
 pub enum StaticExpr {
   MacroVariable(String),
+  ComptimeVariable(String),
   FunctionCall(FunctionCall),
   ResourceRef { resource: ZoglinResource },
   FunctionRef { path: Option<ZoglinResource> },
@@ -120,6 +121,7 @@ pub enum Expression {
   Variable(ZoglinResource),
   ScoreboardVariable(ZoglinResource),
   MacroVariable(String, Location),
+  ComptimeVariable(String, Location),
   BinaryOperation(BinaryOperation),
   UnaryExpression(UnaryExpression),
   Index(Index),
@@ -147,6 +149,7 @@ impl Expression {
       | Expression::Variable(ZoglinResource { location, .. })
       | Expression::ScoreboardVariable(ZoglinResource { location, .. })
       | Expression::MacroVariable(_, location)
+      | Expression::ComptimeVariable(_, location)
       | Expression::BinaryOperation(BinaryOperation { location, .. })
       | Expression::UnaryExpression(UnaryExpression { location, .. }) => location.clone(),
       Expression::Index(index) => index.left.location(),
