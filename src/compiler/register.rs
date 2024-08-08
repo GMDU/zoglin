@@ -60,7 +60,7 @@ impl Compiler {
       .alias
       .clone()
       .unwrap_or_else(|| import.path.name.clone());
-    let path = FunctionLocation::from_zoglin_resource(location, &import.path);
+    let path = FunctionLocation::from_zoglin_resource(location, &import.path, false);
     self.add_import(scope, name, ItemDefinition::Unknown(path));
   }
 

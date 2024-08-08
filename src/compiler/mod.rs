@@ -728,7 +728,7 @@ impl Compiler {
       }
 
       StaticExpr::ResourceRef { resource } => Ok((
-        ResourceLocation::from_zoglin_resource(&location.module, &resource).to_string(),
+        ResourceLocation::from_zoglin_resource(&location.module, &resource, false).to_string(),
         false,
       )),
     }
@@ -816,6 +816,9 @@ impl Compiler {
     if let Some(namespace) = resource.namespace {
       if namespace.is_empty() {
         resource_location.namespace.clone_from(&location.namespace);
+      } else if namespace == "~" {
+        resource_location.namespace.clone_from(&location.namespace);
+        resource_location.modules.extend(location.modules.iter().cloned());
       } else {
         resource_location.namespace = namespace;
       }

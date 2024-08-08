@@ -84,7 +84,7 @@ impl Parser {
     use TokenKind::*;
     let function = match kind {
       TrueKeyword | FalseKeyword => Parser::parse_boolean,
-      Identifier | Colon => Parser::parse_identifier,
+      Identifier | Colon | Tilde => Parser::parse_identifier,
       Byte | Short | Integer | Long | Float | Double => Parser::parse_number,
       String => Parser::parse_string,
       LeftParen => Parser::parse_bracketed_expression,

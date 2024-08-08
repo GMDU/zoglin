@@ -578,6 +578,13 @@ impl Parser {
       self.consume();
       allow_colon = false;
       resource.namespace = Some(String::new());
+    } else if self.current().kind == TokenKind::Tilde {
+      self.consume();
+      allow_colon = false;
+      resource.namespace = Some("~".to_string());
+      if self.current().kind == TokenKind::ForwardSlash {
+        self.consume();
+      }
     }
     loop {
       let identifier = self.expect(TokenKind::Identifier)?.value.clone();

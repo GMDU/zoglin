@@ -84,6 +84,7 @@ pub const OPERATOR_REGISTRY: &[(&str, TokenKind)] = &[
   ("&&", TokenKind::DoubleAmpersand),
   ("||", TokenKind::DoublePipe),
   ("!", TokenKind::Bang),
+  ("~", TokenKind::Tilde),
   ("=", TokenKind::Equals),
   ("+=", TokenKind::PlusEquals),
   ("-=", TokenKind::MinusEquals),

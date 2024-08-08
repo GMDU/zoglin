@@ -67,6 +67,7 @@ pub enum TokenKind {
   DoubleAmpersand,
   DoublePipe,
   Bang,
+  Tilde,
   Equals,
   PlusEquals,
   MinusEquals,

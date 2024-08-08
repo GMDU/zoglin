@@ -269,10 +269,20 @@ impl ResourceLocation {
   pub fn from_zoglin_resource(
     base_location: &ResourceLocation,
     resource: &ast::ZoglinResource,
+    function_scoped: bool,
   ) -> ResourceLocation {
     if let Some(mut namespace) = resource.namespace.clone() {
       if namespace.is_empty() {
         namespace.clone_from(&base_location.namespace);
+      } else if namespace == "~" {
+        let mut location = base_location.clone();
+        if function_scoped {
+          location.modules.pop();
+        }
+
+        location.modules.extend(resource.modules.clone());
+        location.modules.push(resource.name.clone());
+        return location;
       }
 
       let mut modules = resource.modules.clone();
@@ -325,8 +335,9 @@ impl FunctionLocation {
   pub fn from_zoglin_resource(
     base_location: &ResourceLocation,
     resource: &ZoglinResource,
+    function_scoped: bool,
   ) -> FunctionLocation {
-    let mut resource_location = ResourceLocation::from_zoglin_resource(base_location, resource);
+    let mut resource_location = ResourceLocation::from_zoglin_resource(base_location, resource, function_scoped);
     let name = resource_location
       .modules
       .pop()
@@ -362,6 +373,7 @@ impl StorageLocation {
     StorageLocation::from_resource_location(ResourceLocation::from_zoglin_resource(
       &fn_loc.flatten(),
       resource,
+      true,
     ))
   }
 
@@ -401,6 +413,7 @@ impl ScoreboardLocation {
     ScoreboardLocation::from_resource_location(ResourceLocation::from_zoglin_resource(
       &fn_loc.flatten(),
       resource,
+      true,
     ))
   }
 

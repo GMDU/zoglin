@@ -1,15 +1,10 @@
 namespace diamond
 # include "setup"
 
+res advancement foo {
+
+}
+
 fn load() {
-  &msg = "Hello"
-  say &{&msg}
-  &msg = "Hi"
-  say &{&msg}
-  conditon = true
-  if conditon {
-    &msg = "Bye"
-    say &{&msg}
-  }
-  say &{&msg}
+  projects/gmdu/zoglin = 1
 }
