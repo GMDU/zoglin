@@ -182,14 +182,11 @@ impl Compiler {
     }
   }
 
-  fn next_storage(&mut self) -> StorageLocation {
-    StorageLocation {
-      storage: ResourceLocation {
-        namespace: "zoglin".to_string(),
-        modules: vec!["internal".to_string(), "vars".to_string()],
-      },
-      name: format!("var_{}", self.next_counter("storage")),
-    }
+  fn next_storage(&mut self, namespace: &str) -> StorageLocation {
+    StorageLocation::new(
+      ResourceLocation::new("zoglin", &["internal", namespace, "vars"]),
+      format!("var_{}", self.next_counter("storage")),
+    )
   }
 
   fn next_function(&mut self, function_type: &str, namespace: String) -> FunctionLocation {
@@ -731,7 +728,7 @@ impl Compiler {
       match parameter.kind {
         ParameterKind::Storage => {
           let storage = StorageLocation::new(parameter_storage.clone(), parameter.name);
-          self.set_storage(code, &storage, &expr)?;
+          self.set_storage(code, &storage, &expr, &location.module.namespace)?;
         }
         ParameterKind::Scoreboard => {
           let scoreboard = ScoreboardLocation::new(parameter_storage.clone(), &parameter.name);
@@ -740,7 +737,7 @@ impl Compiler {
         ParameterKind::Macro => {
           let storage =
             StorageLocation::new(parameter_storage.clone(), format!("__{}", parameter.name));
-          self.set_storage(code, &storage, &expr)?;
+          self.set_storage(code, &storage, &expr, &location.module.namespace)?;
         }
         ParameterKind::CompileTime => todo!(),
       }
@@ -917,7 +914,12 @@ impl Compiler {
         ReturnType::Storage => {
           let return_storage =
             StorageLocation::new(context.location.clone().flatten(), "return".to_string());
-          self.set_storage(code, &return_storage, &expression)?;
+          self.set_storage(
+            code,
+            &return_storage,
+            &expression,
+            &context.location.module.namespace,
+          )?;
         }
         ReturnType::Scoreboard => {
           let scoreboard = ScoreboardLocation::new(context.location.clone().flatten(), "return");
@@ -1071,7 +1073,9 @@ impl Compiler {
       | ExpressionKind::LongArray(_)
       | ExpressionKind::Array { .. }
       | ExpressionKind::Storage(_)
-      | ExpressionKind::Macro(_) => self.compile_dynamic_index(code, left, index, location),
+      | ExpressionKind::Macro(_) => {
+        self.compile_dynamic_index(code, left, index, location, fn_location)
+      }
     }
   }
 
@@ -1081,9 +1085,10 @@ impl Compiler {
     left: Expression,
     index: Expression,
     location: Location,
+    fn_location: &FunctionLocation,
   ) -> Result<Expression> {
     if let ExpressionKind::Macro(index) = index.kind {
-      let mut storage = self.move_to_storage(code, left)?;
+      let mut storage = self.move_to_storage(code, left, &fn_location.module.namespace)?;
       storage.name = format!("{}[$({})]", storage.name, index.name);
       return Ok(Expression::with_macro(
         ExpressionKind::Storage(storage),
@@ -1100,11 +1105,13 @@ impl Compiler {
       code,
       &StorageLocation::new(storage.clone(), "target".to_string()),
       &left,
+      &fn_location.module.namespace,
     )?;
     self.set_storage(
       code,
       &StorageLocation::new(storage.clone(), "__index".to_string()),
       &index,
+      &fn_location.module.namespace,
     )?;
     code.push(fn_command);
     Ok(Expression::new(
@@ -1248,7 +1255,7 @@ impl Compiler {
       | ExpressionKind::Storage(_)
       | ExpressionKind::Macro(_)
       | ExpressionKind::SubString(_, _, _) => {
-        self.compile_dynamic_range_index(code, left, start, end, location)
+        self.compile_dynamic_range_index(code, left, start, end, location, fn_location)
       }
     }
   }
@@ -1262,6 +1269,7 @@ impl Compiler {
     start: Expression,
     end: Option<Expression>,
     location: Location,
+    fn_location: &FunctionLocation,
   ) -> Result<Expression> {
     let dynamic_index = if end.is_some() {
       self.dynamic_range_index()
@@ -1276,17 +1284,20 @@ impl Compiler {
       code,
       &StorageLocation::new(storage.clone(), "target".to_string()),
       &left,
+      &fn_location.module.namespace,
     )?;
     self.set_storage(
       code,
       &StorageLocation::new(storage.clone(), "__start".to_string()),
       &start,
+      &fn_location.module.namespace,
     )?;
     if let Some(end) = end {
       self.set_storage(
         code,
         &StorageLocation::new(storage.clone(), "__end".to_string()),
         &end,
+        &fn_location.module.namespace,
       )?;
     }
     code.push(fn_command);
@@ -1358,7 +1369,7 @@ impl Compiler {
       }
 
       ExpressionKind::Compound(_) | ExpressionKind::Storage(_) | ExpressionKind::Macro(_) => {
-        self.compile_dynamic_member(code, left, member, location)
+        self.compile_dynamic_member(code, left, member, location, fn_location)
       }
     }
   }
@@ -1369,9 +1380,10 @@ impl Compiler {
     left: Expression,
     member: Expression,
     location: Location,
+    fn_location: &FunctionLocation,
   ) -> Result<Expression> {
     if let ExpressionKind::Macro(member) = member.kind {
-      let mut storage = self.move_to_storage(code, left)?;
+      let mut storage = self.move_to_storage(code, left, &fn_location.module.namespace)?;
       storage.name = format!("{}.\"$({})\"", storage.name, member.name);
       return Ok(Expression::with_macro(
         ExpressionKind::Storage(storage),
@@ -1388,11 +1400,13 @@ impl Compiler {
       code,
       &StorageLocation::new(storage.clone(), "target".to_string()),
       &left,
+      &fn_location.module.namespace,
     )?;
     self.set_storage(
       code,
       &StorageLocation::new(storage.clone(), "__member".to_string()),
       &member,
+      &fn_location.module.namespace,
     )?;
     code.push(fn_command);
     Ok(Expression::new(

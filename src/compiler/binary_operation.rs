@@ -49,7 +49,7 @@ impl Compiler {
       ast::Expression::Variable(variable) => {
         let typ = self.compile_expression(*binary_operation.right, location, code, false)?;
         let storage = StorageLocation::from_zoglin_resource(location.clone(), &variable);
-        self.set_storage(code, &storage, &typ)?;
+        self.set_storage(code, &storage, &typ, &location.module.namespace)?;
 
         Ok(typ)
       }
@@ -594,8 +594,8 @@ impl Compiler {
     check_equality: bool,
     namespace: &str,
   ) -> Result<ExpressionKind> {
-    let right_storage = self.move_to_storage(code, right)?;
-    let temp_storage = self.copy_to_storage(code, &left)?;
+    let right_storage = self.move_to_storage(code, right, namespace)?;
+    let temp_storage = self.copy_to_storage(code, &left, namespace)?;
     let condition_scoreboard = self.next_scoreboard(namespace);
     code.push(format!(
       "execute store success score {condition_scoreboard} run data modify storage {temp_storage} set from storage {right_storage}",
@@ -721,7 +721,7 @@ impl Compiler {
       ExpressionKind::Double(d) => ExpressionKind::Double(-*d),
 
       ExpressionKind::Storage(storage) => {
-        let temp_storage = self.next_storage();
+        let temp_storage = self.next_storage(&location.module.namespace);
         code.push(format!(
           "{}execute store result storage {temp_storage} int -1 run data get storage {storage}",
           if needs_macro { "$" } else { "" }
@@ -730,7 +730,7 @@ impl Compiler {
       }
 
       ExpressionKind::Scoreboard(scoreboard) => {
-        let temp_storage = self.next_storage();
+        let temp_storage = self.next_storage(&location.module.namespace);
         code.push(format!(
           "{}execute store result storage {temp_storage} int -1 run scoreboard players get {scoreboard}",
           if needs_macro { "$" } else { "" }
@@ -739,7 +739,7 @@ impl Compiler {
       }
 
       ExpressionKind::Macro(_) => {
-        let temp_storage = self.copy_to_storage(code, &operand)?;
+        let temp_storage = self.copy_to_storage(code, &operand, &location.module.namespace)?;
         code.push(format!(
           "execute store result storage {temp_storage} int -1 run data get storage {temp_storage}"
         ));
@@ -802,9 +802,10 @@ impl Compiler {
     &mut self,
     code: &mut Vec<String>,
     value: &Expression,
+    namespace: &str,
   ) -> Result<StorageLocation> {
-    let storage = self.next_storage();
-    self.set_storage(code, &storage, value)?;
+    let storage = self.next_storage(namespace);
+    self.set_storage(code, &storage, value, namespace)?;
 
     Ok(storage)
   }
@@ -813,11 +814,12 @@ impl Compiler {
     &mut self,
     code: &mut Vec<String>,
     value: Expression,
+    namespace: &str,
   ) -> Result<StorageLocation> {
     if let ExpressionKind::Storage(location) = value.kind {
       Ok(location)
     } else {
-      self.copy_to_storage(code, &value)
+      self.copy_to_storage(code, &value, namespace)
     }
   }
 
@@ -826,8 +828,9 @@ impl Compiler {
     code: &mut Vec<String>,
     storage: &StorageLocation,
     value: &Expression,
+    namespace: &str,
   ) -> Result<()> {
-    let (conversion_code, kind) = value.to_storage(self, code)?;
+    let (conversion_code, kind) = value.to_storage(self, code, namespace)?;
     match kind {
       StorageKind::Modify => code.push(format!(
         "data modify storage {storage} set {conversion_code}",

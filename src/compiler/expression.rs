@@ -149,6 +149,7 @@ impl Expression {
     &self,
     state: &mut Compiler,
     code: &mut Vec<String>,
+    namespace: &str,
   ) -> Result<(String, StorageKind)> {
     let (conversion_code, kind) = match &self.kind {
       ExpressionKind::Void => {
@@ -170,13 +171,19 @@ impl Expression {
       ),
       ExpressionKind::Array {
         values, data_type, ..
-      } => array_to_storage(values, *data_type, "", state, code)?,
-      ExpressionKind::ByteArray(a) => array_to_storage(a, NbtType::Byte, "B;", state, code)?,
-      ExpressionKind::IntArray(a) => array_to_storage(a, NbtType::Int, "I;", state, code)?,
-      ExpressionKind::LongArray(a) => array_to_storage(a, NbtType::Long, "L;", state, code)?,
+      } => array_to_storage(values, *data_type, "", state, code, namespace)?,
+      ExpressionKind::ByteArray(a) => {
+        array_to_storage(a, NbtType::Byte, "B;", state, code, namespace)?
+      }
+      ExpressionKind::IntArray(a) => {
+        array_to_storage(a, NbtType::Int, "I;", state, code, namespace)?
+      }
+      ExpressionKind::LongArray(a) => {
+        array_to_storage(a, NbtType::Long, "L;", state, code, namespace)?
+      }
       // TODO: optimise this, like a lot
       ExpressionKind::Compound(types) => {
-        let storage = state.next_storage().to_string();
+        let storage = state.next_storage(namespace).to_string();
         code.push(format!("data modify storage {storage} set value {{}}"));
         for (key, value) in types {
           let unescaped_regex = Regex::new("^[A-Za-z_]\\w*$").expect("Regex is valid");
@@ -188,7 +195,7 @@ impl Expression {
               key.escape_default().to_string().replace("\\'", "'")
             )
           };
-          match value.to_storage(state, code)? {
+          match value.to_storage(state, code, namespace)? {
             (expr_code, StorageKind::Modify) => {
               code.push(format!(
                 "data modify storage {storage}.{key} set {expr_code}"
@@ -656,13 +663,14 @@ fn array_to_storage(
   prefix: &str,
   state: &mut Compiler,
   code: &mut Vec<String>,
+  namespace: &str,
 ) -> Result<(String, StorageKind)> {
-  let storage = state.next_storage().to_string();
+  let storage = state.next_storage(namespace).to_string();
   code.push(format!(
     "data modify storage {storage} set value [{prefix}]"
   ));
   for element in elements {
-    match element.to_storage(state, code)? {
+    match element.to_storage(state, code, namespace)? {
       (expr_code, StorageKind::Modify) => {
         code.push(format!("data modify storage {storage} append {expr_code}"));
       }
@@ -670,7 +678,7 @@ fn array_to_storage(
         code.push(format!("$data modify storage {storage} append {expr_code}"));
       }
       (expr_code, StorageKind::Store) => {
-        let temp_storage = state.next_storage().to_string();
+        let temp_storage = state.next_storage(namespace).to_string();
         code.push(format!(
           "execute store result storage {temp_storage} {data_type} 1 run {expr_code}",
           data_type = data_type
@@ -682,7 +690,7 @@ fn array_to_storage(
         ));
       }
       (expr_code, StorageKind::MacroStore) => {
-        let temp_storage = state.next_storage().to_string();
+        let temp_storage = state.next_storage(namespace).to_string();
         code.push(format!(
           "$execute store result storage {temp_storage} {data_type} 1 run {expr_code}",
           data_type = data_type

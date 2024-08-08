@@ -1,5 +1,5 @@
 ## Before initial alpha
-- Namespace temp storages
+- Add a `Context` struct to be passed around in the compiler
 - Simple compile-time functions
 - `@score` & `@condition` builtins
 - Default argument values
