@@ -246,7 +246,7 @@ impl FileResource {
   }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct ResourceLocation {
   pub namespace: String,
   pub modules: Vec<String>,
@@ -324,6 +324,11 @@ impl FunctionLocation {
       module,
       name: name.to_string(),
     }
+  }
+
+  pub fn from_resource_location(mut location: ResourceLocation) -> FunctionLocation {
+    let name = location.modules.pop().expect("Mut have a name");
+    FunctionLocation::new(location, &name)
   }
 
   pub fn flatten(self) -> ResourceLocation {

@@ -2,7 +2,7 @@ use crate::parser::ast::{File, Function, Import, Item, Module, Namespace, Parame
 
 use super::{
   file_tree::{FunctionLocation, ResourceLocation, ScoreboardLocation},
-  scope::{FunctionDefinition, ItemDefinition, Scope},
+  scope::{FunctionDefinition, Scope},
   Compiler,
 };
 
@@ -61,7 +61,7 @@ impl Compiler {
       .clone()
       .unwrap_or_else(|| import.path.name.clone());
     let path = FunctionLocation::from_zoglin_resource(location, &import.path, false);
-    self.add_import(scope, name, ItemDefinition::Unknown(path));
+    self.add_import(scope, name, path.flatten());
   }
 
   fn register_function(&mut self, function: &Function, location: &ResourceLocation, scope: usize) {
@@ -82,15 +82,21 @@ impl Compiler {
       );
     }
 
+    let definition = FunctionDefinition {
+      location: function_location.clone(),
+      arguments: function.parameters.clone(),
+      return_type: function.return_type,
+    };
+
     self.add_function(
       scope,
       function.name.clone(),
-      FunctionDefinition {
-        location: function_location,
-        arguments: function.parameters.clone(),
-        return_type: function.return_type,
-      },
+      function_location.clone().flatten(),
     );
+
+    self
+      .function_registry
+      .insert(function_location.flatten(), definition);
 
     if &function.name == "tick" && location.modules.is_empty() {
       self.tick_functions.push(function_path);

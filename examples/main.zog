@@ -5,6 +5,13 @@ res advancement foo {
 
 }
 
-fn load() {
+fn $load() {
   projects/gmdu/zoglin = 1
+  a = diamond:foo/bar()
+}
+
+module foo {
+  fn $bar() {
+    a = load()
+  }
 }

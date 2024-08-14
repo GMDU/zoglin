@@ -4,7 +4,7 @@ use std::{collections::HashMap, path::Path};
 
 use expression::{verify_types, ConditionKind, Expression, ExpressionKind, NbtValue};
 use file_tree::{FunctionLocation, ScoreboardLocation, StorageLocation};
-use scope::{FunctionDefinition, ItemDefinition};
+use scope::FunctionDefinition;
 use serde::Serialize;
 
 use crate::parser::ast::{
@@ -35,6 +35,7 @@ pub struct Compiler {
   counters: HashMap<String, usize>,
   namespaces: HashMap<String, Namespace>,
   used_scoreboards: HashSet<String>,
+  function_registry: HashMap<ResourceLocation, FunctionDefinition>,
 }
 
 #[derive(Clone)]
@@ -68,11 +69,11 @@ impl Compiler {
     self.current_scope = self.scopes[self.current_scope].parent;
   }
 
-  fn add_function(&mut self, scope: usize, name: String, function: FunctionDefinition) {
-    self.scopes[scope].function_registry.insert(name, function);
+  fn add_function(&mut self, scope: usize, name: String, location: ResourceLocation) {
+    self.scopes[scope].function_registry.insert(name, location);
   }
 
-  fn lookup_resource(&self, resource: &ZoglinResource) -> Option<ItemDefinition> {
+  fn lookup_resource(&self, resource: &ZoglinResource) -> Option<ResourceLocation> {
     if resource.namespace.is_some() {
       return None;
     }
@@ -85,7 +86,7 @@ impl Compiler {
       let scope = &self.scopes[index];
       if valid_function {
         if let Some(function_definition) = scope.function_registry.get(first) {
-          return Some(ItemDefinition::Function(function_definition.clone()));
+          return Some(function_definition.clone());
         }
       }
       if let Some(resource_location) = scope.imported_items.get(first) {
@@ -124,8 +125,8 @@ impl Compiler {
     namespace.get_module(location.modules)
   }
 
-  fn add_import(&mut self, scope: usize, name: String, definition: ItemDefinition) {
-    self.scopes[scope].imported_items.insert(name, definition);
+  fn add_import(&mut self, scope: usize, name: String, location: ResourceLocation) {
+    self.scopes[scope].imported_items.insert(name, location);
   }
 
   fn add_item(&mut self, location: ResourceLocation, item: Item) -> Result<()> {
@@ -699,7 +700,6 @@ impl Compiler {
         if let Some(path) = path {
           self
             .resolve_zoglin_resource(path, &location.module)?
-            .fn_location()
             .to_string()
         } else {
           location.to_string()
@@ -708,9 +708,7 @@ impl Compiler {
       )),
       StaticExpr::MacroVariable(name) => Ok((format!("$({name})"), true)),
       StaticExpr::ComptimeVariable(name) => {
-        if let Some(value) = self
-          .lookup_comptime(&name)
-        {
+        if let Some(value) = self.lookup_comptime(&name) {
           value
             .kind
             .to_comptime_string(true)
@@ -742,15 +740,16 @@ impl Compiler {
   ) -> Result<(String, FunctionDefinition)> {
     let src_location = function_call.path.location.clone();
     let path = self.resolve_zoglin_resource(function_call.path, &location.module)?;
-    let mut function_definition = if let ItemDefinition::Function(function_definition) = path {
-      function_definition
-    } else {
-      FunctionDefinition {
-        location: path.fn_location().clone(),
-        arguments: Vec::new(),
-        return_type: ReturnType::Direct,
-      }
-    };
+    let mut function_definition =
+      if let Some(function_definition) = self.function_registry.get(&path.clone().flatten()) {
+        function_definition.clone()
+      } else {
+        FunctionDefinition {
+          location: path.clone(),
+          arguments: Vec::new(),
+          return_type: ReturnType::Direct,
+        }
+      };
 
     if function_call.arguments.len() != function_definition.arguments.len() {
       return Err(raise_error(
@@ -807,7 +806,7 @@ impl Compiler {
     &mut self,
     resource: ast::ZoglinResource,
     location: &ResourceLocation,
-  ) -> Result<ItemDefinition> {
+  ) -> Result<FunctionLocation> {
     let mut resource_location = ResourceLocation {
       namespace: String::new(),
       modules: Vec::new(),
@@ -818,18 +817,23 @@ impl Compiler {
         resource_location.namespace.clone_from(&location.namespace);
       } else if namespace == "~" {
         resource_location.namespace.clone_from(&location.namespace);
-        resource_location.modules.extend(location.modules.iter().cloned());
+        resource_location
+          .modules
+          .extend(location.modules.iter().cloned());
       } else {
         resource_location.namespace = namespace;
       }
     } else if let Some(resolved) = self.lookup_resource(&resource) {
-      let mut result = resolved;
+      let mut result = FunctionLocation::from_resource_location(resolved);
 
       if resource.modules.len() > 1 {
-        result.modules().extend_from_slice(&resource.modules[1..]);
+        result
+          .module
+          .modules
+          .extend_from_slice(&resource.modules[1..]);
       }
       if !resource.modules.is_empty() {
-        result.modules().push(resource.name);
+        result.module.modules.push(resource.name);
       }
       return Ok(result);
     } else {
@@ -838,10 +842,10 @@ impl Compiler {
 
     resource_location.modules.extend(resource.modules);
 
-    Ok(ItemDefinition::Unknown(FunctionLocation {
+    Ok(FunctionLocation {
       module: resource_location,
       name: resource.name,
-    }))
+    })
   }
 
   fn compile_if_statement(
