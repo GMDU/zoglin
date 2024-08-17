@@ -682,7 +682,7 @@ impl Compiler {
         },
         false,
       )),
-      StaticExpr::MacroVariable(name) => Ok((format!("$({name})"), true)),
+      StaticExpr::MacroVariable(name) => Ok((format!("$(__{name})"), true)),
       StaticExpr::ComptimeVariable(name) => {
         if let Some(value) = self.lookup_comptime(&name) {
           value
