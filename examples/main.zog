@@ -1,17 +1,6 @@
 namespace diamond
 # include "setup"
 
-res advancement foo {
-
-}
-
-fn $load() {
-  projects/gmdu/zoglin = 1
-  a = diamond:foo/bar()
-}
-
-module foo {
-  fn $bar() {
-    a = load()
-  }
+fn load() {
+  a = []
 }

@@ -324,7 +324,11 @@ impl Compiler {
     Ok(())
   }
 
-  fn compile_resource(&mut self, resource: ast::Resource, location: &ResourceLocation) -> Result<()> {
+  fn compile_resource(
+    &mut self,
+    resource: ast::Resource,
+    location: &ResourceLocation,
+  ) -> Result<()> {
     match resource.content {
       ast::ResourceContent::Text(name, text) => {
         let resource = TextResource {
@@ -409,7 +413,11 @@ impl Compiler {
     code.push(format!("execute if score $should_return zoglin.internal.vars matches -2147483648..2147483647 run {return_command}"));
   }
 
-  fn compile_ast_function(&mut self, function: ast::Function, location: &ResourceLocation) -> Result<()> {
+  fn compile_ast_function(
+    &mut self,
+    function: ast::Function,
+    location: &ResourceLocation,
+  ) -> Result<()> {
     let fn_location = location.clone().with_name(&function.name);
     let mut context = FunctionContext {
       location: fn_location,
@@ -702,7 +710,8 @@ impl Compiler {
       }
 
       StaticExpr::ResourceRef { resource } => Ok((
-        FunctionLocation::from_zoglin_resource(&location.clone().module(), &resource, false).to_string(),
+        FunctionLocation::from_zoglin_resource(&location.clone().module(), &resource, false)
+          .to_string(),
         false,
       )),
     }
@@ -717,7 +726,7 @@ impl Compiler {
     let src_location = function_call.path.location.clone();
     let path = self.resolve_zoglin_resource(function_call.path, &location.clone().module())?;
     let mut function_definition =
-      if let Some(function_definition) = self.function_registry.get(&path.clone()) {
+      if let Some(function_definition) = self.function_registry.get(&path) {
         function_definition.clone()
       } else {
         FunctionDefinition {

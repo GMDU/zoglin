@@ -2,8 +2,8 @@ mod registries;
 pub mod token;
 use crate::error::{raise_error, raise_floating_error, raise_warning, Location, Result};
 
-use registries::{KEYWORD_REGISTRY, OPERATOR_REGISTRY, COMMANDS};
 use glob::glob;
+use registries::{COMMANDS, KEYWORD_REGISTRY, OPERATOR_REGISTRY};
 use std::{collections::HashSet, fs, path::Path, rc::Rc};
 use token::{Token, TokenKind};
 

@@ -457,7 +457,7 @@ impl Parser {
     };
 
     let mut expressions = Vec::new();
-    while !self.eof() && self.current().kind != TokenKind::LeftSquare {
+    while !self.eof() && self.current().kind != TokenKind::RightSquare {
       let expression = self.parse_expression()?;
       expressions.push(expression);
 

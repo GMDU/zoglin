@@ -253,17 +253,19 @@ pub struct Resource<T> {
 }
 
 impl<T> PartialEq for Resource<T> {
-    fn eq(&self, other: &Self) -> bool {
-        self.namespace == other.namespace && self.modules == other.modules && self.phantom_data == other.phantom_data
-    }
+  fn eq(&self, other: &Self) -> bool {
+    self.namespace == other.namespace
+      && self.modules == other.modules
+      && self.phantom_data == other.phantom_data
+  }
 }
 
 impl<T> std::hash::Hash for Resource<T> {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.namespace.hash(state);
-        self.modules.hash(state);
-        self.phantom_data.hash(state);
-    }
+  fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+    self.namespace.hash(state);
+    self.modules.hash(state);
+    self.phantom_data.hash(state);
+  }
 }
 
 impl<T> Eq for Resource<T> {}
@@ -283,7 +285,7 @@ impl<T> Clone for Resource<T> {
     Self {
       namespace: self.namespace.clone(),
       modules: self.modules.clone(),
-      phantom_data: self.phantom_data.clone(),
+      phantom_data: self.phantom_data,
     }
   }
 }
@@ -363,14 +365,14 @@ impl Resource<FunctionResource> {
 
   pub fn split(mut self) -> (Resource<ModuleResource>, String) {
     let name = self.modules.pop().expect("Should have a name");
-    (self.to_module(), name)
+    (self.into_module(), name)
   }
 
   pub fn module(self) -> Resource<ModuleResource> {
     self.split().0
   }
 
-  pub fn to_module(self) -> Resource<ModuleResource> {
+  pub fn into_module(self) -> Resource<ModuleResource> {
     Resource {
       namespace: self.namespace,
       modules: self.modules,
@@ -442,7 +444,10 @@ impl Display for StorageLocation {
 
 impl StorageLocation {
   pub fn new(storage: FunctionLocation, name: String) -> StorageLocation {
-    StorageLocation { storage: storage.to_module(), name }
+    StorageLocation {
+      storage: storage.into_module(),
+      name,
+    }
   }
 
   pub fn from_zoglin_resource(
@@ -450,7 +455,7 @@ impl StorageLocation {
     resource: &ZoglinResource,
   ) -> StorageLocation {
     StorageLocation::from_function_location(FunctionLocation::from_zoglin_resource(
-      &fn_loc.to_module(),
+      &fn_loc.into_module(),
       resource,
       true,
     ))
@@ -497,7 +502,7 @@ impl ScoreboardLocation {
     resource: &ZoglinResource,
   ) -> ScoreboardLocation {
     ScoreboardLocation::from_function_location(FunctionLocation::from_zoglin_resource(
-      &fn_loc.to_module(),
+      &fn_loc.into_module(),
       resource,
       true,
     ))
@@ -513,7 +518,7 @@ impl ScoreboardLocation {
 
   pub fn new(location: FunctionLocation, name: &str) -> ScoreboardLocation {
     ScoreboardLocation {
-      scoreboard: location.to_module(),
+      scoreboard: location.into_module(),
       name: format!("${name}"),
     }
   }
