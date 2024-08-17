@@ -2,10 +2,7 @@ use std::sync::OnceLock;
 
 use crate::error::Location;
 
-use super::{
-  file_tree::{FunctionLocation, ResourceLocation},
-  Compiler,
-};
+use super::{file_tree::FunctionLocation, Compiler};
 
 static RESET_DIRECT_RETURN: OnceLock<FunctionLocation> = OnceLock::new();
 static DYNAMIC_INDEX: OnceLock<FunctionLocation> = OnceLock::new();
@@ -19,8 +16,8 @@ impl Compiler {
   pub fn reset_direct_return(&mut self) -> &FunctionLocation {
     RESET_DIRECT_RETURN.get_or_init(|| {
       let location = FunctionLocation::new(
-        ResourceLocation::new("zoglin", &["internal", VERSION]),
-        "reset_return",
+        "zoglin", &["internal", VERSION,
+        "reset_return"],
       );
       self
         .add_function_item(
@@ -40,8 +37,8 @@ impl Compiler {
   pub fn dynamic_index(&mut self) -> &FunctionLocation {
     DYNAMIC_INDEX.get_or_init(|| {
       let location = FunctionLocation::new(
-        ResourceLocation::new("zoglin", &["internal", VERSION]),
-        "dynamic_index",
+        "zoglin", &["internal", VERSION,
+        "dynamic_index"],
       );
       self
         .add_function_item(
@@ -61,8 +58,8 @@ impl Compiler {
   pub fn dynamic_range_index(&mut self) -> &FunctionLocation {
     DYNAMIC_RANGE_INDEX.get_or_init(|| {
       let location = FunctionLocation::new(
-        ResourceLocation::new("zoglin", &["internal", VERSION]),
-        "dynamic_range_index",
+        "zoglin", &["internal", VERSION,
+        "dynamic_range_index"],
       );
       self
         .add_function_item(
@@ -82,8 +79,8 @@ impl Compiler {
   pub fn dynamic_range_index_no_end(&mut self) -> &FunctionLocation {
     DYNAMIC_RANGE_INDEX_NO_END.get_or_init(|| {
       let location = FunctionLocation::new(
-        ResourceLocation::new("zoglin", &["internal", VERSION]),
-        "dynamic_range_index_no_end",
+        "zoglin", &["internal", VERSION,
+        "dynamic_range_index_no_end"],
       );
       self
         .add_function_item(
@@ -103,8 +100,8 @@ impl Compiler {
   pub fn dynamic_member(&mut self) -> &FunctionLocation {
     DYNAMIC_MEMBER.get_or_init(|| {
       let location = FunctionLocation::new(
-        ResourceLocation::new("zoglin", &["internal", VERSION]),
-        "dynamic_member",
+        "zoglin", &["internal", VERSION,
+        "dynamic_member"],
       );
       self
         .add_function_item(

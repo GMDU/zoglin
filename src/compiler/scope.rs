@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::parser::ast::{Parameter, ReturnType};
 
-use super::file_tree::{FunctionLocation, ResourceLocation};
+use super::file_tree::FunctionLocation;
 
 // #[derive(Clone)]
 // pub enum ItemDefinition {
@@ -47,8 +47,8 @@ pub struct FunctionDefinition {
 pub struct Scope {
   pub parent: usize,
   pub children: HashMap<String, Vec<usize>>,
-  pub function_registry: HashMap<String, ResourceLocation>,
-  pub imported_items: HashMap<String, ResourceLocation>,
+  pub function_registry: HashMap<String, FunctionLocation>,
+  pub imported_items: HashMap<String, FunctionLocation>,
 }
 
 impl Scope {

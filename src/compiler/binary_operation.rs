@@ -2,9 +2,10 @@ use crate::parser::ast::{self, BinaryOperation, Operator, UnaryExpression, Unary
 
 use crate::error::{raise_error, Result};
 
+use super::file_tree::FunctionLocation;
 use super::{
   expression::{Condition, ConditionKind, Expression, ExpressionKind, ScoreKind, StorageKind},
-  file_tree::{FunctionLocation, ScoreboardLocation, StorageLocation},
+  file_tree::{ScoreboardLocation, StorageLocation},
   Compiler,
 };
 
@@ -49,7 +50,7 @@ impl Compiler {
       ast::Expression::Variable(variable) => {
         let typ = self.compile_expression(*binary_operation.right, location, code, false)?;
         let storage = StorageLocation::from_zoglin_resource(location.clone(), &variable);
-        self.set_storage(code, &storage, &typ, &location.module.namespace)?;
+        self.set_storage(code, &storage, &typ, &location.namespace)?;
 
         Ok(typ)
       }
@@ -107,7 +108,7 @@ impl Compiler {
         ))
       }
       (num, _) if num.numeric_value().is_some() => {
-        let scoreboard = self.copy_to_scoreboard(code, &right, &location.module.namespace)?;
+        let scoreboard = self.copy_to_scoreboard(code, &right, &location.namespace)?;
         code.push(format!(
           "scoreboard players add {scoreboard} {}",
           num.numeric_value().expect("Numeric value exists"),
@@ -115,14 +116,14 @@ impl Compiler {
         Ok(ExpressionKind::Scoreboard(scoreboard))
       }
       (_, num) if num.numeric_value().is_some() => {
-        let scoreboard = self.copy_to_scoreboard(code, &left, &location.module.namespace)?;
+        let scoreboard = self.copy_to_scoreboard(code, &left, &location.namespace)?;
         code.push(format!(
           "scoreboard players add {scoreboard} {}",
           num.numeric_value().expect("Numeric value exists"),
         ));
         Ok(ExpressionKind::Scoreboard(scoreboard))
       }
-      _ => self.compile_basic_operator(left, right, '+', code, &location.module.namespace),
+      _ => self.compile_basic_operator(left, right, '+', code, &location.namespace),
     }
     .map(|kind| Expression::with_macro(kind, binary_operation.location, needs_macro))
   }
@@ -157,14 +158,14 @@ impl Compiler {
         ))
       }
       (_, num) if num.numeric_value().is_some() => {
-        let scoreboard = self.copy_to_scoreboard(code, &left, &location.module.namespace)?;
+        let scoreboard = self.copy_to_scoreboard(code, &left, &location.namespace)?;
         code.push(format!(
           "scoreboard players remove {scoreboard} {}",
           num.numeric_value().expect("Numeric value exists"),
         ));
         Ok(ExpressionKind::Scoreboard(scoreboard))
       }
-      _ => self.compile_basic_operator(left, right, '-', code, &location.module.namespace),
+      _ => self.compile_basic_operator(left, right, '-', code, &location.namespace),
     }
     .map(|kind| Expression::with_macro(kind, binary_operation.location, needs_macro))
   }
@@ -198,7 +199,7 @@ impl Compiler {
             * right.numeric_value().expect("Numeric value exists"),
         ))
       }
-      _ => self.compile_basic_operator(left, right, '*', code, &location.module.namespace),
+      _ => self.compile_basic_operator(left, right, '*', code, &location.namespace),
     }
     .map(|kind| Expression::with_macro(kind, binary_operation.location, needs_macro))
   }
@@ -232,7 +233,7 @@ impl Compiler {
             / right.numeric_value().expect("Numeric value exists"),
         ))
       }
-      _ => self.compile_basic_operator(left, right, '/', code, &location.module.namespace),
+      _ => self.compile_basic_operator(left, right, '/', code, &location.namespace),
     }
     .map(|kind| Expression::with_macro(kind, binary_operation.location, needs_macro))
   }
@@ -266,7 +267,7 @@ impl Compiler {
             % right.numeric_value().expect("Numeric value exists"),
         ))
       }
-      _ => self.compile_basic_operator(left, right, '%', code, &location.module.namespace),
+      _ => self.compile_basic_operator(left, right, '%', code, &location.namespace),
     }
     .map(|kind| Expression::with_macro(kind, binary_operation.location, needs_macro))
   }
@@ -304,7 +305,7 @@ impl Compiler {
           "{}..",
           num.numeric_value().expect("Numeric value exists") + 1
         ),
-        &location.module.namespace,
+        &location.namespace,
       ),
       (_, num) if num.numeric_value().is_some() => self.compile_match_comparison(
         code,
@@ -313,9 +314,9 @@ impl Compiler {
           "..{}",
           num.numeric_value().expect("Numeric value exists") - 1
         ),
-        &location.module.namespace,
+        &location.namespace,
       ),
-      _ => self.compile_comparison_operator(code, left, right, "<", &location.module.namespace),
+      _ => self.compile_comparison_operator(code, left, right, "<", &location.namespace),
     }
     .map(|kind| Expression::with_macro(kind, binary_operation.location, needs_macro))
   }
@@ -353,7 +354,7 @@ impl Compiler {
           "..{}",
           num.numeric_value().expect("Numeric value exists") - 1
         ),
-        &location.module.namespace,
+        &location.namespace,
       ),
       (_, num) if num.numeric_value().is_some() => self.compile_match_comparison(
         code,
@@ -362,9 +363,9 @@ impl Compiler {
           "{}..",
           num.numeric_value().expect("Numeric value exists") + 1
         ),
-        &location.module.namespace,
+        &location.namespace,
       ),
-      _ => self.compile_comparison_operator(code, left, right, ">", &location.module.namespace),
+      _ => self.compile_comparison_operator(code, left, right, ">", &location.namespace),
     }
     .map(|kind| Expression::with_macro(kind, binary_operation.location, needs_macro))
   }
@@ -399,15 +400,15 @@ impl Compiler {
         code,
         right,
         format!("{}..", num.numeric_value().expect("Numeric value exists")),
-        &location.module.namespace,
+        &location.namespace,
       ),
       (_, num) if num.numeric_value().is_some() => self.compile_match_comparison(
         code,
         left,
         format!("..{}", num.numeric_value().expect("Numeric value exists")),
-        &location.module.namespace,
+        &location.namespace,
       ),
-      _ => self.compile_comparison_operator(code, left, right, "<=", &location.module.namespace),
+      _ => self.compile_comparison_operator(code, left, right, "<=", &location.namespace),
     }
     .map(|kind| Expression::with_macro(kind, binary_operation.location, needs_macro))
   }
@@ -442,15 +443,15 @@ impl Compiler {
         code,
         right,
         format!("..{}", num.numeric_value().expect("Numeric value exists")),
-        &location.module.namespace,
+        &location.namespace,
       ),
       (_, num) if num.numeric_value().is_some() => self.compile_match_comparison(
         code,
         left,
         format!("{}..", num.numeric_value().expect("Numeric value exists")),
-        &location.module.namespace,
+        &location.namespace,
       ),
-      _ => self.compile_comparison_operator(code, left, right, ">=", &location.module.namespace),
+      _ => self.compile_comparison_operator(code, left, right, ">=", &location.namespace),
     }
     .map(|kind| Expression::with_macro(kind, binary_operation.location, needs_macro))
   }
@@ -477,14 +478,14 @@ impl Compiler {
         Err(raise_error(left.location, "Cannot compare with void."))
       }
       (ExpressionKind::Storage(_), _) | (_, ExpressionKind::Storage(_)) => {
-        self.storage_comparison(code, left, right, true, &location.module.namespace)
+        self.storage_comparison(code, left, right, true, &location.namespace)
       }
       (left_kind, right_kind)
         if left_kind.to_type().is_numeric() && right_kind.to_type().is_numeric() =>
       {
-        self.compile_comparison_operator(code, left, right, "=", &location.module.namespace)
+        self.compile_comparison_operator(code, left, right, "=", &location.namespace)
       }
-      _ => self.storage_comparison(code, left, right, true, &location.module.namespace),
+      _ => self.storage_comparison(code, left, right, true, &location.namespace),
     }
     .map(|kind| Expression::with_macro(kind, binary_operation.location, needs_macro))
   }
@@ -511,14 +512,14 @@ impl Compiler {
         Err(raise_error(left.location, "Cannot compare with void."))
       }
       (ExpressionKind::Storage(_), _) | (_, ExpressionKind::Storage(_)) => {
-        self.storage_comparison(code, left, right, false, &location.module.namespace)
+        self.storage_comparison(code, left, right, false, &location.namespace)
       }
       (left_kind, right_kind)
         if left_kind.to_type().is_numeric() && right_kind.to_type().is_numeric() =>
       {
-        self.compile_comparison_operator(code, left, right, "!=", &location.module.namespace)
+        self.compile_comparison_operator(code, left, right, "!=", &location.namespace)
       }
-      _ => self.storage_comparison(code, left, right, false, &location.module.namespace),
+      _ => self.storage_comparison(code, left, right, false, &location.namespace),
     }
     .map(|kind| Expression::with_macro(kind, binary_operation.location, needs_macro))
   }
@@ -533,8 +534,8 @@ impl Compiler {
     let right = self.compile_expression(*binary_operation.right, location, code, false)?;
     let needs_macro = left.needs_macro || right.needs_macro;
 
-    let left_condition = left.to_condition(self, code, &location.module.namespace, false)?;
-    let right_condition = right.to_condition(self, code, &location.module.namespace, false)?;
+    let left_condition = left.to_condition(self, code, &location.namespace, false)?;
+    let right_condition = right.to_condition(self, code, &location.namespace, false)?;
 
     match (left_condition, right_condition) {
       (ConditionKind::Known(false), _) | (_, ConditionKind::Known(false)) => {
@@ -562,8 +563,8 @@ impl Compiler {
     let right = self.compile_expression(*binary_operation.right, location, code, false)?;
     let needs_macro = left.needs_macro || right.needs_macro;
 
-    let left_condition = left.to_condition(self, code, &location.module.namespace, false)?;
-    let right_condition = right.to_condition(self, code, &location.module.namespace, false)?;
+    let left_condition = left.to_condition(self, code, &location.namespace, false)?;
+    let right_condition = right.to_condition(self, code, &location.namespace, false)?;
 
     match (left_condition, right_condition) {
       (ConditionKind::Known(true), _) | (_, ConditionKind::Known(true)) => {
@@ -577,7 +578,7 @@ impl Compiler {
         Ok(ExpressionKind::Condition(Condition::Check(other)))
       }
       (ConditionKind::Check(a), ConditionKind::Check(b)) => {
-        let scoreboard = self.next_scoreboard(&location.module.namespace);
+        let scoreboard = self.next_scoreboard(&location.namespace);
         code.push(format!(
           "execute {a} run scoreboard players set {scoreboard} 1",
         ));
@@ -681,7 +682,7 @@ impl Compiler {
     let operand = self.compile_expression(*unary_expression.operand, location, code, false)?;
     let needs_macro = operand.needs_macro;
 
-    let condition = operand.to_condition(self, code, &location.module.namespace, true)?;
+    let condition = operand.to_condition(self, code, &location.namespace, true)?;
 
     let kind = match condition {
       ConditionKind::Known(b) => ExpressionKind::Boolean(!b),
@@ -729,7 +730,7 @@ impl Compiler {
       ExpressionKind::Double(d) => ExpressionKind::Double(-*d),
 
       ExpressionKind::Storage(storage) => {
-        let temp_storage = self.next_storage(&location.module.namespace);
+        let temp_storage = self.next_storage(&location.namespace);
         code.push(format!(
           "{}execute store result storage {temp_storage} int -1 run data get storage {storage}",
           if needs_macro { "$" } else { "" }
@@ -738,7 +739,7 @@ impl Compiler {
       }
 
       ExpressionKind::Scoreboard(scoreboard) => {
-        let temp_storage = self.next_storage(&location.module.namespace);
+        let temp_storage = self.next_storage(&location.namespace);
         code.push(format!(
           "{}execute store result storage {temp_storage} int -1 run scoreboard players get {scoreboard}",
           if needs_macro { "$" } else { "" }
@@ -747,7 +748,7 @@ impl Compiler {
       }
 
       ExpressionKind::Macro(_) => {
-        let temp_storage = self.copy_to_storage(code, &operand, &location.module.namespace)?;
+        let temp_storage = self.copy_to_storage(code, &operand, &location.namespace)?;
         code.push(format!(
           "execute store result storage {temp_storage} int -1 run data get storage {temp_storage}"
         ));

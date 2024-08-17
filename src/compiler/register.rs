@@ -18,10 +18,7 @@ impl Compiler {
     let index = self.push_scope(namespace.name.clone(), parent_scope);
 
     for item in namespace.items.iter() {
-      let mut resource = ResourceLocation {
-        namespace: namespace.name.clone(),
-        modules: Vec::new(),
-      };
+      let mut resource = ResourceLocation::new(&namespace.name, &[]);
       self.register_item(item, &mut resource, index);
     }
   }
@@ -61,25 +58,22 @@ impl Compiler {
       .clone()
       .unwrap_or_else(|| import.path.name.clone());
     let path = FunctionLocation::from_zoglin_resource(location, &import.path, false);
-    self.add_import(scope, name, path.flatten());
+    self.add_import(scope, name, path);
   }
 
   fn register_function(&mut self, function: &Function, location: &ResourceLocation, scope: usize) {
     let function_path = location.join(&function.name);
 
-    let function_location = FunctionLocation {
-      module: location.clone(),
-      name: function.name.clone(),
-    };
+    let function_location = location.clone().with_name(&function.name);
 
     if function
       .parameters
       .iter()
       .any(|param| matches!(param.kind, ParameterKind::Scoreboard))
     {
-      self.used_scoreboards.insert(
-        ScoreboardLocation::new(function_location.clone().flatten(), "").scoreboard_string(),
-      );
+      self
+        .used_scoreboards
+        .insert(ScoreboardLocation::new(function_location.clone(), "").scoreboard_string());
     }
 
     let definition = FunctionDefinition {
@@ -88,15 +82,9 @@ impl Compiler {
       return_type: function.return_type,
     };
 
-    self.add_function(
-      scope,
-      function.name.clone(),
-      function_location.clone().flatten(),
-    );
+    self.add_function(scope, function.name.clone(), function_location.clone());
 
-    self
-      .function_registry
-      .insert(function_location.flatten(), definition);
+    self.function_registry.insert(function_location, definition);
 
     if &function.name == "tick" && location.modules.is_empty() {
       self.tick_functions.push(function_path);

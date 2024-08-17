@@ -3,7 +3,7 @@ use std::mem::take;
 use std::{collections::HashMap, path::Path};
 
 use expression::{verify_types, ConditionKind, Expression, ExpressionKind, NbtValue};
-use file_tree::{FunctionLocation, ScoreboardLocation, StorageLocation};
+use file_tree::{FunctionLocation, ResourceLocation, ScoreboardLocation, StorageLocation};
 use scope::FunctionDefinition;
 use serde::Serialize;
 
@@ -15,7 +15,7 @@ use crate::parser::ast::{
 use crate::error::{raise_error, raise_floating_error, Location, Result};
 
 use self::{
-  file_tree::{FileResource, FileTree, Function, Item, Namespace, ResourceLocation, TextResource},
+  file_tree::{FileResource, FileTree, Function, Item, Namespace, Resource, TextResource},
   scope::Scope,
 };
 mod binary_operation;
@@ -35,7 +35,7 @@ pub struct Compiler {
   counters: HashMap<String, usize>,
   namespaces: HashMap<String, Namespace>,
   used_scoreboards: HashSet<String>,
-  function_registry: HashMap<ResourceLocation, FunctionDefinition>,
+  function_registry: HashMap<FunctionLocation, FunctionDefinition>,
 }
 
 #[derive(Clone)]
@@ -69,11 +69,11 @@ impl Compiler {
     self.current_scope = self.scopes[self.current_scope].parent;
   }
 
-  fn add_function(&mut self, scope: usize, name: String, location: ResourceLocation) {
+  fn add_function(&mut self, scope: usize, name: String, location: FunctionLocation) {
     self.scopes[scope].function_registry.insert(name, location);
   }
 
-  fn lookup_resource(&self, resource: &ZoglinResource) -> Option<ResourceLocation> {
+  fn lookup_resource(&self, resource: &ZoglinResource) -> Option<FunctionLocation> {
     if resource.namespace.is_some() {
       return None;
     }
@@ -125,7 +125,7 @@ impl Compiler {
     namespace.get_module(location.modules)
   }
 
-  fn add_import(&mut self, scope: usize, name: String, location: ResourceLocation) {
+  fn add_import(&mut self, scope: usize, name: String, location: FunctionLocation) {
     self.scopes[scope].imported_items.insert(name, location);
   }
 
@@ -185,36 +185,31 @@ impl Compiler {
       .used_scoreboards
       .insert(format!("zoglin.internal.{namespace}.vars"));
     ScoreboardLocation {
-      scoreboard: vec!["zoglin", "internal", namespace, "vars"]
-        .into_iter()
-        .map(|s| s.to_string())
-        .collect(),
+      scoreboard: ResourceLocation::new("zoglin", &["internal", namespace, "vars"]),
       name: format!("$var_{}", self.next_counter("scoreboard")),
     }
   }
 
   fn next_storage(&mut self, namespace: &str) -> StorageLocation {
     StorageLocation::new(
-      ResourceLocation::new("zoglin", &["internal", namespace, "vars"]),
+      Resource::new("zoglin", &["internal", namespace, "vars"]),
       format!("var_{}", self.next_counter("storage")),
     )
   }
 
-  fn next_function(&mut self, function_type: &str, namespace: String) -> FunctionLocation {
-    FunctionLocation {
-      module: ResourceLocation {
-        namespace: "zoglin".to_string(),
-        modules: vec![
-          "generated".to_string(),
-          namespace,
-          function_type.to_string(),
-        ],
-      },
-      name: format!(
-        "fn_{}",
-        self.next_counter(&format!("function:{}", function_type))
-      ),
-    }
+  fn next_function(&mut self, function_type: &str, namespace: &str) -> FunctionLocation {
+    FunctionLocation::new(
+      "zoglin",
+      &[
+        "generated",
+        namespace,
+        function_type,
+        &format!(
+          "fn_{}",
+          self.next_counter(&format!("function:{}", function_type))
+        ),
+      ],
+    )
   }
 }
 
@@ -247,10 +242,7 @@ impl Compiler {
       location: Location::blank(),
     });
 
-    let location = ResourceLocation {
-      namespace: "minecraft".to_string(),
-      modules: Vec::new(),
-    };
+    let location = ResourceLocation::new("minecraft", &[]);
     self.add_item(location.clone(), load)?;
 
     if !self.tick_functions.is_empty() {
@@ -283,10 +275,7 @@ impl Compiler {
     self.enter_scope(&namespace.name);
     self.comptime_scopes.push(HashMap::new());
 
-    let resource: ResourceLocation = ResourceLocation {
-      namespace: namespace.name.clone(),
-      modules: Vec::new(),
-    };
+    let resource = Resource::new(&namespace.name, &[]);
 
     for item in namespace.items {
       self.compile_item(item, &resource)?;
@@ -304,10 +293,7 @@ impl Compiler {
       location: Location::blank(),
     });
     self.add_item(
-      ResourceLocation {
-        namespace: "zoglin".to_string(),
-        modules: vec!["generated".to_string(), namespace.name],
-      },
+      Resource::new("zoglin", &["generated", &namespace.name]),
       load_function,
     )?;
 
@@ -338,11 +324,7 @@ impl Compiler {
     Ok(())
   }
 
-  fn compile_resource(
-    &mut self,
-    resource: ast::Resource,
-    location: &ResourceLocation,
-  ) -> Result<()> {
+  fn compile_resource(&mut self, resource: ast::Resource, location: &ResourceLocation) -> Result<()> {
     match resource.content {
       ast::ResourceContent::Text(name, text) => {
         let resource = TextResource {
@@ -427,15 +409,8 @@ impl Compiler {
     code.push(format!("execute if score $should_return zoglin.internal.vars matches -2147483648..2147483647 run {return_command}"));
   }
 
-  fn compile_ast_function(
-    &mut self,
-    function: ast::Function,
-    location: &ResourceLocation,
-  ) -> Result<()> {
-    let fn_location = FunctionLocation {
-      module: location.clone(),
-      name: function.name,
-    };
+  fn compile_ast_function(&mut self, function: ast::Function, location: &ResourceLocation) -> Result<()> {
+    let fn_location = location.clone().with_name(&function.name);
     let mut context = FunctionContext {
       location: fn_location,
       return_type: function.return_type,
@@ -455,13 +430,14 @@ impl Compiler {
     fn_location: FunctionLocation,
     commands: Vec<String>,
   ) -> Result<()> {
+    let (module, name) = fn_location.split();
     let function = Function {
-      name: fn_location.name,
+      name,
       location,
       commands,
     };
 
-    self.add_item(fn_location.module, Item::Function(function))
+    self.add_item(module, Item::Function(function))
   }
 
   fn compile_block(
@@ -523,7 +499,7 @@ impl Compiler {
         let (command, definition) = self.compile_function_call(code, function_call, fn_location)?;
         match definition.return_type {
           ReturnType::Storage => {
-            let storage = StorageLocation::new(definition.location.flatten(), "return".to_string());
+            let storage = StorageLocation::new(definition.location, "return".to_string());
             if !ignored {
               code.push(format!("data modify storage {storage} set value false",))
             }
@@ -535,7 +511,7 @@ impl Compiler {
             }
           }
           ReturnType::Scoreboard => {
-            let scoreboard = ScoreboardLocation::new(definition.location.flatten(), "return");
+            let scoreboard = ScoreboardLocation::new(definition.location, "return");
             if !ignored {
               code.push(format!("scoreboard players set {scoreboard} 0",))
             }
@@ -547,7 +523,7 @@ impl Compiler {
             }
           }
           ReturnType::Direct => {
-            let scoreboard = self.next_scoreboard(&fn_location.module.namespace);
+            let scoreboard = self.next_scoreboard(&fn_location.namespace);
             code.push(format!(
               "execute store result score {scoreboard} run {command}",
             ));
@@ -593,7 +569,7 @@ impl Compiler {
       ),
       ast::Expression::MacroVariable(name, location) => Expression::with_macro(
         ExpressionKind::Macro(StorageLocation::new(
-          fn_location.clone().flatten(),
+          fn_location.clone(),
           format!("__{name}"),
         )),
         location,
@@ -699,7 +675,7 @@ impl Compiler {
       StaticExpr::FunctionRef { path } => Ok((
         if let Some(path) = path {
           self
-            .resolve_zoglin_resource(path, &location.module)?
+            .resolve_zoglin_resource(path, &location.clone().module())?
             .to_string()
         } else {
           location.to_string()
@@ -726,7 +702,7 @@ impl Compiler {
       }
 
       StaticExpr::ResourceRef { resource } => Ok((
-        ResourceLocation::from_zoglin_resource(&location.module, &resource, false).to_string(),
+        FunctionLocation::from_zoglin_resource(&location.clone().module(), &resource, false).to_string(),
         false,
       )),
     }
@@ -739,9 +715,9 @@ impl Compiler {
     location: &FunctionLocation,
   ) -> Result<(String, FunctionDefinition)> {
     let src_location = function_call.path.location.clone();
-    let path = self.resolve_zoglin_resource(function_call.path, &location.module)?;
+    let path = self.resolve_zoglin_resource(function_call.path, &location.clone().module())?;
     let mut function_definition =
-      if let Some(function_definition) = self.function_registry.get(&path.clone().flatten()) {
+      if let Some(function_definition) = self.function_registry.get(&path.clone()) {
         function_definition.clone()
       } else {
         FunctionDefinition {
@@ -766,7 +742,7 @@ impl Compiler {
       .arguments
       .iter()
       .any(|param| param.kind == ParameterKind::Macro);
-    let parameter_storage = function_definition.location.clone().flatten();
+    let parameter_storage = function_definition.location.clone();
 
     for (parameter, argument) in take(&mut function_definition.arguments)
       .into_iter()
@@ -776,7 +752,7 @@ impl Compiler {
       match parameter.kind {
         ParameterKind::Storage => {
           let storage = StorageLocation::new(parameter_storage.clone(), parameter.name);
-          self.set_storage(code, &storage, &expr, &location.module.namespace)?;
+          self.set_storage(code, &storage, &expr, &location.namespace)?;
         }
         ParameterKind::Scoreboard => {
           let scoreboard = ScoreboardLocation::new(parameter_storage.clone(), &parameter.name);
@@ -785,7 +761,7 @@ impl Compiler {
         ParameterKind::Macro => {
           let storage =
             StorageLocation::new(parameter_storage.clone(), format!("__{}", parameter.name));
-          self.set_storage(code, &storage, &expr, &location.module.namespace)?;
+          self.set_storage(code, &storage, &expr, &location.namespace)?;
         }
         ParameterKind::CompileTime => todo!(),
       }
@@ -807,10 +783,7 @@ impl Compiler {
     resource: ast::ZoglinResource,
     location: &ResourceLocation,
   ) -> Result<FunctionLocation> {
-    let mut resource_location = ResourceLocation {
-      namespace: String::new(),
-      modules: Vec::new(),
-    };
+    let mut resource_location = ResourceLocation::new("", &[]);
 
     if let Some(namespace) = resource.namespace {
       if namespace.is_empty() {
@@ -824,16 +797,13 @@ impl Compiler {
         resource_location.namespace = namespace;
       }
     } else if let Some(resolved) = self.lookup_resource(&resource) {
-      let mut result = FunctionLocation::from_resource_location(resolved);
+      let mut result = resolved;
 
       if resource.modules.len() > 1 {
-        result
-          .module
-          .modules
-          .extend_from_slice(&resource.modules[1..]);
+        result.modules.extend_from_slice(&resource.modules[1..]);
       }
       if !resource.modules.is_empty() {
-        result.module.modules.push(resource.name);
+        result.modules.push(resource.name);
       }
       return Ok(result);
     } else {
@@ -842,10 +812,7 @@ impl Compiler {
 
     resource_location.modules.extend(resource.modules);
 
-    Ok(FunctionLocation {
-      module: resource_location,
-      name: resource.name,
-    })
+    Ok(resource_location.with_name(&resource.name))
   }
 
   fn compile_if_statement(
@@ -858,7 +825,7 @@ impl Compiler {
     context.is_nested = true;
 
     if if_statement.child.is_some() {
-      let if_function = self.next_function("if", context.location.module.namespace.clone());
+      let if_function = self.next_function("if", &context.location.namespace);
 
       code.push(format!("function {if_function}"));
       let mut function_code = Vec::new();
@@ -887,10 +854,12 @@ impl Compiler {
         }
       }
 
+      let (module, name) = if_function.split();
+
       self.add_item(
-        if_function.module,
+        module,
         Item::Function(Function {
-          name: if_function.name,
+          name,
           commands: function_code,
           location: Location::blank(),
         }),
@@ -920,16 +889,15 @@ impl Compiler {
   ) -> Result<()> {
     let condition = self.compile_expression(condition, &context.location, code, false)?;
 
-    let check_code =
-      match condition.to_condition(self, code, &context.location.module.namespace, false)? {
-        ConditionKind::Known(false) => return Ok(()),
-        ConditionKind::Known(true) => {
-          let commands: Vec<String> = self.compile_block(context, body)?;
-          code.extend(commands);
-          return Ok(());
-        }
-        ConditionKind::Check(check_code) => check_code,
-      };
+    let check_code = match condition.to_condition(self, code, &context.location.namespace, false)? {
+      ConditionKind::Known(false) => return Ok(()),
+      ConditionKind::Known(true) => {
+        let commands: Vec<String> = self.compile_block(context, body)?;
+        code.extend(commands);
+        return Ok(());
+      }
+      ConditionKind::Check(check_code) => check_code,
+    };
 
     let commands = self.compile_block(context, body)?;
 
@@ -937,7 +905,7 @@ impl Compiler {
       0 => return Ok(()),
       1 => &commands[0],
       _ => {
-        let function = self.next_function("if", context.location.module.namespace.clone());
+        let function = self.next_function("if", &context.location.namespace);
         let fn_str = function.to_string();
         self.add_function_item(Location::blank(), function, commands)?;
         &format!("function {fn_str}")
@@ -968,17 +936,16 @@ impl Compiler {
 
       match context.return_type {
         ReturnType::Storage => {
-          let return_storage =
-            StorageLocation::new(context.location.clone().flatten(), "return".to_string());
+          let return_storage = StorageLocation::new(context.location.clone(), "return".to_string());
           self.set_storage(
             code,
             &return_storage,
             &expression,
-            &context.location.module.namespace,
+            &context.location.namespace,
           )?;
         }
         ReturnType::Scoreboard => {
-          let scoreboard = ScoreboardLocation::new(context.location.clone().flatten(), "return");
+          let scoreboard = ScoreboardLocation::new(context.location.clone(), "return");
           self.used_scoreboards.insert(scoreboard.scoreboard_string());
           self.set_scoreboard(code, &scoreboard, &expression)?;
         }
@@ -1035,15 +1002,10 @@ impl Compiler {
 
     let fn_location: FunctionLocation;
 
-    match condition.to_condition(
-      self,
-      &mut commands,
-      &context.location.module.namespace,
-      true,
-    )? {
+    match condition.to_condition(self, &mut commands, &context.location.namespace, true)? {
       ConditionKind::Known(false) => {}
       ConditionKind::Known(true) => {
-        fn_location = self.next_function("while", context.location.module.namespace.clone());
+        fn_location = self.next_function("while", &context.location.namespace);
 
         commands.extend(self.compile_block(context, while_loop.block)?);
 
@@ -1053,7 +1015,7 @@ impl Compiler {
       }
 
       ConditionKind::Check(check_code) => {
-        fn_location = self.next_function("while", context.location.module.namespace.clone());
+        fn_location = self.next_function("while", &context.location.namespace);
         code.push(format!("function {fn_location}"));
         commands.push(format!("execute {check_code} run return 0"));
 
@@ -1144,7 +1106,7 @@ impl Compiler {
     fn_location: &FunctionLocation,
   ) -> Result<Expression> {
     if let ExpressionKind::Macro(index) = index.kind {
-      let mut storage = self.move_to_storage(code, left, &fn_location.module.namespace)?;
+      let mut storage = self.move_to_storage(code, left, &fn_location.namespace)?;
       storage.name = format!("{}[$({})]", storage.name, index.name);
       return Ok(Expression::with_macro(
         ExpressionKind::Storage(storage),
@@ -1154,20 +1116,20 @@ impl Compiler {
     }
 
     let dynamic_index = self.dynamic_index();
-    let storage = dynamic_index.clone().flatten();
+    let storage = dynamic_index.clone();
     let fn_command = format!("function {dynamic_index} with storage {storage}");
 
     self.set_storage(
       code,
       &StorageLocation::new(storage.clone(), "target".to_string()),
       &left,
-      &fn_location.module.namespace,
+      &fn_location.namespace,
     )?;
     self.set_storage(
       code,
       &StorageLocation::new(storage.clone(), "__index".to_string()),
       &index,
-      &fn_location.module.namespace,
+      &fn_location.namespace,
     )?;
     code.push(fn_command);
     Ok(Expression::new(
@@ -1333,27 +1295,27 @@ impl Compiler {
       self.dynamic_range_index_no_end()
     };
 
-    let storage = dynamic_index.clone().flatten();
+    let storage = dynamic_index.clone();
     let fn_command = format!("function {dynamic_index} with storage {storage}");
 
     self.set_storage(
       code,
       &StorageLocation::new(storage.clone(), "target".to_string()),
       &left,
-      &fn_location.module.namespace,
+      &fn_location.namespace,
     )?;
     self.set_storage(
       code,
       &StorageLocation::new(storage.clone(), "__start".to_string()),
       &start,
-      &fn_location.module.namespace,
+      &fn_location.namespace,
     )?;
     if let Some(end) = end {
       self.set_storage(
         code,
         &StorageLocation::new(storage.clone(), "__end".to_string()),
         &end,
-        &fn_location.module.namespace,
+        &fn_location.namespace,
       )?;
     }
     code.push(fn_command);
@@ -1439,7 +1401,7 @@ impl Compiler {
     fn_location: &FunctionLocation,
   ) -> Result<Expression> {
     if let ExpressionKind::Macro(member) = member.kind {
-      let mut storage = self.move_to_storage(code, left, &fn_location.module.namespace)?;
+      let mut storage = self.move_to_storage(code, left, &fn_location.namespace)?;
       storage.name = format!("{}.\"$({})\"", storage.name, member.name);
       return Ok(Expression::with_macro(
         ExpressionKind::Storage(storage),
@@ -1449,20 +1411,20 @@ impl Compiler {
     }
 
     let dynamic_member = self.dynamic_member();
-    let storage = dynamic_member.clone().flatten();
+    let storage = dynamic_member.clone();
     let fn_command = format!("function {dynamic_member} with storage {storage}");
 
     self.set_storage(
       code,
       &StorageLocation::new(storage.clone(), "target".to_string()),
       &left,
-      &fn_location.module.namespace,
+      &fn_location.namespace,
     )?;
     self.set_storage(
       code,
       &StorageLocation::new(storage.clone(), "__member".to_string()),
       &member,
-      &fn_location.module.namespace,
+      &fn_location.namespace,
     )?;
     code.push(fn_command);
     Ok(Expression::new(
