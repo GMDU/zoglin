@@ -1,6 +1,6 @@
 ## Before initial alpha
 - Add a `Context` struct to be passed around in the compiler
-- Module-scoped compile-time variables
+- Operator-assignment
 - Simple compile-time functions
 - Add more functionality to static expressions
 - `@score` & `@condition` builtins

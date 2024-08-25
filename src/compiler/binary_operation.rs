@@ -2,7 +2,7 @@ use crate::parser::ast::{self, BinaryOperation, Operator, UnaryExpression, Unary
 
 use crate::error::{raise_error, Result};
 
-use super::file_tree::FunctionLocation;
+use super::file_tree::ResourceLocation;
 use super::{
   expression::{Condition, ConditionKind, Expression, ExpressionKind, ScoreKind, StorageKind},
   file_tree::{ScoreboardLocation, StorageLocation},
@@ -13,7 +13,7 @@ impl Compiler {
   pub(super) fn compile_binary_operation(
     &mut self,
     binary_operation: BinaryOperation,
-    location: &FunctionLocation,
+    location: &ResourceLocation,
     code: &mut Vec<String>,
   ) -> Result<Expression> {
     match binary_operation.operator {
@@ -43,20 +43,20 @@ impl Compiler {
   fn compile_assignment(
     &mut self,
     binary_operation: BinaryOperation,
-    location: &FunctionLocation,
+    location: &ResourceLocation,
     code: &mut Vec<String>,
   ) -> Result<Expression> {
     match *binary_operation.left {
       ast::Expression::Variable(variable) => {
         let typ = self.compile_expression(*binary_operation.right, location, code, false)?;
-        let storage = StorageLocation::from_zoglin_resource(location.clone(), &variable);
+        let storage = StorageLocation::from_zoglin_resource(location, &variable);
         self.set_storage(code, &storage, &typ, &location.namespace)?;
 
         Ok(typ)
       }
       ast::Expression::ScoreboardVariable(variable) => {
         let typ = self.compile_expression(*binary_operation.right, location, code, false)?;
-        let scoreboard = ScoreboardLocation::from_zoglin_resource(location.clone(), &variable);
+        let scoreboard = ScoreboardLocation::from_zoglin_resource(location, &variable);
         self.set_scoreboard(code, &scoreboard, &typ)?;
         self.used_scoreboards.insert(scoreboard.scoreboard_string());
 
@@ -81,7 +81,7 @@ impl Compiler {
   fn compile_plus(
     &mut self,
     binary_operation: BinaryOperation,
-    location: &FunctionLocation,
+    location: &ResourceLocation,
     code: &mut Vec<String>,
   ) -> Result<Expression> {
     let left = self.compile_expression(*binary_operation.left, location, code, false)?;
@@ -131,7 +131,7 @@ impl Compiler {
   fn compile_minus(
     &mut self,
     binary_operation: BinaryOperation,
-    location: &FunctionLocation,
+    location: &ResourceLocation,
     code: &mut Vec<String>,
   ) -> Result<Expression> {
     let left = self.compile_expression(*binary_operation.left, location, code, false)?;
@@ -173,7 +173,7 @@ impl Compiler {
   fn compile_multiply(
     &mut self,
     binary_operation: BinaryOperation,
-    location: &FunctionLocation,
+    location: &ResourceLocation,
     code: &mut Vec<String>,
   ) -> Result<Expression> {
     let left = self.compile_expression(*binary_operation.left, location, code, false)?;
@@ -207,7 +207,7 @@ impl Compiler {
   fn compile_divide(
     &mut self,
     binary_operation: BinaryOperation,
-    location: &FunctionLocation,
+    location: &ResourceLocation,
     code: &mut Vec<String>,
   ) -> Result<Expression> {
     let left = self.compile_expression(*binary_operation.left, location, code, false)?;
@@ -241,7 +241,7 @@ impl Compiler {
   fn compile_modulo(
     &mut self,
     binary_operation: BinaryOperation,
-    location: &FunctionLocation,
+    location: &ResourceLocation,
     code: &mut Vec<String>,
   ) -> Result<Expression> {
     let left = self.compile_expression(*binary_operation.left, location, code, false)?;
@@ -276,7 +276,7 @@ impl Compiler {
     &mut self,
     code: &mut Vec<String>,
     binary_operation: BinaryOperation,
-    location: &FunctionLocation,
+    location: &ResourceLocation,
   ) -> Result<Expression> {
     let left = self.compile_expression(*binary_operation.left, location, code, false)?;
     let right = self.compile_expression(*binary_operation.right, location, code, false)?;
@@ -325,7 +325,7 @@ impl Compiler {
     &mut self,
     code: &mut Vec<String>,
     binary_operation: BinaryOperation,
-    location: &FunctionLocation,
+    location: &ResourceLocation,
   ) -> Result<Expression> {
     let left = self.compile_expression(*binary_operation.left, location, code, false)?;
     let right = self.compile_expression(*binary_operation.right, location, code, false)?;
@@ -374,7 +374,7 @@ impl Compiler {
     &mut self,
     code: &mut Vec<String>,
     binary_operation: BinaryOperation,
-    location: &FunctionLocation,
+    location: &ResourceLocation,
   ) -> Result<Expression> {
     let left = self.compile_expression(*binary_operation.left, location, code, false)?;
     let right = self.compile_expression(*binary_operation.right, location, code, false)?;
@@ -417,7 +417,7 @@ impl Compiler {
     &mut self,
     code: &mut Vec<String>,
     binary_operation: BinaryOperation,
-    location: &FunctionLocation,
+    location: &ResourceLocation,
   ) -> Result<Expression> {
     let left = self.compile_expression(*binary_operation.left, location, code, false)?;
     let right = self.compile_expression(*binary_operation.right, location, code, false)?;
@@ -460,7 +460,7 @@ impl Compiler {
     &mut self,
     code: &mut Vec<String>,
     binary_operation: BinaryOperation,
-    location: &FunctionLocation,
+    location: &ResourceLocation,
   ) -> Result<Expression> {
     let left = self.compile_expression(*binary_operation.left, location, code, false)?;
     let right = self.compile_expression(*binary_operation.right, location, code, false)?;
@@ -494,7 +494,7 @@ impl Compiler {
     &mut self,
     code: &mut Vec<String>,
     binary_operation: BinaryOperation,
-    location: &FunctionLocation,
+    location: &ResourceLocation,
   ) -> Result<Expression> {
     let left = self.compile_expression(*binary_operation.left, location, code, false)?;
     let right = self.compile_expression(*binary_operation.right, location, code, false)?;
@@ -528,7 +528,7 @@ impl Compiler {
     &mut self,
     code: &mut Vec<String>,
     binary_operation: BinaryOperation,
-    location: &FunctionLocation,
+    location: &ResourceLocation,
   ) -> Result<Expression> {
     let left = self.compile_expression(*binary_operation.left, location, code, false)?;
     let right = self.compile_expression(*binary_operation.right, location, code, false)?;
@@ -557,7 +557,7 @@ impl Compiler {
     &mut self,
     code: &mut Vec<String>,
     binary_operation: BinaryOperation,
-    location: &FunctionLocation,
+    location: &ResourceLocation,
   ) -> Result<Expression> {
     let left = self.compile_expression(*binary_operation.left, location, code, false)?;
     let right = self.compile_expression(*binary_operation.right, location, code, false)?;
@@ -664,7 +664,7 @@ impl Compiler {
   pub fn compile_unary_expression(
     &mut self,
     unary_expression: UnaryExpression,
-    location: &FunctionLocation,
+    location: &ResourceLocation,
     code: &mut Vec<String>,
   ) -> Result<Expression> {
     match unary_expression.operator {
@@ -676,7 +676,7 @@ impl Compiler {
   fn compile_logical_not(
     &mut self,
     unary_expression: UnaryExpression,
-    location: &FunctionLocation,
+    location: &ResourceLocation,
     code: &mut Vec<String>,
   ) -> Result<Expression> {
     let operand = self.compile_expression(*unary_expression.operand, location, code, false)?;
@@ -699,7 +699,7 @@ impl Compiler {
   fn compile_negation(
     &mut self,
     unary_expression: UnaryExpression,
-    location: &FunctionLocation,
+    location: &ResourceLocation,
     code: &mut Vec<String>,
   ) -> Result<Expression> {
     let operand = self.compile_expression(*unary_expression.operand, location, code, false)?;

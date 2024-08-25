@@ -1,29 +1,34 @@
-use crate::parser::ast::{File, Function, Import, Item, Module, Namespace, ParameterKind};
+use crate::parser::ast::{self, File, Function, Import, Item, Module, Namespace, ParameterKind};
 
 use super::{
-  file_tree::{FunctionLocation, ResourceLocation, ScoreboardLocation},
+  file_tree::{ResourceLocation, ScoreboardLocation},
   scope::{FunctionDefinition, Scope},
   Compiler,
 };
 
 impl Compiler {
-  pub fn register(&mut self, ast: &File) {
+  pub fn register(&mut self, ast: &mut File) {
     self.scopes.push(Scope::new(0));
-    for namespace in ast.items.iter() {
+    for namespace in ast.items.iter_mut() {
       self.register_namespace(namespace, 0);
     }
   }
 
-  fn register_namespace(&mut self, namespace: &Namespace, parent_scope: usize) {
+  fn register_namespace(&mut self, namespace: &mut Namespace, parent_scope: usize) {
     let index = self.push_scope(namespace.name.clone(), parent_scope);
 
-    for item in namespace.items.iter() {
-      let mut resource = ResourceLocation::new(&namespace.name, &[]);
+    for item in namespace.items.iter_mut() {
+      let mut resource = ResourceLocation::new_module(&namespace.name, &[]);
       self.register_item(item, &mut resource, index);
     }
   }
 
-  fn register_item(&mut self, item: &Item, location: &mut ResourceLocation, parent_scope: usize) {
+  fn register_item(
+    &mut self,
+    item: &mut Item,
+    location: &mut ResourceLocation,
+    parent_scope: usize,
+  ) {
     match item {
       Item::Module(module) => self.register_module(module, location, parent_scope),
 
@@ -32,12 +37,20 @@ impl Compiler {
       Item::Function(function) => self.register_function(function, location, parent_scope),
 
       Item::Resource(_) => {}
+
+      Item::ComptimeAssignment(_, _) => {
+        let Item::ComptimeAssignment(name, value) = item.take() else {
+          unreachable!()
+        };
+        self.register_comptime_assignment(name, value, location, parent_scope)
+      }
+      Item::None => {}
     }
   }
 
   fn register_module(
     &mut self,
-    module: &Module,
+    module: &mut Module,
     location: &mut ResourceLocation,
     parent_scope: usize,
   ) {
@@ -45,7 +58,7 @@ impl Compiler {
 
     location.modules.push(module.name.clone());
 
-    for item in module.items.iter() {
+    for item in module.items.iter_mut() {
       self.register_item(item, location, index);
     }
 
@@ -57,7 +70,7 @@ impl Compiler {
       .alias
       .clone()
       .unwrap_or_else(|| import.path.name.clone());
-    let path = FunctionLocation::from_zoglin_resource(location, &import.path, false);
+    let path = ResourceLocation::from_zoglin_resource(location, &import.path, false);
     self.add_import(scope, name, path);
   }
 
@@ -91,5 +104,21 @@ impl Compiler {
     } else if &function.name == "load" && location.modules.is_empty() {
       self.load_functions.push(function_path);
     }
+  }
+
+  fn register_comptime_assignment(
+    &mut self,
+    name: String,
+    value: ast::Expression,
+    location: &ResourceLocation,
+    scope: usize,
+  ) {
+    // TODO: Add some sort of validation
+    let compiled_value = self
+      .compile_expression(value, location, &mut Vec::new(), false)
+      .expect("TODO: return error");
+    self.scopes[scope]
+      .comptime_values
+      .insert(name, compiled_value);
   }
 }

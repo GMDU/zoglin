@@ -1,3 +1,5 @@
+use std::mem::replace;
+
 use crate::error::Location;
 
 #[derive(Debug)]
@@ -13,10 +15,18 @@ pub struct Namespace {
 
 #[derive(Debug)]
 pub enum Item {
+  None,
   Module(Module),
   Import(Import),
   Function(Function),
   Resource(Resource),
+  ComptimeAssignment(String, Expression),
+}
+
+impl Item {
+  pub fn take(&mut self) -> Item {
+    replace(self, Item::None)
+  }
 }
 
 #[derive(Debug)]

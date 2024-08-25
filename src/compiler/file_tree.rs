@@ -1,6 +1,6 @@
 use glob::glob;
 use serde::Serialize;
-use std::{fmt::Display, fs, marker::PhantomData, path::Path};
+use std::{fmt::Display, fs, path::Path};
 
 use crate::{
   error::{raise_error, raise_floating_error, Location, Result},
@@ -55,7 +55,7 @@ pub struct Namespace {
 impl Namespace {
   fn generate(&self, path: &str) -> Result<()> {
     for item in self.items.iter() {
-      item.generate(path, &ResourceLocation::new(&self.name, &[]))?;
+      item.generate(path, &ResourceLocation::new_module(&self.name, &[]))?;
     }
     Ok(())
   }
@@ -240,76 +240,31 @@ impl FileResource {
   }
 }
 
-pub type ResourceLocation = Resource<ModuleResource>;
-pub type FunctionLocation = Resource<FunctionResource>;
-
-pub struct ModuleResource;
-pub struct FunctionResource;
-
-pub struct Resource<T> {
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ResourceLocation {
   pub namespace: String,
   pub modules: Vec<String>,
-  phantom_data: PhantomData<T>,
+  kind: ResourceKind,
 }
 
-impl<T> PartialEq for Resource<T> {
-  fn eq(&self, other: &Self) -> bool {
-    self.namespace == other.namespace
-      && self.modules == other.modules
-      && self.phantom_data == other.phantom_data
-  }
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+enum ResourceKind {
+  Function,
+  Module,
 }
 
-impl<T> std::hash::Hash for Resource<T> {
-  fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-    self.namespace.hash(state);
-    self.modules.hash(state);
-    self.phantom_data.hash(state);
-  }
-}
-
-impl<T> Eq for Resource<T> {}
-
-impl<T> std::fmt::Debug for Resource<T> {
-  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    f.debug_struct("Resource")
-      .field("namespace", &self.namespace)
-      .field("modules", &self.modules)
-      .field("phantom_data", &self.phantom_data)
-      .finish()
-  }
-}
-
-impl<T> Clone for Resource<T> {
-  fn clone(&self) -> Self {
-    Self {
-      namespace: self.namespace.clone(),
-      modules: self.modules.clone(),
-      phantom_data: self.phantom_data,
-    }
-  }
-}
-
-impl<T> Display for Resource<T> {
+impl Display for ResourceLocation {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     write!(f, "{}:{}", self.namespace, self.modules.join("/"))
   }
 }
 
-impl<T> Resource<T> {
-  pub fn new(namespace: &str, modules: &[&str]) -> Self {
-    Self {
-      namespace: namespace.to_string(),
-      modules: modules.iter().map(|module| module.to_string()).collect(),
-      phantom_data: PhantomData,
-    }
-  }
-
+impl ResourceLocation {
   pub fn from_zoglin_resource(
-    base_location: &Resource<ModuleResource>,
+    base_location: &ResourceLocation,
     resource: &ast::ZoglinResource,
     function_scoped: bool,
-  ) -> Resource<FunctionResource> {
+  ) -> ResourceLocation {
     if let Some(mut namespace) = resource.namespace.clone() {
       if namespace.is_empty() {
         namespace.clone_from(&base_location.namespace);
@@ -323,15 +278,15 @@ impl<T> Resource<T> {
         return location.with_name(&resource.name);
       }
 
-      let mut modules = resource.modules.clone();
-      modules.push(resource.name.clone());
-      return Resource {
+      let modules = resource.modules.clone();
+      return ResourceLocation {
         namespace,
         modules,
-        phantom_data: PhantomData,
-      };
+        kind: ResourceKind::Module,
+      }
+      .with_name(&resource.name);
     }
-    let mut location = base_location.clone();
+    let mut location: ResourceLocation = base_location.clone();
 
     location.modules.extend(resource.modules.clone());
     location.with_name(&resource.name)
@@ -343,40 +298,59 @@ impl<T> Resource<T> {
       prefix.push('/');
     }
     prefix.push_str(suffix);
+
     prefix
   }
-}
 
-impl Resource<ModuleResource> {
-  pub fn with_name(mut self, name: &str) -> Resource<FunctionResource> {
-    self.modules.push(name.to_string());
-    Resource {
-      namespace: self.namespace,
-      modules: self.modules,
-      phantom_data: PhantomData,
+  pub fn module(mut self) -> ResourceLocation {
+    match self.kind {
+      ResourceKind::Function => {
+        self.modules.pop().expect("Should have a name");
+        self
+      }
+      ResourceKind::Module => self,
     }
   }
-}
 
-impl Resource<FunctionResource> {
+  pub fn try_split(mut self) -> Option<(ResourceLocation, String)> {
+    match self.kind {
+      ResourceKind::Function => {
+        let name = self.modules.pop().expect("Should have a name");
+        Some((self, name))
+      }
+      ResourceKind::Module => None,
+    }
+  }
+
   pub fn name(&self) -> &String {
     self.modules.last().expect("Should have a name")
   }
 
-  pub fn split(mut self) -> (Resource<ModuleResource>, String) {
-    let name = self.modules.pop().expect("Should have a name");
-    (self.into_module(), name)
-  }
-
-  pub fn module(self) -> Resource<ModuleResource> {
-    self.split().0
-  }
-
-  pub fn into_module(self) -> Resource<ModuleResource> {
-    Resource {
+  pub fn with_name(mut self, name: &str) -> ResourceLocation {
+    self.modules.push(name.to_string());
+    ResourceLocation {
       namespace: self.namespace,
       modules: self.modules,
-      phantom_data: PhantomData,
+      kind: ResourceKind::Function,
+    }
+  }
+
+  pub fn new_module(namespace: &str, modules: &[&str]) -> Self {
+    Self {
+      namespace: namespace.to_string(),
+      modules: modules.iter().map(|module| module.to_string()).collect(),
+      kind: ResourceKind::Module,
+    }
+  }
+
+  pub fn new_function(namespace: &str, modules: &[&str]) -> Self {
+    if modules.is_empty() {
+      panic!("Should not construct function locations with no name");
+    }
+    Self {
+      namespace: namespace.to_string(),
+      modules: modules.iter().map(|module| module.to_string()).collect(),
+      kind: ResourceKind::Function,
     }
   }
 }
@@ -443,26 +417,24 @@ impl Display for StorageLocation {
 }
 
 impl StorageLocation {
-  pub fn new(storage: FunctionLocation, name: String) -> StorageLocation {
+  pub fn new(storage: ResourceLocation, name: String) -> StorageLocation {
     StorageLocation {
-      storage: storage.into_module(),
+      storage: storage,
       name,
     }
   }
 
   pub fn from_zoglin_resource(
-    fn_loc: FunctionLocation,
+    fn_loc: &ResourceLocation,
     resource: &ZoglinResource,
   ) -> StorageLocation {
-    StorageLocation::from_function_location(FunctionLocation::from_zoglin_resource(
-      &fn_loc.into_module(),
-      resource,
-      true,
+    StorageLocation::from_function_location(ResourceLocation::from_zoglin_resource(
+      fn_loc, resource, true,
     ))
   }
 
-  fn from_function_location(location: FunctionLocation) -> StorageLocation {
-    let (module, name) = location.split();
+  fn from_function_location(location: ResourceLocation) -> StorageLocation {
+    let (module, name) = location.try_split().expect("Should have a name");
     StorageLocation {
       storage: module,
       name,
@@ -498,34 +470,32 @@ impl ScoreboardLocation {
   }
 
   pub fn from_zoglin_resource(
-    fn_loc: FunctionLocation,
+    fn_loc: &ResourceLocation,
     resource: &ZoglinResource,
   ) -> ScoreboardLocation {
-    ScoreboardLocation::from_function_location(FunctionLocation::from_zoglin_resource(
-      &fn_loc.into_module(),
-      resource,
-      true,
+    ScoreboardLocation::from_function_location(ResourceLocation::from_zoglin_resource(
+      &fn_loc, resource, true,
     ))
   }
 
-  fn from_function_location(location: FunctionLocation) -> ScoreboardLocation {
-    let (module, name) = location.split();
+  fn from_function_location(location: ResourceLocation) -> ScoreboardLocation {
+    let (module, name) = location.try_split().expect("Function location");
     ScoreboardLocation {
       scoreboard: module,
       name: format!("${name}"),
     }
   }
 
-  pub fn new(location: FunctionLocation, name: &str) -> ScoreboardLocation {
+  pub fn new(location: ResourceLocation, name: &str) -> ScoreboardLocation {
     ScoreboardLocation {
-      scoreboard: location.into_module(),
+      scoreboard: location,
       name: format!("${name}"),
     }
   }
 
   pub fn of_internal(name: &str) -> ScoreboardLocation {
     ScoreboardLocation {
-      scoreboard: ResourceLocation::new("zoglin", &["internal", "vars"]),
+      scoreboard: ResourceLocation::new_function("zoglin", &["internal", "vars"]),
       name: format!("${name}"),
     }
   }

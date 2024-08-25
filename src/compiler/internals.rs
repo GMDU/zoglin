@@ -2,20 +2,20 @@ use std::sync::OnceLock;
 
 use crate::error::Location;
 
-use super::{file_tree::FunctionLocation, Compiler};
+use super::{file_tree::ResourceLocation, Compiler};
 
-static RESET_DIRECT_RETURN: OnceLock<FunctionLocation> = OnceLock::new();
-static DYNAMIC_INDEX: OnceLock<FunctionLocation> = OnceLock::new();
-static DYNAMIC_RANGE_INDEX: OnceLock<FunctionLocation> = OnceLock::new();
-static DYNAMIC_RANGE_INDEX_NO_END: OnceLock<FunctionLocation> = OnceLock::new();
-static DYNAMIC_MEMBER: OnceLock<FunctionLocation> = OnceLock::new();
+static RESET_DIRECT_RETURN: OnceLock<ResourceLocation> = OnceLock::new();
+static DYNAMIC_INDEX: OnceLock<ResourceLocation> = OnceLock::new();
+static DYNAMIC_RANGE_INDEX: OnceLock<ResourceLocation> = OnceLock::new();
+static DYNAMIC_RANGE_INDEX_NO_END: OnceLock<ResourceLocation> = OnceLock::new();
+static DYNAMIC_MEMBER: OnceLock<ResourceLocation> = OnceLock::new();
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 impl Compiler {
-  pub fn reset_direct_return(&mut self) -> &FunctionLocation {
+  pub fn reset_direct_return(&mut self) -> &ResourceLocation {
     RESET_DIRECT_RETURN.get_or_init(|| {
-      let location = FunctionLocation::new(
+      let location = ResourceLocation::new_function(
         "zoglin", &["internal", VERSION,
         "reset_return"],
       );
@@ -34,9 +34,9 @@ impl Compiler {
     })
   }
 
-  pub fn dynamic_index(&mut self) -> &FunctionLocation {
+  pub fn dynamic_index(&mut self) -> &ResourceLocation {
     DYNAMIC_INDEX.get_or_init(|| {
-      let location = FunctionLocation::new(
+      let location = ResourceLocation::new_function(
         "zoglin", &["internal", VERSION,
         "dynamic_index"],
       );
@@ -55,9 +55,9 @@ impl Compiler {
     })
   }
 
-  pub fn dynamic_range_index(&mut self) -> &FunctionLocation {
+  pub fn dynamic_range_index(&mut self) -> &ResourceLocation {
     DYNAMIC_RANGE_INDEX.get_or_init(|| {
-      let location = FunctionLocation::new(
+      let location = ResourceLocation::new_function(
         "zoglin", &["internal", VERSION,
         "dynamic_range_index"],
       );
@@ -76,9 +76,9 @@ impl Compiler {
     })
   }
 
-  pub fn dynamic_range_index_no_end(&mut self) -> &FunctionLocation {
+  pub fn dynamic_range_index_no_end(&mut self) -> &ResourceLocation {
     DYNAMIC_RANGE_INDEX_NO_END.get_or_init(|| {
-      let location = FunctionLocation::new(
+      let location = ResourceLocation::new_function(
         "zoglin", &["internal", VERSION,
         "dynamic_range_index_no_end"],
       );
@@ -97,9 +97,9 @@ impl Compiler {
     })
   }
 
-  pub fn dynamic_member(&mut self) -> &FunctionLocation {
+  pub fn dynamic_member(&mut self) -> &ResourceLocation {
     DYNAMIC_MEMBER.get_or_init(|| {
-      let location = FunctionLocation::new(
+      let location = ResourceLocation::new_function(
         "zoglin", &["internal", VERSION,
         "dynamic_member"],
       );

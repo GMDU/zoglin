@@ -3,7 +3,7 @@ use std::mem::take;
 use std::{collections::HashMap, path::Path};
 
 use expression::{verify_types, ConditionKind, Expression, ExpressionKind, NbtValue};
-use file_tree::{FunctionLocation, ResourceLocation, ScoreboardLocation, StorageLocation};
+use file_tree::{ResourceLocation, ScoreboardLocation, StorageLocation};
 use scope::FunctionDefinition;
 use serde::Serialize;
 
@@ -15,7 +15,7 @@ use crate::parser::ast::{
 use crate::error::{raise_error, raise_floating_error, Location, Result};
 
 use self::{
-  file_tree::{FileResource, FileTree, Function, Item, Namespace, Resource, TextResource},
+  file_tree::{FileResource, FileTree, Function, Item, Namespace, TextResource},
   scope::Scope,
 };
 mod binary_operation;
@@ -35,12 +35,12 @@ pub struct Compiler {
   counters: HashMap<String, usize>,
   namespaces: HashMap<String, Namespace>,
   used_scoreboards: HashSet<String>,
-  function_registry: HashMap<FunctionLocation, FunctionDefinition>,
+  function_registry: HashMap<ResourceLocation, FunctionDefinition>,
 }
 
 #[derive(Clone)]
 struct FunctionContext {
-  location: FunctionLocation,
+  location: ResourceLocation,
   return_type: ReturnType,
   is_nested: bool,
   has_nested_returns: bool,
@@ -69,11 +69,11 @@ impl Compiler {
     self.current_scope = self.scopes[self.current_scope].parent;
   }
 
-  fn add_function(&mut self, scope: usize, name: String, location: FunctionLocation) {
+  fn add_function(&mut self, scope: usize, name: String, location: ResourceLocation) {
     self.scopes[scope].function_registry.insert(name, location);
   }
 
-  fn lookup_resource(&self, resource: &ZoglinResource) -> Option<FunctionLocation> {
+  fn lookup_resource(&self, resource: &ZoglinResource) -> Option<ResourceLocation> {
     if resource.namespace.is_some() {
       return None;
     }
@@ -104,6 +104,18 @@ impl Compiler {
         return Some(value.clone());
       }
     }
+
+    let mut index = self.current_scope;
+
+    while index != 0 {
+      let scope = &self.scopes[index];
+      if let Some(value) = scope.comptime_values.get(name) {
+        return Some(value.clone());
+      }
+
+      index = scope.parent;
+    }
+
     None
   }
 
@@ -125,7 +137,7 @@ impl Compiler {
     namespace.get_module(location.modules)
   }
 
-  fn add_import(&mut self, scope: usize, name: String, location: FunctionLocation) {
+  fn add_import(&mut self, scope: usize, name: String, location: ResourceLocation) {
     self.scopes[scope].imported_items.insert(name, location);
   }
 
@@ -185,20 +197,20 @@ impl Compiler {
       .used_scoreboards
       .insert(format!("zoglin.internal.{namespace}.vars"));
     ScoreboardLocation {
-      scoreboard: ResourceLocation::new("zoglin", &["internal", namespace, "vars"]),
+      scoreboard: ResourceLocation::new_function("zoglin", &["internal", namespace, "vars"]),
       name: format!("$var_{}", self.next_counter("scoreboard")),
     }
   }
 
   fn next_storage(&mut self, namespace: &str) -> StorageLocation {
     StorageLocation::new(
-      Resource::new("zoglin", &["internal", namespace, "vars"]),
+      ResourceLocation::new_function("zoglin", &["internal", namespace, "vars"]),
       format!("var_{}", self.next_counter("storage")),
     )
   }
 
-  fn next_function(&mut self, function_type: &str, namespace: &str) -> FunctionLocation {
-    FunctionLocation::new(
+  fn next_function(&mut self, function_type: &str, namespace: &str) -> ResourceLocation {
+    ResourceLocation::new_function(
       "zoglin",
       &[
         "generated",
@@ -214,10 +226,10 @@ impl Compiler {
 }
 
 impl Compiler {
-  pub fn compile(ast: File, output: &String) -> Result<()> {
+  pub fn compile(mut ast: File, output: &String) -> Result<()> {
     let mut compiler = Compiler::default();
 
-    compiler.register(&ast);
+    compiler.register(&mut ast);
     let tree = compiler.compile_tree(ast)?;
     tree.generate(output)?;
     Ok(())
@@ -242,7 +254,7 @@ impl Compiler {
       location: Location::blank(),
     });
 
-    let location = ResourceLocation::new("minecraft", &[]);
+    let location = ResourceLocation::new_module("minecraft", &[]);
     self.add_item(location.clone(), load)?;
 
     if !self.tick_functions.is_empty() {
@@ -275,7 +287,7 @@ impl Compiler {
     self.enter_scope(&namespace.name);
     self.comptime_scopes.push(HashMap::new());
 
-    let resource = Resource::new(&namespace.name, &[]);
+    let resource = ResourceLocation::new_module(&namespace.name, &[]);
 
     for item in namespace.items {
       self.compile_item(item, &resource)?;
@@ -293,7 +305,7 @@ impl Compiler {
       location: Location::blank(),
     });
     self.add_item(
-      Resource::new("zoglin", &["generated", &namespace.name]),
+      ResourceLocation::new_module("zoglin", &["generated", &namespace.name]),
       load_function,
     )?;
 
@@ -306,6 +318,8 @@ impl Compiler {
       ast::Item::Import(_) => Ok(()),
       ast::Item::Function(function) => self.compile_ast_function(function, location),
       ast::Item::Resource(resource) => self.compile_resource(resource, location),
+      ast::Item::ComptimeAssignment(_, _) => Ok(()),
+      ast::Item::None => Ok(()),
     }
   }
 
@@ -435,10 +449,10 @@ impl Compiler {
   fn add_function_item(
     &mut self,
     location: Location,
-    fn_location: FunctionLocation,
+    fn_location: ResourceLocation,
     commands: Vec<String>,
   ) -> Result<()> {
-    let (module, name) = fn_location.split();
+    let (module, name) = fn_location.try_split().expect("Is a function location");
     let function = Function {
       name,
       location,
@@ -464,7 +478,7 @@ impl Compiler {
     &mut self,
     code: &mut Vec<String>,
     command: Command,
-    location: &FunctionLocation,
+    location: &ResourceLocation,
   ) -> Result<String> {
     let mut result = String::new();
     let mut is_macro = false;
@@ -497,7 +511,7 @@ impl Compiler {
   fn compile_expression(
     &mut self,
     expression: ast::Expression,
-    fn_location: &FunctionLocation,
+    fn_location: &ResourceLocation,
     code: &mut Vec<String>,
     ignored: bool,
   ) -> Result<Expression> {
@@ -563,14 +577,14 @@ impl Compiler {
       }
       ast::Expression::Variable(variable) => Expression::new(
         ExpressionKind::Storage(StorageLocation::from_zoglin_resource(
-          fn_location.clone(),
+          &fn_location,
           &variable,
         )),
         variable.location,
       ),
       ast::Expression::ScoreboardVariable(variable) => Expression::new(
         ExpressionKind::Scoreboard(ScoreboardLocation::from_zoglin_resource(
-          fn_location.clone(),
+          &fn_location,
           &variable,
         )),
         variable.location,
@@ -611,7 +625,7 @@ impl Compiler {
     typ: ArrayType,
     expressions: Vec<ast::Expression>,
     location: Location,
-    fn_location: &FunctionLocation,
+    fn_location: &ResourceLocation,
   ) -> Result<Expression> {
     let mut types = Vec::new();
 
@@ -645,7 +659,7 @@ impl Compiler {
     code: &mut Vec<String>,
     key_values: Vec<KeyValue>,
     location: Location,
-    fn_location: &FunctionLocation,
+    fn_location: &ResourceLocation,
   ) -> Result<Expression> {
     let mut types = HashMap::new();
 
@@ -674,7 +688,7 @@ impl Compiler {
     &mut self,
     code: &mut Vec<String>,
     expr: StaticExpr,
-    location: &FunctionLocation,
+    location: &ResourceLocation,
   ) -> Result<(String, bool)> {
     match expr {
       StaticExpr::FunctionCall(call) => {
@@ -710,7 +724,7 @@ impl Compiler {
       }
 
       StaticExpr::ResourceRef { resource } => Ok((
-        FunctionLocation::from_zoglin_resource(&location.clone().module(), &resource, false)
+        ResourceLocation::from_zoglin_resource(&location.clone().module(), &resource, false)
           .to_string(),
         false,
       )),
@@ -721,9 +735,10 @@ impl Compiler {
     &mut self,
     code: &mut Vec<String>,
     function_call: FunctionCall,
-    location: &FunctionLocation,
+    location: &ResourceLocation,
   ) -> Result<(String, FunctionDefinition)> {
     let src_location = function_call.path.location.clone();
+
     let path = self.resolve_zoglin_resource(function_call.path, &location.clone().module())?;
     let mut function_definition =
       if let Some(function_definition) = self.function_registry.get(&path) {
@@ -791,8 +806,8 @@ impl Compiler {
     &mut self,
     resource: ast::ZoglinResource,
     location: &ResourceLocation,
-  ) -> Result<FunctionLocation> {
-    let mut resource_location = ResourceLocation::new("", &[]);
+  ) -> Result<ResourceLocation> {
+    let mut resource_location = ResourceLocation::new_module("", &[]);
 
     if let Some(namespace) = resource.namespace {
       if namespace.is_empty() {
@@ -863,7 +878,7 @@ impl Compiler {
         }
       }
 
-      let (module, name) = if_function.split();
+      let (module, name) = if_function.try_split().expect("Is a function");
 
       self.add_item(
         module,
@@ -1009,7 +1024,7 @@ impl Compiler {
       false,
     )?;
 
-    let fn_location: FunctionLocation;
+    let fn_location: ResourceLocation;
 
     match condition.to_condition(self, &mut commands, &context.location.namespace, true)? {
       ConditionKind::Known(false) => {}
@@ -1043,7 +1058,7 @@ impl Compiler {
     &mut self,
     code: &mut Vec<String>,
     index: Index,
-    fn_location: &FunctionLocation,
+    fn_location: &ResourceLocation,
   ) -> Result<Expression> {
     let location = index.left.location();
     let left = self.compile_expression(*index.left, fn_location, code, false)?;
@@ -1112,7 +1127,7 @@ impl Compiler {
     left: Expression,
     index: Expression,
     location: Location,
-    fn_location: &FunctionLocation,
+    fn_location: &ResourceLocation,
   ) -> Result<Expression> {
     if let ExpressionKind::Macro(index) = index.kind {
       let mut storage = self.move_to_storage(code, left, &fn_location.namespace)?;
@@ -1151,7 +1166,7 @@ impl Compiler {
     &mut self,
     code: &mut Vec<String>,
     index: RangeIndex,
-    fn_location: &FunctionLocation,
+    fn_location: &ResourceLocation,
   ) -> Result<Expression> {
     let location = index.left.location();
     let left = self.compile_expression(*index.left, fn_location, code, false)?;
@@ -1296,7 +1311,7 @@ impl Compiler {
     start: Expression,
     end: Option<Expression>,
     location: Location,
-    fn_location: &FunctionLocation,
+    fn_location: &ResourceLocation,
   ) -> Result<Expression> {
     let dynamic_index = if end.is_some() {
       self.dynamic_range_index()
@@ -1338,7 +1353,7 @@ impl Compiler {
     &mut self,
     code: &mut Vec<String>,
     member: Member,
-    fn_location: &FunctionLocation,
+    fn_location: &ResourceLocation,
   ) -> Result<Expression> {
     let location = member.left.location();
     let left = self.compile_expression(*member.left, fn_location, code, false)?;
@@ -1407,7 +1422,7 @@ impl Compiler {
     left: Expression,
     member: Expression,
     location: Location,
-    fn_location: &FunctionLocation,
+    fn_location: &ResourceLocation,
   ) -> Result<Expression> {
     if let ExpressionKind::Macro(member) = member.kind {
       let mut storage = self.move_to_storage(code, left, &fn_location.namespace)?;

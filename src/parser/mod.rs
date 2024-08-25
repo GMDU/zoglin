@@ -173,6 +173,7 @@ impl Parser {
         Item::Resource(self.parse_resource()?)
       }
       TokenKind::FunctionKeyword => Item::Function(self.parse_function()?),
+      TokenKind::Ampersand => self.parse_comptime_assignment()?,
       _ => {
         return Err(raise_error(
           self.current().location.clone(),
@@ -180,6 +181,14 @@ impl Parser {
         ))
       }
     })
+  }
+
+  fn parse_comptime_assignment(&mut self) -> Result<Item> {
+    self.consume();
+    let name = self.expect(TokenKind::Identifier)?.value.clone();
+    self.expect(TokenKind::Equals)?;
+    let value = self.parse_expression()?;
+    Ok(Item::ComptimeAssignment(name, value))
   }
 
   fn parse_module(&mut self) -> Result<Module> {

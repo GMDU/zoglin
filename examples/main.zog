@@ -1,6 +1,8 @@
 namespace diamond
 # include "setup"
 
+&foo = 1
+
 fn load() {
-  a = []
+  a = &foo
 }
