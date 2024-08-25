@@ -85,9 +85,31 @@ impl Condition {
       Condition::Match(score, range) => {
         format!("{check_str} score {score} matches {range}",)
       }
-      Condition::Check(code) => code.clone(),
-      Condition::And(a, b) => format!("{a} {b}"),
+      Condition::Check(code) => {
+        if invert {
+          Self::invert_code(code)
+        } else {
+          code.clone()
+        }
+      }
+      Condition::And(a, b) => {
+        if invert {
+          format!("{} {}", Self::invert_code(a), Self::invert_code(b))
+        } else {
+          format!("{a} {b}")
+        }
+      }
       Condition::Inverted(condition) => condition.do_to_string(!invert),
+    }
+  }
+
+  fn invert_code(code: &str) -> String {
+    if let Some(condition) = code.strip_prefix("if") {
+      ["unless", condition].concat()
+    } else if let Some(condition) = code.strip_prefix("unless") {
+      ["if", condition].concat()
+    } else {
+      code.to_string()
     }
   }
 
