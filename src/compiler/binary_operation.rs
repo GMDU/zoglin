@@ -2,7 +2,7 @@ use crate::parser::ast::{self, BinaryOperation, Operator, UnaryExpression, Unary
 
 use crate::error::{raise_error, Result};
 
-use super::file_tree::ResourceLocation;
+use super::FunctionContext;
 use super::{
   expression::{Condition, ConditionKind, Expression, ExpressionKind, ScoreKind, StorageKind},
   file_tree::{ScoreboardLocation, StorageLocation},
@@ -13,29 +13,26 @@ impl Compiler {
   pub(super) fn compile_binary_operation(
     &mut self,
     binary_operation: BinaryOperation,
-    location: &ResourceLocation,
-    code: &mut Vec<String>,
+    context: &mut FunctionContext,
   ) -> Result<Expression> {
     match binary_operation.operator {
-      Operator::Plus => self.compile_plus(binary_operation, location, code),
-      Operator::Minus => self.compile_minus(binary_operation, location, code),
-      Operator::Divide => self.compile_divide(binary_operation, location, code),
-      Operator::Multiply => self.compile_multiply(binary_operation, location, code),
-      Operator::Modulo => self.compile_modulo(binary_operation, location, code),
+      Operator::Plus => self.compile_plus(binary_operation, context),
+      Operator::Minus => self.compile_minus(binary_operation, context),
+      Operator::Divide => self.compile_divide(binary_operation, context),
+      Operator::Multiply => self.compile_multiply(binary_operation, context),
+      Operator::Modulo => self.compile_modulo(binary_operation, context),
       Operator::Power => todo!(),
       Operator::LeftShift => todo!(),
       Operator::RightShift => todo!(),
-      Operator::LessThan => self.compile_less_than(code, binary_operation, location),
-      Operator::GreaterThan => self.compile_greater_than(code, binary_operation, location),
-      Operator::LessThanEquals => self.compile_less_than_equals(code, binary_operation, location),
-      Operator::GreaterThanEquals => {
-        self.compile_greater_than_equals(code, binary_operation, location)
-      }
-      Operator::Equal => self.compile_equals(code, binary_operation, location),
-      Operator::NotEqual => self.compile_not_equals(code, binary_operation, location),
-      Operator::LogicalAnd => self.compile_logical_and(code, binary_operation, location),
-      Operator::LogicalOr => self.compile_logical_or(code, binary_operation, location),
-      Operator::Assign => self.compile_assignment(binary_operation, location, code),
+      Operator::LessThan => self.compile_less_than(binary_operation, context),
+      Operator::GreaterThan => self.compile_greater_than(binary_operation, context),
+      Operator::LessThanEquals => self.compile_less_than_equals(binary_operation, context),
+      Operator::GreaterThanEquals => self.compile_greater_than_equals(binary_operation, context),
+      Operator::Equal => self.compile_equals(binary_operation, context),
+      Operator::NotEqual => self.compile_not_equals(binary_operation, context),
+      Operator::LogicalAnd => self.compile_logical_and(binary_operation, context),
+      Operator::LogicalOr => self.compile_logical_or(binary_operation, context),
+      Operator::Assign => self.compile_assignment(binary_operation, context),
       Operator::OperatorAssign(_) => todo!(),
     }
   }
@@ -43,27 +40,31 @@ impl Compiler {
   fn compile_assignment(
     &mut self,
     binary_operation: BinaryOperation,
-    location: &ResourceLocation,
-    code: &mut Vec<String>,
+    context: &mut FunctionContext,
   ) -> Result<Expression> {
     match *binary_operation.left {
       ast::Expression::Variable(variable) => {
-        let typ = self.compile_expression(*binary_operation.right, location, code, false)?;
-        let storage = StorageLocation::from_zoglin_resource(location, &variable);
-        self.set_storage(code, &storage, &typ, &location.namespace)?;
+        let typ = self.compile_expression(*binary_operation.right, context, false)?;
+        let storage = StorageLocation::from_zoglin_resource(&context.location, &variable);
+        self.set_storage(
+          &mut context.code,
+          &storage,
+          &typ,
+          &context.location.namespace,
+        )?;
 
         Ok(typ)
       }
       ast::Expression::ScoreboardVariable(variable) => {
-        let typ = self.compile_expression(*binary_operation.right, location, code, false)?;
-        let scoreboard = ScoreboardLocation::from_zoglin_resource(location, &variable);
-        self.set_scoreboard(code, &scoreboard, &typ)?;
+        let typ = self.compile_expression(*binary_operation.right, context, false)?;
+        let scoreboard = ScoreboardLocation::from_zoglin_resource(&context.location, &variable);
+        self.set_scoreboard(&mut context.code, &scoreboard, &typ)?;
         self.used_scoreboards.insert(scoreboard.scoreboard_string());
 
         Ok(typ)
       }
       ast::Expression::ComptimeVariable(name, _) => {
-        let expr = self.compile_expression(*binary_operation.right, location, code, false)?;
+        let expr = self.compile_expression(*binary_operation.right, context, false)?;
         self
           .comptime_scopes
           .last_mut()
@@ -81,11 +82,10 @@ impl Compiler {
   fn compile_plus(
     &mut self,
     binary_operation: BinaryOperation,
-    location: &ResourceLocation,
-    code: &mut Vec<String>,
+    context: &mut FunctionContext,
   ) -> Result<Expression> {
-    let left = self.compile_expression(*binary_operation.left, location, code, false)?;
-    let right = self.compile_expression(*binary_operation.right, location, code, false)?;
+    let left = self.compile_expression(*binary_operation.left, context, false)?;
+    let right = self.compile_expression(*binary_operation.right, context, false)?;
     let needs_macro = left.needs_macro || right.needs_macro;
 
     match (&left.kind, &right.kind) {
@@ -108,22 +108,24 @@ impl Compiler {
         ))
       }
       (num, _) if num.numeric_value().is_some() => {
-        let scoreboard = self.copy_to_scoreboard(code, &right, &location.namespace)?;
-        code.push(format!(
+        let scoreboard =
+          self.copy_to_scoreboard(&mut context.code, &right, &context.location.namespace)?;
+        context.code.push(format!(
           "scoreboard players add {scoreboard} {}",
           num.numeric_value().expect("Numeric value exists"),
         ));
         Ok(ExpressionKind::Scoreboard(scoreboard))
       }
       (_, num) if num.numeric_value().is_some() => {
-        let scoreboard = self.copy_to_scoreboard(code, &left, &location.namespace)?;
-        code.push(format!(
+        let scoreboard =
+          self.copy_to_scoreboard(&mut context.code, &left, &context.location.namespace)?;
+        context.code.push(format!(
           "scoreboard players add {scoreboard} {}",
           num.numeric_value().expect("Numeric value exists"),
         ));
         Ok(ExpressionKind::Scoreboard(scoreboard))
       }
-      _ => self.compile_basic_operator(left, right, '+', code, &location.namespace),
+      _ => self.compile_basic_operator(left, right, '+', &mut context.code, &context.location.namespace),
     }
     .map(|kind| Expression::with_macro(kind, binary_operation.location, needs_macro))
   }
@@ -131,11 +133,10 @@ impl Compiler {
   fn compile_minus(
     &mut self,
     binary_operation: BinaryOperation,
-    location: &ResourceLocation,
-    code: &mut Vec<String>,
+    context: &mut FunctionContext,
   ) -> Result<Expression> {
-    let left = self.compile_expression(*binary_operation.left, location, code, false)?;
-    let right = self.compile_expression(*binary_operation.right, location, code, false)?;
+    let left = self.compile_expression(*binary_operation.left, context, false)?;
+    let right = self.compile_expression(*binary_operation.right, context, false)?;
     let needs_macro = left.needs_macro || right.needs_macro;
 
     match (&left.kind, &right.kind) {
@@ -158,14 +159,15 @@ impl Compiler {
         ))
       }
       (_, num) if num.numeric_value().is_some() => {
-        let scoreboard = self.copy_to_scoreboard(code, &left, &location.namespace)?;
-        code.push(format!(
+        let scoreboard =
+          self.copy_to_scoreboard(&mut context.code, &left, &context.location.namespace)?;
+        context.code.push(format!(
           "scoreboard players remove {scoreboard} {}",
           num.numeric_value().expect("Numeric value exists"),
         ));
         Ok(ExpressionKind::Scoreboard(scoreboard))
       }
-      _ => self.compile_basic_operator(left, right, '-', code, &location.namespace),
+      _ => self.compile_basic_operator(left, right, '-', &mut context.code, &context.location.namespace),
     }
     .map(|kind| Expression::with_macro(kind, binary_operation.location, needs_macro))
   }
@@ -173,11 +175,10 @@ impl Compiler {
   fn compile_multiply(
     &mut self,
     binary_operation: BinaryOperation,
-    location: &ResourceLocation,
-    code: &mut Vec<String>,
+    context: &mut FunctionContext,
   ) -> Result<Expression> {
-    let left = self.compile_expression(*binary_operation.left, location, code, false)?;
-    let right = self.compile_expression(*binary_operation.right, location, code, false)?;
+    let left = self.compile_expression(*binary_operation.left, context, false)?;
+    let right = self.compile_expression(*binary_operation.right, context, false)?;
     let needs_macro = left.needs_macro || right.needs_macro;
 
     match (&left.kind, &right.kind) {
@@ -199,7 +200,7 @@ impl Compiler {
             * right.numeric_value().expect("Numeric value exists"),
         ))
       }
-      _ => self.compile_basic_operator(left, right, '*', code, &location.namespace),
+      _ => self.compile_basic_operator(left, right, '*', &mut context.code, &context.location.namespace),
     }
     .map(|kind| Expression::with_macro(kind, binary_operation.location, needs_macro))
   }
@@ -207,11 +208,10 @@ impl Compiler {
   fn compile_divide(
     &mut self,
     binary_operation: BinaryOperation,
-    location: &ResourceLocation,
-    code: &mut Vec<String>,
+    context: &mut FunctionContext,
   ) -> Result<Expression> {
-    let left = self.compile_expression(*binary_operation.left, location, code, false)?;
-    let right = self.compile_expression(*binary_operation.right, location, code, false)?;
+    let left = self.compile_expression(*binary_operation.left, context, false)?;
+    let right = self.compile_expression(*binary_operation.right, context, false)?;
     let needs_macro = left.needs_macro || right.needs_macro;
 
     match (&left.kind, &right.kind) {
@@ -233,7 +233,7 @@ impl Compiler {
             / right.numeric_value().expect("Numeric value exists"),
         ))
       }
-      _ => self.compile_basic_operator(left, right, '/', code, &location.namespace),
+      _ => self.compile_basic_operator(left, right, '/', &mut context.code, &context.location.namespace),
     }
     .map(|kind| Expression::with_macro(kind, binary_operation.location, needs_macro))
   }
@@ -241,11 +241,10 @@ impl Compiler {
   fn compile_modulo(
     &mut self,
     binary_operation: BinaryOperation,
-    location: &ResourceLocation,
-    code: &mut Vec<String>,
+    context: &mut FunctionContext,
   ) -> Result<Expression> {
-    let left = self.compile_expression(*binary_operation.left, location, code, false)?;
-    let right = self.compile_expression(*binary_operation.right, location, code, false)?;
+    let left = self.compile_expression(*binary_operation.left, context, false)?;
+    let right = self.compile_expression(*binary_operation.right, context, false)?;
     let needs_macro = left.needs_macro || right.needs_macro;
 
     match (&left.kind, &right.kind) {
@@ -267,19 +266,18 @@ impl Compiler {
             % right.numeric_value().expect("Numeric value exists"),
         ))
       }
-      _ => self.compile_basic_operator(left, right, '%', code, &location.namespace),
+      _ => self.compile_basic_operator(left, right, '%', &mut context.code, &context.location.namespace),
     }
     .map(|kind| Expression::with_macro(kind, binary_operation.location, needs_macro))
   }
 
   fn compile_less_than(
     &mut self,
-    code: &mut Vec<String>,
     binary_operation: BinaryOperation,
-    location: &ResourceLocation,
+    context: &mut FunctionContext,
   ) -> Result<Expression> {
-    let left = self.compile_expression(*binary_operation.left, location, code, false)?;
-    let right = self.compile_expression(*binary_operation.right, location, code, false)?;
+    let left = self.compile_expression(*binary_operation.left, context, false)?;
+    let right = self.compile_expression(*binary_operation.right, context, false)?;
     let needs_macro = left.needs_macro || right.needs_macro;
 
     match (&left.kind, &right.kind) {
@@ -299,36 +297,35 @@ impl Compiler {
         ))
       }
       (num, _) if num.numeric_value().is_some() => self.compile_match_comparison(
-        code,
+        &mut context.code,
         right,
         format!(
           "{}..",
           num.numeric_value().expect("Numeric value exists") + 1
         ),
-        &location.namespace,
+        &context.location.namespace,
       ),
       (_, num) if num.numeric_value().is_some() => self.compile_match_comparison(
-        code,
+        &mut context.code,
         left,
         format!(
           "..{}",
           num.numeric_value().expect("Numeric value exists") - 1
         ),
-        &location.namespace,
+        &context.location.namespace,
       ),
-      _ => self.compile_comparison_operator(code, left, right, "<", &location.namespace),
+      _ => self.compile_comparison_operator(&mut context.code, left, right, "<", &context.location.namespace),
     }
     .map(|kind| Expression::with_macro(kind, binary_operation.location, needs_macro))
   }
 
   fn compile_greater_than(
     &mut self,
-    code: &mut Vec<String>,
     binary_operation: BinaryOperation,
-    location: &ResourceLocation,
+    context: &mut FunctionContext,
   ) -> Result<Expression> {
-    let left = self.compile_expression(*binary_operation.left, location, code, false)?;
-    let right = self.compile_expression(*binary_operation.right, location, code, false)?;
+    let left = self.compile_expression(*binary_operation.left, context, false)?;
+    let right = self.compile_expression(*binary_operation.right, context, false)?;
     let needs_macro = left.needs_macro || right.needs_macro;
 
     match (&left.kind, &right.kind) {
@@ -348,36 +345,35 @@ impl Compiler {
         ))
       }
       (num, _) if num.numeric_value().is_some() => self.compile_match_comparison(
-        code,
+        &mut context.code,
         right,
         format!(
           "..{}",
           num.numeric_value().expect("Numeric value exists") - 1
         ),
-        &location.namespace,
+        &context.location.namespace,
       ),
       (_, num) if num.numeric_value().is_some() => self.compile_match_comparison(
-        code,
+        &mut context.code,
         left,
         format!(
           "{}..",
           num.numeric_value().expect("Numeric value exists") + 1
         ),
-        &location.namespace,
+        &context.location.namespace,
       ),
-      _ => self.compile_comparison_operator(code, left, right, ">", &location.namespace),
+      _ => self.compile_comparison_operator(&mut context.code, left, right, ">", &context.location.namespace),
     }
     .map(|kind| Expression::with_macro(kind, binary_operation.location, needs_macro))
   }
 
   fn compile_less_than_equals(
     &mut self,
-    code: &mut Vec<String>,
     binary_operation: BinaryOperation,
-    location: &ResourceLocation,
+    context: &mut FunctionContext,
   ) -> Result<Expression> {
-    let left = self.compile_expression(*binary_operation.left, location, code, false)?;
-    let right = self.compile_expression(*binary_operation.right, location, code, false)?;
+    let left = self.compile_expression(*binary_operation.left, context, false)?;
+    let right = self.compile_expression(*binary_operation.right, context, false)?;
     let needs_macro = left.needs_macro || right.needs_macro;
 
     match (&left.kind, &right.kind) {
@@ -397,30 +393,29 @@ impl Compiler {
         ))
       }
       (num, _) if num.numeric_value().is_some() => self.compile_match_comparison(
-        code,
+        &mut context.code,
         right,
         format!("{}..", num.numeric_value().expect("Numeric value exists")),
-        &location.namespace,
+        &context.location.namespace,
       ),
       (_, num) if num.numeric_value().is_some() => self.compile_match_comparison(
-        code,
+        &mut context.code,
         left,
         format!("..{}", num.numeric_value().expect("Numeric value exists")),
-        &location.namespace,
+        &context.location.namespace,
       ),
-      _ => self.compile_comparison_operator(code, left, right, "<=", &location.namespace),
+      _ => self.compile_comparison_operator(&mut context.code, left, right, "<=", &context.location.namespace),
     }
     .map(|kind| Expression::with_macro(kind, binary_operation.location, needs_macro))
   }
 
   fn compile_greater_than_equals(
     &mut self,
-    code: &mut Vec<String>,
     binary_operation: BinaryOperation,
-    location: &ResourceLocation,
+    context: &mut FunctionContext,
   ) -> Result<Expression> {
-    let left = self.compile_expression(*binary_operation.left, location, code, false)?;
-    let right = self.compile_expression(*binary_operation.right, location, code, false)?;
+    let left = self.compile_expression(*binary_operation.left, context, false)?;
+    let right = self.compile_expression(*binary_operation.right, context, false)?;
     let needs_macro = left.needs_macro || right.needs_macro;
 
     match (&left.kind, &right.kind) {
@@ -440,30 +435,29 @@ impl Compiler {
         ))
       }
       (num, _) if num.numeric_value().is_some() => self.compile_match_comparison(
-        code,
+        &mut context.code,
         right,
         format!("..{}", num.numeric_value().expect("Numeric value exists")),
-        &location.namespace,
+        &context.location.namespace,
       ),
       (_, num) if num.numeric_value().is_some() => self.compile_match_comparison(
-        code,
+        &mut context.code,
         left,
         format!("{}..", num.numeric_value().expect("Numeric value exists")),
-        &location.namespace,
+        &context.location.namespace,
       ),
-      _ => self.compile_comparison_operator(code, left, right, ">=", &location.namespace),
+      _ => self.compile_comparison_operator(&mut context.code, left, right, ">=", &context.location.namespace),
     }
     .map(|kind| Expression::with_macro(kind, binary_operation.location, needs_macro))
   }
 
   fn compile_equals(
     &mut self,
-    code: &mut Vec<String>,
     binary_operation: BinaryOperation,
-    location: &ResourceLocation,
+    context: &mut FunctionContext,
   ) -> Result<Expression> {
-    let left = self.compile_expression(*binary_operation.left, location, code, false)?;
-    let right = self.compile_expression(*binary_operation.right, location, code, false)?;
+    let left = self.compile_expression(*binary_operation.left, context, false)?;
+    let right = self.compile_expression(*binary_operation.right, context, false)?;
     let needs_macro = left.needs_macro || right.needs_macro;
 
     if let Some(equal) = left.equal(&right) {
@@ -478,26 +472,25 @@ impl Compiler {
         Err(raise_error(left.location, "Cannot compare with void."))
       }
       (ExpressionKind::Storage(_), _) | (_, ExpressionKind::Storage(_)) => {
-        self.storage_comparison(code, left, right, true, &location.namespace)
+        self.storage_comparison(&mut context.code, left, right, true, &context.location.namespace)
       }
       (left_kind, right_kind)
         if left_kind.to_type().is_numeric() && right_kind.to_type().is_numeric() =>
       {
-        self.compile_comparison_operator(code, left, right, "=", &location.namespace)
+        self.compile_comparison_operator(&mut context.code, left, right, "=", &context.location.namespace)
       }
-      _ => self.storage_comparison(code, left, right, true, &location.namespace),
+      _ => self.storage_comparison(&mut context.code, left, right, true, &context.location.namespace),
     }
     .map(|kind| Expression::with_macro(kind, binary_operation.location, needs_macro))
   }
 
   fn compile_not_equals(
     &mut self,
-    code: &mut Vec<String>,
     binary_operation: BinaryOperation,
-    location: &ResourceLocation,
+    context: &mut FunctionContext,
   ) -> Result<Expression> {
-    let left = self.compile_expression(*binary_operation.left, location, code, false)?;
-    let right = self.compile_expression(*binary_operation.right, location, code, false)?;
+    let left = self.compile_expression(*binary_operation.left, context, false)?;
+    let right = self.compile_expression(*binary_operation.right, context, false)?;
     let needs_macro = left.needs_macro || right.needs_macro;
 
     if let Some(equal) = left.equal(&right) {
@@ -512,30 +505,29 @@ impl Compiler {
         Err(raise_error(left.location, "Cannot compare with void."))
       }
       (ExpressionKind::Storage(_), _) | (_, ExpressionKind::Storage(_)) => {
-        self.storage_comparison(code, left, right, false, &location.namespace)
+        self.storage_comparison(&mut context.code, left, right, false, &context.location.namespace)
       }
       (left_kind, right_kind)
         if left_kind.to_type().is_numeric() && right_kind.to_type().is_numeric() =>
       {
-        self.compile_comparison_operator(code, left, right, "!=", &location.namespace)
+        self.compile_comparison_operator(&mut context.code, left, right, "!=", &context.location.namespace)
       }
-      _ => self.storage_comparison(code, left, right, false, &location.namespace),
+      _ => self.storage_comparison(&mut context.code, left, right, false, &context.location.namespace),
     }
     .map(|kind| Expression::with_macro(kind, binary_operation.location, needs_macro))
   }
 
   fn compile_logical_and(
     &mut self,
-    code: &mut Vec<String>,
     binary_operation: BinaryOperation,
-    location: &ResourceLocation,
+    context: &mut FunctionContext,
   ) -> Result<Expression> {
-    let left = self.compile_expression(*binary_operation.left, location, code, false)?;
-    let right = self.compile_expression(*binary_operation.right, location, code, false)?;
+    let left = self.compile_expression(*binary_operation.left, context, false)?;
+    let right = self.compile_expression(*binary_operation.right, context, false)?;
     let needs_macro = left.needs_macro || right.needs_macro;
 
-    let left_condition = left.to_condition(self, code, &location.namespace, false)?;
-    let right_condition = right.to_condition(self, code, &location.namespace, false)?;
+    let left_condition = left.to_condition(self, &mut context.code, &context.location.namespace, false)?;
+    let right_condition = right.to_condition(self, &mut context.code, &context.location.namespace, false)?;
 
     match (left_condition, right_condition) {
       (ConditionKind::Known(false), _) | (_, ConditionKind::Known(false)) => {
@@ -555,16 +547,15 @@ impl Compiler {
 
   fn compile_logical_or(
     &mut self,
-    code: &mut Vec<String>,
     binary_operation: BinaryOperation,
-    location: &ResourceLocation,
+    context: &mut FunctionContext,
   ) -> Result<Expression> {
-    let left = self.compile_expression(*binary_operation.left, location, code, false)?;
-    let right = self.compile_expression(*binary_operation.right, location, code, false)?;
+    let left = self.compile_expression(*binary_operation.left, context, false)?;
+    let right = self.compile_expression(*binary_operation.right, context, false)?;
     let needs_macro = left.needs_macro || right.needs_macro;
 
-    let left_condition = left.to_condition(self, code, &location.namespace, false)?;
-    let right_condition = right.to_condition(self, code, &location.namespace, false)?;
+    let left_condition = left.to_condition(self, &mut context.code, &context.location.namespace, false)?;
+    let right_condition = right.to_condition(self, &mut context.code, &context.location.namespace, false)?;
 
     match (left_condition, right_condition) {
       (ConditionKind::Known(true), _) | (_, ConditionKind::Known(true)) => {
@@ -578,11 +569,11 @@ impl Compiler {
         Ok(ExpressionKind::Condition(Condition::Check(other)))
       }
       (ConditionKind::Check(a), ConditionKind::Check(b)) => {
-        let scoreboard = self.next_scoreboard(&location.namespace);
-        code.push(format!(
+        let scoreboard = self.next_scoreboard(&context.location.namespace);
+        context.code.push(format!(
           "execute {a} run scoreboard players set {scoreboard} 1",
         ));
-        code.push(format!(
+        context.code.push(format!(
           "execute {b} run scoreboard players set {scoreboard} 1",
         ));
 
@@ -661,28 +652,26 @@ impl Compiler {
     )))
   }
 
-  pub fn compile_unary_expression(
+  pub(super) fn compile_unary_expression(
     &mut self,
     unary_expression: UnaryExpression,
-    location: &ResourceLocation,
-    code: &mut Vec<String>,
+    context: &mut FunctionContext,
   ) -> Result<Expression> {
     match unary_expression.operator {
-      UnaryOperator::LogicalNot => self.compile_logical_not(unary_expression, location, code),
-      UnaryOperator::Negation => self.compile_negation(unary_expression, location, code),
+      UnaryOperator::LogicalNot => self.compile_logical_not(unary_expression, context),
+      UnaryOperator::Negation => self.compile_negation(unary_expression, context),
     }
   }
 
   fn compile_logical_not(
     &mut self,
     unary_expression: UnaryExpression,
-    location: &ResourceLocation,
-    code: &mut Vec<String>,
+    context: &mut FunctionContext,
   ) -> Result<Expression> {
-    let operand = self.compile_expression(*unary_expression.operand, location, code, false)?;
+    let operand = self.compile_expression(*unary_expression.operand, context, false)?;
     let needs_macro = operand.needs_macro;
 
-    let condition = operand.to_condition(self, code, &location.namespace, true)?;
+    let condition = operand.to_condition(self, &mut context.code, &context.location.namespace, true)?;
 
     let kind = match condition {
       ConditionKind::Known(b) => ExpressionKind::Boolean(!b),
@@ -699,10 +688,9 @@ impl Compiler {
   fn compile_negation(
     &mut self,
     unary_expression: UnaryExpression,
-    location: &ResourceLocation,
-    code: &mut Vec<String>,
+    context: &mut FunctionContext,
   ) -> Result<Expression> {
-    let operand = self.compile_expression(*unary_expression.operand, location, code, false)?;
+    let operand = self.compile_expression(*unary_expression.operand, context, false)?;
     let needs_macro = operand.needs_macro;
 
     let kind = match &operand.kind {
@@ -730,8 +718,8 @@ impl Compiler {
       ExpressionKind::Double(d) => ExpressionKind::Double(-*d),
 
       ExpressionKind::Storage(storage) => {
-        let temp_storage = self.next_storage(&location.namespace);
-        code.push(format!(
+        let temp_storage = self.next_storage(&context.location.namespace);
+        context.code.push(format!(
           "{}execute store result storage {temp_storage} int -1 run data get storage {storage}",
           if needs_macro { "$" } else { "" }
         ));
@@ -739,8 +727,8 @@ impl Compiler {
       }
 
       ExpressionKind::Scoreboard(scoreboard) => {
-        let temp_storage = self.next_storage(&location.namespace);
-        code.push(format!(
+        let temp_storage = self.next_storage(&context.location.namespace);
+        context.code.push(format!(
           "{}execute store result storage {temp_storage} int -1 run scoreboard players get {scoreboard}",
           if needs_macro { "$" } else { "" }
         ));
@@ -748,8 +736,8 @@ impl Compiler {
       }
 
       ExpressionKind::Macro(_) => {
-        let temp_storage = self.copy_to_storage(code, &operand, &location.namespace)?;
-        code.push(format!(
+        let temp_storage = self.copy_to_storage(&mut context.code, &operand, &context.location.namespace)?;
+        context.code.push(format!(
           "execute store result storage {temp_storage} int -1 run data get storage {temp_storage}"
         ));
         ExpressionKind::Storage(temp_storage)

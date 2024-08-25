@@ -44,6 +44,7 @@ struct FunctionContext {
   return_type: ReturnType,
   is_nested: bool,
   has_nested_returns: bool,
+  code: Vec<String>,
 }
 
 #[derive(Serialize)]
@@ -377,27 +378,27 @@ impl Compiler {
     &mut self,
     statement: Statement,
     context: &mut FunctionContext,
-    code: &mut Vec<String>,
   ) -> Result<()> {
     match statement {
       Statement::Command(command) => {
-        let result = self.compile_command(code, command, &context.location)?;
-        code.push(result);
+        let result = self.compile_command(command, context)?;
+        context.code.push(result);
       }
       Statement::Comment(comment) => {
-        code.push(comment);
+        context.code.push(comment);
       }
       Statement::Expression(expression) => {
-        self.compile_expression(expression, &context.location, code, true)?;
+        self.compile_expression(expression, context, true)?;
       }
       Statement::IfStatement(if_statement) => {
         let mut sub_context = context.clone();
         sub_context.has_nested_returns = false;
         self.comptime_scopes.push(HashMap::new());
-        self.compile_if_statement(code, if_statement, &mut sub_context)?;
+        self.compile_if_statement(if_statement, &mut sub_context)?;
+        context.code = sub_context.code;
         if sub_context.has_nested_returns {
           context.has_nested_returns = true;
-          self.generate_nested_return(code, context.return_type);
+          self.generate_nested_return(context);
         }
         self.comptime_scopes.pop();
       }
@@ -405,26 +406,27 @@ impl Compiler {
         let mut sub_context: FunctionContext = context.clone();
         sub_context.has_nested_returns = false;
         self.comptime_scopes.push(HashMap::new());
-        self.compile_while_loop(code, while_loop, &mut sub_context)?;
+        self.compile_while_loop(while_loop, &mut sub_context)?;
+        context.code = sub_context.code;
         if sub_context.has_nested_returns {
           context.has_nested_returns = true;
-          self.generate_nested_return(code, context.return_type);
+          self.generate_nested_return(context);
         }
         self.comptime_scopes.pop();
       }
-      Statement::Return(value) => self.compile_return(code, value, context)?,
+      Statement::Return(value) => self.compile_return(value, context)?,
     }
     Ok(())
   }
 
-  fn generate_nested_return(&mut self, code: &mut Vec<String>, return_type: ReturnType) {
-    let return_command = match return_type {
+  fn generate_nested_return(&mut self, context: &mut FunctionContext) {
+    let return_command = match context.return_type {
       ReturnType::Storage | ReturnType::Scoreboard => {
         "return run scoreboard players reset $should_return"
       }
       ReturnType::Direct => &format!("return run function {}", self.reset_direct_return()),
     };
-    code.push(format!("execute if score $should_return zoglin.internal.vars matches -2147483648..2147483647 run {return_command}"));
+    context. code.push(format!("execute if score $should_return zoglin.internal.vars matches -2147483648..2147483647 run {return_command}"));
   }
 
   fn compile_ast_function(
@@ -438,12 +440,13 @@ impl Compiler {
       return_type: function.return_type,
       is_nested: false,
       has_nested_returns: false,
+      code: Vec::new(),
     };
     self.comptime_scopes.push(HashMap::new());
 
-    let commands = self.compile_block(&mut context, function.items)?;
+    self.compile_block(&mut context, function.items)?;
     self.comptime_scopes.pop();
-    self.add_function_item(function.location, context.location, commands)
+    self.add_function_item(function.location, context.location, context.code)
   }
 
   fn add_function_item(
@@ -462,24 +465,14 @@ impl Compiler {
     self.add_item(module, Item::Function(function))
   }
 
-  fn compile_block(
-    &mut self,
-    context: &mut FunctionContext,
-    block: Vec<Statement>,
-  ) -> Result<Vec<String>> {
-    let mut commands = Vec::new();
+  fn compile_block(&mut self, context: &mut FunctionContext, block: Vec<Statement>) -> Result<()> {
     for item in block {
-      self.compile_statement(item, context, &mut commands)?;
+      self.compile_statement(item, context)?;
     }
-    Ok(commands)
+    Ok(())
   }
 
-  fn compile_command(
-    &mut self,
-    code: &mut Vec<String>,
-    command: Command,
-    location: &ResourceLocation,
-  ) -> Result<String> {
+  fn compile_command(&mut self, command: Command, context: &mut FunctionContext) -> Result<String> {
     let mut result = String::new();
     let mut is_macro = false;
     let mut has_macro_prefix = false;
@@ -494,7 +487,7 @@ impl Compiler {
           result.push_str(&lit)
         }
         ast::CommandPart::Expression(expr) => {
-          let (code, needs_macro) = self.compile_static_expr(code, expr, location)?;
+          let (code, needs_macro) = self.compile_static_expr(expr, context)?;
           is_macro = is_macro || needs_macro;
           result.push_str(&code)
         }
@@ -511,21 +504,22 @@ impl Compiler {
   fn compile_expression(
     &mut self,
     expression: ast::Expression,
-    fn_location: &ResourceLocation,
-    code: &mut Vec<String>,
+    context: &mut FunctionContext,
     ignored: bool,
   ) -> Result<Expression> {
     Ok(match expression {
       ast::Expression::FunctionCall(function_call) => {
         let location = function_call.path.location.clone();
-        let (command, definition) = self.compile_function_call(code, function_call, fn_location)?;
+        let (command, definition) = self.compile_function_call(function_call, context)?;
         match definition.return_type {
           ReturnType::Storage => {
             let storage = StorageLocation::new(definition.location, "return".to_string());
             if !ignored {
-              code.push(format!("data modify storage {storage} set value false",))
+              context
+                .code
+                .push(format!("data modify storage {storage} set value false",))
             }
-            code.push(command);
+            context.code.push(command);
             Expression {
               location,
               kind: ExpressionKind::Storage(storage),
@@ -535,9 +529,11 @@ impl Compiler {
           ReturnType::Scoreboard => {
             let scoreboard = ScoreboardLocation::new(definition.location, "return");
             if !ignored {
-              code.push(format!("scoreboard players set {scoreboard} 0",))
+              context
+                .code
+                .push(format!("scoreboard players set {scoreboard} 0",))
             }
-            code.push(command);
+            context.code.push(command);
             Expression {
               location,
               kind: ExpressionKind::Scoreboard(scoreboard),
@@ -545,8 +541,8 @@ impl Compiler {
             }
           }
           ReturnType::Direct => {
-            let scoreboard = self.next_scoreboard(&fn_location.namespace);
-            code.push(format!(
+            let scoreboard = self.next_scoreboard(&context.location.namespace);
+            context.code.push(format!(
               "execute store result score {scoreboard} run {command}",
             ));
             Expression {
@@ -569,29 +565,27 @@ impl Compiler {
         Expression::new(ExpressionKind::Boolean(b), location)
       }
       ast::Expression::String(s, location) => Expression::new(ExpressionKind::String(s), location),
-      ast::Expression::Array(typ, a, location) => {
-        self.compile_array(code, typ, a, location, fn_location)?
-      }
+      ast::Expression::Array(typ, a, location) => self.compile_array(typ, a, location, context)?,
       ast::Expression::Compound(key_values, location) => {
-        self.compile_compound(code, key_values, location, fn_location)?
+        self.compile_compound(key_values, location, context)?
       }
       ast::Expression::Variable(variable) => Expression::new(
         ExpressionKind::Storage(StorageLocation::from_zoglin_resource(
-          &fn_location,
+          &context.location,
           &variable,
         )),
         variable.location,
       ),
       ast::Expression::ScoreboardVariable(variable) => Expression::new(
         ExpressionKind::Scoreboard(ScoreboardLocation::from_zoglin_resource(
-          &fn_location,
+          &context.location,
           &variable,
         )),
         variable.location,
       ),
       ast::Expression::MacroVariable(name, location) => Expression::with_macro(
         ExpressionKind::Macro(StorageLocation::new(
-          fn_location.clone(),
+          context.location.clone(),
           format!("__{name}"),
         )),
         location,
@@ -608,29 +602,28 @@ impl Compiler {
         }
       }
       ast::Expression::BinaryOperation(binary_operation) => {
-        self.compile_binary_operation(binary_operation, fn_location, code)?
+        self.compile_binary_operation(binary_operation, context)?
       }
       ast::Expression::UnaryExpression(unary_expression) => {
-        self.compile_unary_expression(unary_expression, fn_location, code)?
+        self.compile_unary_expression(unary_expression, context)?
       }
-      ast::Expression::Index(index) => self.compile_index(code, index, fn_location)?,
-      ast::Expression::RangeIndex(index) => self.compile_range_index(code, index, fn_location)?,
-      ast::Expression::Member(member) => self.compile_member(code, member, fn_location)?,
+      ast::Expression::Index(index) => self.compile_index(index, context)?,
+      ast::Expression::RangeIndex(index) => self.compile_range_index(index, context)?,
+      ast::Expression::Member(member) => self.compile_member(member, context)?,
     })
   }
 
   fn compile_array(
     &mut self,
-    code: &mut Vec<String>,
     typ: ArrayType,
     expressions: Vec<ast::Expression>,
     location: Location,
-    fn_location: &ResourceLocation,
+    context: &mut FunctionContext,
   ) -> Result<Expression> {
     let mut types = Vec::new();
 
     for expr in expressions {
-      types.push(self.compile_expression(expr, fn_location, code, false)?);
+      types.push(self.compile_expression(expr, context, false)?);
     }
 
     let err_msg = match typ {
@@ -656,10 +649,9 @@ impl Compiler {
 
   fn compile_compound(
     &mut self,
-    code: &mut Vec<String>,
     key_values: Vec<KeyValue>,
     location: Location,
-    fn_location: &ResourceLocation,
+    context: &mut FunctionContext,
   ) -> Result<Expression> {
     let mut types = HashMap::new();
 
@@ -670,10 +662,7 @@ impl Compiler {
     } in key_values
     {
       if types
-        .insert(
-          key,
-          self.compile_expression(value, fn_location, code, false)?,
-        )
+        .insert(key, self.compile_expression(value, context, false)?)
         .is_some()
       {
         return Err(raise_error(location, "Duplicate keys not allowed"));
@@ -686,21 +675,18 @@ impl Compiler {
   // Returns whether the expression requires a macro command
   fn compile_static_expr(
     &mut self,
-    code: &mut Vec<String>,
     expr: StaticExpr,
-    location: &ResourceLocation,
+    context: &mut FunctionContext,
   ) -> Result<(String, bool)> {
     match expr {
-      StaticExpr::FunctionCall(call) => {
-        Ok((self.compile_function_call(code, call, location)?.0, false))
-      }
+      StaticExpr::FunctionCall(call) => Ok((self.compile_function_call(call, context)?.0, false)),
       StaticExpr::FunctionRef { path } => Ok((
         if let Some(path) = path {
           self
-            .resolve_zoglin_resource(path, &location.clone().module())?
+            .resolve_zoglin_resource(path, &context.location.clone().module())?
             .to_string()
         } else {
-          location.to_string()
+          context.location.to_string()
         },
         false,
       )),
@@ -724,8 +710,12 @@ impl Compiler {
       }
 
       StaticExpr::ResourceRef { resource } => Ok((
-        ResourceLocation::from_zoglin_resource(&location.clone().module(), &resource, false)
-          .to_string(),
+        ResourceLocation::from_zoglin_resource(
+          &context.location.clone().module(),
+          &resource,
+          false,
+        )
+        .to_string(),
         false,
       )),
     }
@@ -733,13 +723,13 @@ impl Compiler {
 
   fn compile_function_call(
     &mut self,
-    code: &mut Vec<String>,
     function_call: FunctionCall,
-    location: &ResourceLocation,
+    context: &mut FunctionContext,
   ) -> Result<(String, FunctionDefinition)> {
     let src_location = function_call.path.location.clone();
 
-    let path = self.resolve_zoglin_resource(function_call.path, &location.clone().module())?;
+    let path =
+      self.resolve_zoglin_resource(function_call.path, &context.location.clone().module())?;
     let mut function_definition =
       if let Some(function_definition) = self.function_registry.get(&path) {
         function_definition.clone()
@@ -772,20 +762,30 @@ impl Compiler {
       .into_iter()
       .zip(function_call.arguments)
     {
-      let expr = self.compile_expression(argument, location, code, false)?;
+      let expr = self.compile_expression(argument, context, false)?;
       match parameter.kind {
         ParameterKind::Storage => {
           let storage = StorageLocation::new(parameter_storage.clone(), parameter.name);
-          self.set_storage(code, &storage, &expr, &location.namespace)?;
+          self.set_storage(
+            &mut context.code,
+            &storage,
+            &expr,
+            &context.location.namespace,
+          )?;
         }
         ParameterKind::Scoreboard => {
           let scoreboard = ScoreboardLocation::new(parameter_storage.clone(), &parameter.name);
-          self.set_scoreboard(code, &scoreboard, &expr)?;
+          self.set_scoreboard(&mut context.code, &scoreboard, &expr)?;
         }
         ParameterKind::Macro => {
           let storage =
             StorageLocation::new(parameter_storage.clone(), format!("__{}", parameter.name));
-          self.set_storage(code, &storage, &expr, &location.namespace)?;
+          self.set_storage(
+            &mut context.code,
+            &storage,
+            &expr,
+            &context.location.namespace,
+          )?;
         }
         ParameterKind::CompileTime => todo!(),
       }
@@ -841,36 +841,38 @@ impl Compiler {
 
   fn compile_if_statement(
     &mut self,
-    code: &mut Vec<String>,
     if_statement: IfStatement,
     context: &mut FunctionContext,
   ) -> Result<()> {
-    let was_nested = context.is_nested;
-    context.is_nested = true;
-
     if if_statement.child.is_some() {
       let if_function = self.next_function("if", &context.location.namespace);
 
-      code.push(format!("function {if_function}"));
-      let mut function_code = Vec::new();
+      context.code.push(format!("function {if_function}"));
+      let mut sub_context = FunctionContext {
+        location: context.location.clone(),
+        return_type: context.return_type,
+        is_nested: true,
+        has_nested_returns: context.has_nested_returns,
+        code: Vec::new(),
+      };
 
       let mut if_statement = if_statement;
       loop {
         self.compile_if_statement_without_child(
-          &mut function_code,
           if_statement.condition,
           if_statement.block,
-          context,
+          &mut sub_context,
           true,
         )?;
+        context.has_nested_returns = sub_context.has_nested_returns;
         match if_statement.child {
           Some(ElseStatement::IfStatement(if_stmt)) => {
             if_statement = *if_stmt;
           }
 
           Some(ElseStatement::Block(block)) => {
-            let commands = self.compile_block(context, block)?;
-            function_code.extend(commands);
+            self.compile_block(&mut sub_context, block)?;
+
             break;
           }
 
@@ -884,69 +886,71 @@ impl Compiler {
         module,
         Item::Function(Function {
           name,
-          commands: function_code,
+          commands: sub_context.code,
           location: Location::blank(),
         }),
       )?;
 
-      context.is_nested = was_nested;
       return Ok(());
     }
     self.compile_if_statement_without_child(
-      code,
       if_statement.condition,
       if_statement.block,
       context,
       false,
-    )?;
-    context.is_nested = was_nested;
-    Ok(())
+    )
   }
 
   fn compile_if_statement_without_child(
     &mut self,
-    code: &mut Vec<String>,
     condition: ast::Expression,
     body: Vec<Statement>,
     context: &mut FunctionContext,
     is_child: bool,
   ) -> Result<()> {
-    let condition = self.compile_expression(condition, &context.location, code, false)?;
+    let condition = self.compile_expression(condition, context, false)?;
 
-    let check_code = match condition.to_condition(self, code, &context.location.namespace, false)? {
-      ConditionKind::Known(false) => return Ok(()),
-      ConditionKind::Known(true) => {
-        let commands: Vec<String> = self.compile_block(context, body)?;
-        code.extend(commands);
-        return Ok(());
-      }
-      ConditionKind::Check(check_code) => check_code,
+    let check_code =
+      match condition.to_condition(self, &mut context.code, &context.location.namespace, false)? {
+        ConditionKind::Known(false) => return Ok(()),
+        ConditionKind::Known(true) => {
+          self.compile_block(context, body)?;
+          return Ok(());
+        }
+        ConditionKind::Check(check_code) => check_code,
+      };
+
+    let mut sub_context = FunctionContext {
+      location: context.location.clone(),
+      return_type: context.return_type,
+      is_nested: true,
+      has_nested_returns: context.has_nested_returns,
+      code: Vec::new(),
     };
+    self.compile_block(&mut sub_context, body)?;
 
-    let commands = self.compile_block(context, body)?;
-
-    let command = match commands.len() {
+    let command = match sub_context.code.len() {
       0 => return Ok(()),
-      1 => &commands[0],
+      1 => &sub_context.code[0],
       _ => {
         let function = self.next_function("if", &context.location.namespace);
         let fn_str = function.to_string();
-        self.add_function_item(Location::blank(), function, commands)?;
+        self.add_function_item(Location::blank(), function, sub_context.code)?;
         &format!("function {fn_str}")
       }
     };
 
-    code.push(format!(
+    context.code.push(format!(
       "execute {condition} {run_str} {command}",
       condition = check_code,
       run_str = if is_child { "run return run" } else { "run" },
     ));
+    context.has_nested_returns = sub_context.has_nested_returns;
     Ok(())
   }
 
   fn compile_return(
     &mut self,
-    code: &mut Vec<String>,
     value: Option<ast::Expression>,
     context: &mut FunctionContext,
   ) -> Result<()> {
@@ -956,13 +960,13 @@ impl Compiler {
 
     let has_value = value.is_some();
     if let Some(value) = value {
-      let expression = self.compile_expression(value, &context.location, code, false)?;
+      let expression = self.compile_expression(value, context, false)?;
 
       match context.return_type {
         ReturnType::Storage => {
           let return_storage = StorageLocation::new(context.location.clone(), "return".to_string());
           self.set_storage(
-            code,
+            &mut context.code,
             &return_storage,
             &expression,
             &context.location.namespace,
@@ -971,17 +975,17 @@ impl Compiler {
         ReturnType::Scoreboard => {
           let scoreboard = ScoreboardLocation::new(context.location.clone(), "return");
           self.used_scoreboards.insert(scoreboard.scoreboard_string());
-          self.set_scoreboard(code, &scoreboard, &expression)?;
+          self.set_scoreboard(&mut context.code, &scoreboard, &expression)?;
         }
         ReturnType::Direct => {
           if context.is_nested {
             self.set_scoreboard(
-              code,
+              &mut context.code,
               &ScoreboardLocation::of_internal("should_return"),
               &expression,
             )?;
           } else {
-            code.push(expression.to_return_command()?)
+            context.code.push(expression.to_return_command()?)
           }
         }
       }
@@ -989,7 +993,7 @@ impl Compiler {
 
     if context.return_type != ReturnType::Direct && context.is_nested {
       self.set_scoreboard(
-        code,
+        &mut context.code,
         &ScoreboardLocation::of_internal("should_return"),
         &Expression::new(ExpressionKind::Integer(1), Location::blank()),
       )?;
@@ -997,10 +1001,10 @@ impl Compiler {
 
     if has_value {
       if context.return_type != ReturnType::Direct || context.is_nested {
-        code.push("return 0".to_string())
+        context.code.push("return 0".to_string())
       }
     } else {
-      code.push("return fail".to_string());
+      context.code.push("return fail".to_string());
     }
 
     Ok(())
@@ -1008,61 +1012,58 @@ impl Compiler {
 
   fn compile_while_loop(
     &mut self,
-    code: &mut Vec<String>,
     while_loop: WhileLoop,
     context: &mut FunctionContext,
   ) -> Result<()> {
-    let was_nested = context.is_nested;
-    context.is_nested = true;
+    let mut sub_context = FunctionContext {
+      location: context.location.clone(),
+      return_type: context.return_type,
+      is_nested: true,
+      has_nested_returns: context.has_nested_returns,
+      code: Vec::new(),
+    };
 
-    let mut commands = Vec::new();
+    let condition = self.compile_expression(while_loop.condition, context, false)?;
 
-    let condition = self.compile_expression(
-      while_loop.condition,
-      &context.location,
-      &mut commands,
-      false,
-    )?;
-
-    let fn_location: ResourceLocation;
-
-    match condition.to_condition(self, &mut commands, &context.location.namespace, true)? {
+    match condition.to_condition(
+      self,
+      &mut sub_context.code,
+      &context.location.namespace,
+      true,
+    )? {
       ConditionKind::Known(false) => {}
       ConditionKind::Known(true) => {
-        fn_location = self.next_function("while", &context.location.namespace);
+        let fn_location = self.next_function("while", &context.location.namespace);
 
-        commands.extend(self.compile_block(context, while_loop.block)?);
+        self.compile_block(&mut sub_context, while_loop.block)?;
 
-        commands.push(format!("function {fn_location}"));
-        code.push(format!("function {fn_location}"));
-        self.add_function_item(Location::blank(), fn_location, commands)?;
+        sub_context.code.push(format!("function {fn_location}"));
+        context.code.push(format!("function {fn_location}"));
+        self.add_function_item(Location::blank(), fn_location, sub_context.code)?;
       }
 
       ConditionKind::Check(check_code) => {
-        fn_location = self.next_function("while", &context.location.namespace);
-        code.push(format!("function {fn_location}"));
-        commands.push(format!("execute {check_code} run return 0"));
+        let fn_location = self.next_function("while", &context.location.namespace);
+        context.code.push(format!("function {fn_location}"));
+        sub_context
+          .code
+          .push(format!("execute {check_code} run return 0"));
 
-        commands.extend(self.compile_block(context, while_loop.block)?);
-        commands.push(format!("function {fn_location}"));
-        self.add_function_item(Location::blank(), fn_location, commands)?;
+        self.compile_block(&mut sub_context, while_loop.block)?;
+        sub_context.code.push(format!("function {fn_location}"));
+        self.add_function_item(Location::blank(), fn_location, sub_context.code)?;
       }
     }
 
-    context.is_nested = was_nested;
+    context.has_nested_returns = sub_context.has_nested_returns;
 
     Ok(())
   }
 
-  fn compile_index(
-    &mut self,
-    code: &mut Vec<String>,
-    index: Index,
-    fn_location: &ResourceLocation,
-  ) -> Result<Expression> {
+  fn compile_index(&mut self, index: Index, context: &mut FunctionContext) -> Result<Expression> {
     let location = index.left.location();
-    let left = self.compile_expression(*index.left, fn_location, code, false)?;
-    let index = self.compile_expression(*index.index, fn_location, code, false)?;
+    let left = self.compile_expression(*index.left, context, false)?;
+    let index = self.compile_expression(*index.index, context, false)?;
 
     match left.kind {
       ExpressionKind::Void
@@ -1115,22 +1116,20 @@ impl Compiler {
       | ExpressionKind::LongArray(_)
       | ExpressionKind::Array { .. }
       | ExpressionKind::Storage(_)
-      | ExpressionKind::Macro(_) => {
-        self.compile_dynamic_index(code, left, index, location, fn_location)
-      }
+      | ExpressionKind::Macro(_) => self.compile_dynamic_index(left, index, location, context),
     }
   }
 
   fn compile_dynamic_index(
     &mut self,
-    code: &mut Vec<String>,
     left: Expression,
     index: Expression,
     location: Location,
-    fn_location: &ResourceLocation,
+    context: &mut FunctionContext,
   ) -> Result<Expression> {
     if let ExpressionKind::Macro(index) = index.kind {
-      let mut storage = self.move_to_storage(code, left, &fn_location.namespace)?;
+      let mut storage =
+        self.move_to_storage(&mut context.code, left, &context.location.namespace)?;
       storage.name = format!("{}[$({})]", storage.name, index.name);
       return Ok(Expression::with_macro(
         ExpressionKind::Storage(storage),
@@ -1144,18 +1143,18 @@ impl Compiler {
     let fn_command = format!("function {dynamic_index} with storage {storage}");
 
     self.set_storage(
-      code,
+      &mut context.code,
       &StorageLocation::new(storage.clone(), "target".to_string()),
       &left,
-      &fn_location.namespace,
+      &context.location.namespace,
     )?;
     self.set_storage(
-      code,
+      &mut context.code,
       &StorageLocation::new(storage.clone(), "__index".to_string()),
       &index,
-      &fn_location.namespace,
+      &context.location.namespace,
     )?;
-    code.push(fn_command);
+    context.code.push(fn_command);
     Ok(Expression::new(
       ExpressionKind::Storage(StorageLocation::new(storage, "return".to_string())),
       location,
@@ -1164,19 +1163,18 @@ impl Compiler {
 
   fn compile_range_index(
     &mut self,
-    code: &mut Vec<String>,
     index: RangeIndex,
-    fn_location: &ResourceLocation,
+    context: &mut FunctionContext,
   ) -> Result<Expression> {
     let location = index.left.location();
-    let left = self.compile_expression(*index.left, fn_location, code, false)?;
+    let left = self.compile_expression(*index.left, context, false)?;
     let start = if let Some(start) = index.start {
-      self.compile_expression(*start, fn_location, code, false)?
+      self.compile_expression(*start, context, false)?
     } else {
       Expression::new(ExpressionKind::Integer(0), location.clone())
     };
     let end = if let Some(end) = index.end {
-      Some(self.compile_expression(*end, fn_location, code, false)?)
+      Some(self.compile_expression(*end, context, false)?)
     } else {
       None
     };
@@ -1297,7 +1295,7 @@ impl Compiler {
       | ExpressionKind::Storage(_)
       | ExpressionKind::Macro(_)
       | ExpressionKind::SubString(_, _, _) => {
-        self.compile_dynamic_range_index(code, left, start, end, location, fn_location)
+        self.compile_dynamic_range_index(left, start, end, location, context)
       }
     }
   }
@@ -1306,12 +1304,10 @@ impl Compiler {
   // TODO: Handle case where both start and end are macros
   fn compile_dynamic_range_index(
     &mut self,
-    code: &mut Vec<String>,
     left: Expression,
     start: Expression,
     end: Option<Expression>,
-    location: Location,
-    fn_location: &ResourceLocation,
+    location: Location,context: &mut FunctionContext,
   ) -> Result<Expression> {
     let dynamic_index = if end.is_some() {
       self.dynamic_range_index()
@@ -1323,26 +1319,26 @@ impl Compiler {
     let fn_command = format!("function {dynamic_index} with storage {storage}");
 
     self.set_storage(
-      code,
+      &mut context.code,
       &StorageLocation::new(storage.clone(), "target".to_string()),
       &left,
-      &fn_location.namespace,
+      &context.location.namespace,
     )?;
     self.set_storage(
-      code,
+      &mut context.code,
       &StorageLocation::new(storage.clone(), "__start".to_string()),
       &start,
-      &fn_location.namespace,
+      &context.location.namespace,
     )?;
     if let Some(end) = end {
       self.set_storage(
-        code,
+        &mut context.code,
         &StorageLocation::new(storage.clone(), "__end".to_string()),
         &end,
-        &fn_location.namespace,
+        &context.location.namespace,
       )?;
     }
-    code.push(fn_command);
+   context. code.push(fn_command);
     Ok(Expression::new(
       ExpressionKind::Storage(StorageLocation::new(storage, "return".to_string())),
       location,
@@ -1351,17 +1347,16 @@ impl Compiler {
 
   fn compile_member(
     &mut self,
-    code: &mut Vec<String>,
     member: Member,
-    fn_location: &ResourceLocation,
+    context: &mut FunctionContext,
   ) -> Result<Expression> {
     let location = member.left.location();
-    let left = self.compile_expression(*member.left, fn_location, code, false)?;
+    let left = self.compile_expression(*member.left, context, false)?;
     let member = match *member.member {
       ast::MemberKind::Literal(lit) => {
         Expression::new(ExpressionKind::String(lit), location.clone())
       }
-      ast::MemberKind::Dynamic(expr) => self.compile_expression(expr, fn_location, code, false)?,
+      ast::MemberKind::Dynamic(expr) => self.compile_expression(expr,context, false)?,
     };
     let member_value = match member.kind.compile_time_value() {
       Some(value) => match value {
@@ -1411,21 +1406,19 @@ impl Compiler {
       }
 
       ExpressionKind::Compound(_) | ExpressionKind::Storage(_) | ExpressionKind::Macro(_) => {
-        self.compile_dynamic_member(code, left, member, location, fn_location)
+        self.compile_dynamic_member( left, member, location, context)
       }
     }
   }
 
   fn compile_dynamic_member(
     &mut self,
-    code: &mut Vec<String>,
     left: Expression,
     member: Expression,
-    location: Location,
-    fn_location: &ResourceLocation,
+    location: Location,context: &mut FunctionContext
   ) -> Result<Expression> {
     if let ExpressionKind::Macro(member) = member.kind {
-      let mut storage = self.move_to_storage(code, left, &fn_location.namespace)?;
+      let mut storage = self.move_to_storage(&mut context.code, left, &context.location.namespace)?;
       storage.name = format!("{}.\"$({})\"", storage.name, member.name);
       return Ok(Expression::with_macro(
         ExpressionKind::Storage(storage),
@@ -1439,18 +1432,18 @@ impl Compiler {
     let fn_command = format!("function {dynamic_member} with storage {storage}");
 
     self.set_storage(
-      code,
+      &mut context.code,
       &StorageLocation::new(storage.clone(), "target".to_string()),
       &left,
-      &fn_location.namespace,
+      &context.location.namespace,
     )?;
     self.set_storage(
-      code,
+      &mut context.code,
       &StorageLocation::new(storage.clone(), "__member".to_string()),
       &member,
-      &fn_location.namespace,
+      &context.location.namespace,
     )?;
-    code.push(fn_command);
+    context.code.push(fn_command);
     Ok(Expression::new(
       ExpressionKind::Storage(StorageLocation::new(storage, "return".to_string())),
       location,

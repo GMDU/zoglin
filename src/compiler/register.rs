@@ -1,9 +1,11 @@
-use crate::parser::ast::{self, File, Function, Import, Item, Module, Namespace, ParameterKind};
+use crate::parser::ast::{
+  self, File, Function, Import, Item, Module, Namespace, ParameterKind, ReturnType,
+};
 
 use super::{
   file_tree::{ResourceLocation, ScoreboardLocation},
   scope::{FunctionDefinition, Scope},
-  Compiler,
+  Compiler, FunctionContext,
 };
 
 impl Compiler {
@@ -113,9 +115,16 @@ impl Compiler {
     location: &ResourceLocation,
     scope: usize,
   ) {
+    let mut context = FunctionContext {
+      location: location.clone(),
+      return_type: ReturnType::Direct,
+      is_nested: false,
+      has_nested_returns: false,
+      code: Vec::new(),
+    };
     // TODO: Add some sort of validation
     let compiled_value = self
-      .compile_expression(value, location, &mut Vec::new(), false)
+      .compile_expression(value, &mut context, false)
       .expect("TODO: return error");
     self.scopes[scope]
       .comptime_values
