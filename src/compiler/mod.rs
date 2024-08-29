@@ -4,7 +4,7 @@ use std::{collections::HashMap, path::Path};
 
 use expression::{verify_types, ConditionKind, Expression, ExpressionKind, NbtValue};
 use file_tree::{ResourceLocation, ScoreboardLocation, StorageLocation};
-use scope::FunctionDefinition;
+use scope::{ComptimeFunction, FunctionDefinition};
 use serde::Serialize;
 
 use crate::parser::ast::{
@@ -36,6 +36,7 @@ pub struct Compiler {
   namespaces: HashMap<String, Namespace>,
   used_scoreboards: HashSet<String>,
   function_registry: HashMap<ResourceLocation, FunctionDefinition>,
+  comptime_function_registry: HashMap<ResourceLocation, ComptimeFunction>,
 }
 
 #[derive(Clone)]
@@ -74,7 +75,11 @@ impl Compiler {
     self.scopes[scope].function_registry.insert(name, location);
   }
 
-  fn lookup_resource(&self, resource: &ZoglinResource) -> Option<ResourceLocation> {
+  fn add_comptime_function(&mut self, scope: usize, name: String, location: ResourceLocation) {
+    self.scopes[scope].comptime_functions.insert(name, location);
+  }
+
+  fn lookup_resource(&self, resource: &ZoglinResource, comptime: bool) -> Option<ResourceLocation> {
     if resource.namespace.is_some() {
       return None;
     }
@@ -86,8 +91,14 @@ impl Compiler {
     while index != 0 {
       let scope = &self.scopes[index];
       if valid_function {
-        if let Some(function_definition) = scope.function_registry.get(first) {
-          return Some(function_definition.clone());
+        if comptime {
+          if let Some(function_definition) = scope.function_registry.get(first) {
+            return Some(function_definition.clone());
+          }
+        } else {
+          if let Some(location) = scope.comptime_functions.get(first) {
+            return Some(location.clone());
+          }
         }
       }
       if let Some(resource_location) = scope.imported_items.get(first) {
@@ -99,7 +110,7 @@ impl Compiler {
     None
   }
 
-  fn lookup_comptime(&self, name: &str) -> Option<Expression> {
+  fn lookup_comptime_variable(&self, name: &str) -> Option<Expression> {
     for scope in self.comptime_scopes.iter().rev() {
       if let Some(value) = scope.get(name) {
         return Some(value.clone());
@@ -320,6 +331,7 @@ impl Compiler {
       ast::Item::Function(function) => self.compile_ast_function(function, location),
       ast::Item::Resource(resource) => self.compile_resource(resource, location),
       ast::Item::ComptimeAssignment(_, _) => Ok(()),
+      ast::Item::ComptimeFunction(_) => todo!(),
       ast::Item::None => Ok(()),
     }
   }
@@ -508,6 +520,9 @@ impl Compiler {
     ignored: bool,
   ) -> Result<Expression> {
     Ok(match expression {
+      ast::Expression::FunctionCall(function_call) if function_call.comptime => {
+        self.compile_comptime_call(function_call, context)?
+      }
       ast::Expression::FunctionCall(function_call) => {
         let location = function_call.path.location.clone();
         let (command, definition) = self.compile_function_call(function_call, context)?;
@@ -592,7 +607,7 @@ impl Compiler {
         true,
       ),
       ast::Expression::ComptimeVariable(name, location) => {
-        if let Some(value) = self.lookup_comptime(&name) {
+        if let Some(value) = self.lookup_comptime_variable(&name) {
           return Ok(value.clone());
         } else {
           return Err(raise_error(
@@ -683,7 +698,7 @@ impl Compiler {
       StaticExpr::FunctionRef { path } => Ok((
         if let Some(path) = path {
           self
-            .resolve_zoglin_resource(path, &context.location.clone().module())?
+            .resolve_zoglin_resource(path, &context.location.clone().module(), false)?
             .to_string()
         } else {
           context.location.to_string()
@@ -692,7 +707,7 @@ impl Compiler {
       )),
       StaticExpr::MacroVariable(name) => Ok((format!("$(__{name})"), true)),
       StaticExpr::ComptimeVariable(name) => {
-        if let Some(value) = self.lookup_comptime(&name) {
+        if let Some(value) = self.lookup_comptime_variable(&name) {
           value
             .kind
             .to_comptime_string(true)
@@ -728,8 +743,11 @@ impl Compiler {
   ) -> Result<(String, FunctionDefinition)> {
     let src_location = function_call.path.location.clone();
 
-    let path =
-      self.resolve_zoglin_resource(function_call.path, &context.location.clone().module())?;
+    let path = self.resolve_zoglin_resource(
+      function_call.path,
+      &context.location.clone().module(),
+      false,
+    )?;
     let mut function_definition =
       if let Some(function_definition) = self.function_registry.get(&path) {
         function_definition.clone()
@@ -802,10 +820,75 @@ impl Compiler {
     Ok((command, function_definition))
   }
 
+  fn compile_comptime_call(
+    &mut self,
+    function_call: FunctionCall,
+    context: &mut FunctionContext,
+  ) -> Result<Expression> {
+    let source_location = function_call.path.location.clone();
+
+    let resource = self.resolve_zoglin_resource(function_call.path, &context.location, true)?;
+    let comptime_function = self
+      .comptime_function_registry
+      .get(&resource)
+      .ok_or(raise_error(
+        source_location.clone(),
+        format!("Compile-time function &{resource} does not exist"),
+      ))?
+      .clone();
+
+    if function_call.arguments.len() != comptime_function.parameters.len() {
+      return Err(raise_error(
+        source_location,
+        format!(
+          "Compile-time function &{resource} expects {} arguments, but {} were given",
+          comptime_function.parameters.len(),
+          function_call.arguments.len()
+        ),
+      ));
+    }
+
+    let arguments: Vec<_> = function_call
+      .arguments
+      .into_iter()
+      .map(|value| self.compile_expression(value, context, false))
+      .collect();
+
+    self.comptime_scopes.push(HashMap::new());
+    for (name, value) in comptime_function.parameters.iter().zip(arguments) {
+      self
+        .comptime_scopes
+        .last_mut()
+        .expect("The must be at least one scope")
+        .insert(name.clone(), value?);
+    }
+
+    let mut return_value = None;
+
+    for statement in comptime_function.body {
+      match statement {
+        // TODO: Handle returns in comptime-if
+        Statement::Return(value) => {
+          return_value = match value {
+            Some(value) => Some(self.compile_expression(value, context, false)?),
+            None => None,
+          };
+          break;
+        }
+        // TODO: Prevent returns in nested blocks
+        _ => self.compile_statement(statement, context)?,
+      }
+    }
+
+    self.comptime_scopes.pop();
+    Ok(return_value.unwrap_or(Expression::new(ExpressionKind::Void, source_location)))
+  }
+
   fn resolve_zoglin_resource(
     &mut self,
     resource: ast::ZoglinResource,
     location: &ResourceLocation,
+    comptime: bool,
   ) -> Result<ResourceLocation> {
     let mut resource_location = ResourceLocation::new_module("", &[]);
 
@@ -820,7 +903,7 @@ impl Compiler {
       } else {
         resource_location.namespace = namespace;
       }
-    } else if let Some(resolved) = self.lookup_resource(&resource) {
+    } else if let Some(resolved) = self.lookup_resource(&resource, comptime) {
       let mut result = resolved;
 
       if resource.modules.len() > 1 {
@@ -1307,7 +1390,8 @@ impl Compiler {
     left: Expression,
     start: Expression,
     end: Option<Expression>,
-    location: Location,context: &mut FunctionContext,
+    location: Location,
+    context: &mut FunctionContext,
   ) -> Result<Expression> {
     let dynamic_index = if end.is_some() {
       self.dynamic_range_index()
@@ -1338,7 +1422,7 @@ impl Compiler {
         &context.location.namespace,
       )?;
     }
-   context. code.push(fn_command);
+    context.code.push(fn_command);
     Ok(Expression::new(
       ExpressionKind::Storage(StorageLocation::new(storage, "return".to_string())),
       location,
@@ -1356,7 +1440,7 @@ impl Compiler {
       ast::MemberKind::Literal(lit) => {
         Expression::new(ExpressionKind::String(lit), location.clone())
       }
-      ast::MemberKind::Dynamic(expr) => self.compile_expression(expr,context, false)?,
+      ast::MemberKind::Dynamic(expr) => self.compile_expression(expr, context, false)?,
     };
     let member_value = match member.kind.compile_time_value() {
       Some(value) => match value {
@@ -1406,7 +1490,7 @@ impl Compiler {
       }
 
       ExpressionKind::Compound(_) | ExpressionKind::Storage(_) | ExpressionKind::Macro(_) => {
-        self.compile_dynamic_member( left, member, location, context)
+        self.compile_dynamic_member(left, member, location, context)
       }
     }
   }
@@ -1415,10 +1499,12 @@ impl Compiler {
     &mut self,
     left: Expression,
     member: Expression,
-    location: Location,context: &mut FunctionContext
+    location: Location,
+    context: &mut FunctionContext,
   ) -> Result<Expression> {
     if let ExpressionKind::Macro(member) = member.kind {
-      let mut storage = self.move_to_storage(&mut context.code, left, &context.location.namespace)?;
+      let mut storage =
+        self.move_to_storage(&mut context.code, left, &context.location.namespace)?;
       storage.name = format!("{}.\"$({})\"", storage.name, member.name);
       return Ok(Expression::with_macro(
         ExpressionKind::Storage(storage),

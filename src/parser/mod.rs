@@ -1,6 +1,6 @@
 use ast::{
-  ArrayType, Command, CommandPart, ElseStatement, KeyValue, Parameter, ParameterKind, ReturnType,
-  StaticExpr, WhileLoop,
+  ArrayType, Command, CommandPart, ComptimeFunction, ElseStatement, KeyValue, Parameter,
+  ParameterKind, ReturnType, StaticExpr, WhileLoop,
 };
 
 use self::ast::{
@@ -172,7 +172,7 @@ impl Parser {
       TokenKind::ResourceKeyword | TokenKind::AssetKeyword => {
         Item::Resource(self.parse_resource()?)
       }
-      TokenKind::FunctionKeyword => Item::Function(self.parse_function()?),
+      TokenKind::FunctionKeyword => self.parse_function()?,
       TokenKind::Ampersand => self.parse_comptime_assignment()?,
       _ => {
         return Err(raise_error(
@@ -288,7 +288,7 @@ impl Parser {
     Ok(Parameter { name, kind })
   }
 
-  fn parse_function(&mut self) -> Result<Function> {
+  fn parse_function(&mut self) -> Result<Item> {
     self.expect(TokenKind::FunctionKeyword)?;
 
     let return_type = match self.current().kind {
@@ -299,6 +299,10 @@ impl Parser {
       TokenKind::Percent => {
         self.consume();
         ReturnType::Direct
+      }
+      TokenKind::Ampersand => {
+        self.consume();
+        return self.parse_comptime_function();
       }
       _ => ReturnType::Storage,
     };
@@ -315,13 +319,40 @@ impl Parser {
 
     let items = self.parse_block()?;
 
-    Ok(Function {
+    Ok(Item::Function(Function {
       name,
       return_type,
       location,
       parameters: arguments,
       items,
-    })
+    }))
+  }
+
+  // Expects `fn &` already to be consumed
+  fn parse_comptime_function(&mut self) -> Result<Item> {
+    let Token {
+      value: name,
+      location,
+      kind: _,
+    } = self.expect(TokenKind::Identifier)?.clone();
+
+    self.expect(TokenKind::LeftParen)?;
+
+    let parameters = self.parse_list(TokenKind::RightParen, |parser| {
+      if parser.current().kind == TokenKind::Ampersand {
+        parser.consume();
+      }
+      Ok(parser.expect(TokenKind::Identifier)?.value.clone())
+    })?;
+
+    let items = self.parse_block()?;
+
+    Ok(Item::ComptimeFunction(ComptimeFunction {
+      location,
+      name,
+      parameters,
+      items,
+    }))
   }
 
   fn parse_statement(&mut self) -> Result<Statement> {
@@ -522,7 +553,7 @@ impl Parser {
     let resource = self.parse_zoglin_resource()?;
     if self.current().kind == TokenKind::LeftParen {
       Ok(Expression::FunctionCall(
-        self.parse_function_call(resource)?,
+        self.parse_function_call(resource, false)?,
       ))
     } else {
       Ok(Expression::Variable(resource))
@@ -543,11 +574,11 @@ impl Parser {
         let name = self.expect(TokenKind::Identifier)?.value.clone();
         Ok(StaticExpr::MacroVariable(name))
       }
-      TokenKind::Ampersand => {
-        self.consume();
-        let name = self.expect(TokenKind::Identifier)?.value.clone();
-        Ok(StaticExpr::ComptimeVariable(name))
-      }
+      TokenKind::Ampersand => match self.parse_comptime_variable()? {
+        Expression::FunctionCall(call) => Ok(StaticExpr::FunctionCall(call)),
+        Expression::ComptimeVariable(name, _) => Ok(StaticExpr::ComptimeVariable(name)),
+        _ => unreachable!(),
+      },
       TokenKind::FunctionKeyword => {
         self.consume();
         let path = match self.current().kind {
@@ -560,7 +591,7 @@ impl Parser {
         let resource: ZoglinResource = self.parse_zoglin_resource()?;
         if self.current().kind == TokenKind::LeftParen {
           return Ok(StaticExpr::FunctionCall(
-            self.parse_function_call(resource)?,
+            self.parse_function_call(resource, false)?,
           ));
         }
         Ok(StaticExpr::ResourceRef { resource })
@@ -568,11 +599,15 @@ impl Parser {
     }
   }
 
-  fn parse_function_call(&mut self, path: ZoglinResource) -> Result<FunctionCall> {
+  fn parse_function_call(&mut self, path: ZoglinResource, comptime: bool) -> Result<FunctionCall> {
     self.expect(TokenKind::LeftParen)?;
     let arguments = self.parse_list(TokenKind::RightParen, Self::parse_expression)?;
 
-    Ok(FunctionCall { path, arguments })
+    Ok(FunctionCall {
+      path,
+      arguments,
+      comptime,
+    })
   }
 
   fn parse_zoglin_resource(&mut self) -> Result<ZoglinResource> {

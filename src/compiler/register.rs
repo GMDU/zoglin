@@ -4,7 +4,7 @@ use crate::parser::ast::{
 
 use super::{
   file_tree::{ResourceLocation, ScoreboardLocation},
-  scope::{FunctionDefinition, Scope},
+  scope::{ComptimeFunction, FunctionDefinition, Scope},
   Compiler, FunctionContext,
 };
 
@@ -45,6 +45,27 @@ impl Compiler {
           unreachable!()
         };
         self.register_comptime_assignment(name, value, location, parent_scope)
+      }
+      Item::ComptimeFunction(_) => {
+        let Item::ComptimeFunction(ast::ComptimeFunction {
+          name,
+          parameters,
+          items,
+          ..
+        }) = item.take()
+        else {
+          unreachable!()
+        };
+
+        let location = location.clone().with_name(&name);
+
+        let function = ComptimeFunction {
+          location,
+          parameters,
+          body: items,
+        };
+        self.add_comptime_function(parent_scope, name, function.location.clone());
+        self.comptime_function_registry.insert(function.location.clone(), function);
       }
       Item::None => {}
     }

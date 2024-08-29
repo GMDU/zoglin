@@ -19,6 +19,7 @@ pub enum Item {
   Module(Module),
   Import(Import),
   Function(Function),
+  ComptimeFunction(ComptimeFunction),
   Resource(Resource),
   ComptimeAssignment(String, Expression),
 }
@@ -86,6 +87,14 @@ pub enum ReturnType {
 }
 
 #[derive(Debug)]
+pub struct ComptimeFunction {
+  pub location: Location,
+  pub name: String,
+  pub parameters: Vec<String>,
+  pub items: Vec<Statement>,
+}
+
+#[derive(Debug, Clone)]
 pub enum Statement {
   Command(Command),
   Comment(String),
@@ -95,18 +104,18 @@ pub enum Statement {
   Return(Option<Expression>),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Command {
   pub parts: Vec<CommandPart>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum CommandPart {
   Literal(String),
   Expression(StaticExpr),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum StaticExpr {
   MacroVariable(String),
   ComptimeVariable(String),
@@ -211,6 +220,7 @@ pub enum ArrayType {
 
 #[derive(Debug, Clone)]
 pub struct FunctionCall {
+  pub comptime: bool,
   pub path: ZoglinResource,
   pub arguments: Vec<Expression>,
 }
@@ -266,20 +276,20 @@ pub enum UnaryOperator {
   Negation,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct IfStatement {
   pub condition: Expression,
   pub block: Vec<Statement>,
   pub child: Option<ElseStatement>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct WhileLoop {
   pub condition: Expression,
   pub block: Vec<Statement>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum ElseStatement {
   IfStatement(Box<IfStatement>),
   Block(Vec<Statement>),

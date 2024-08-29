@@ -12,5 +12,11 @@ fn $add($a, b) {
     $a -= 1
     b += 1
   }
-  return b
+
+  result = &add($a, b)
+  return result
+}
+
+fn &add(&a, &b) {
+  return &a + &b
 }

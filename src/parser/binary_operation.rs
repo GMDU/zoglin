@@ -4,6 +4,7 @@ use crate::{error::raise_error, lexer::token::TokenKind};
 
 use super::ast::{
   BinaryOperation, Index, Member, MemberKind, RangeIndex, UnaryExpression, UnaryOperator,
+  ZoglinResource,
 };
 use super::{
   ast::{Expression, Operator},
@@ -96,11 +97,7 @@ impl Parser {
         let name = parser.expect(TokenKind::Identifier)?.clone();
         Ok(Expression::MacroVariable(name.value, name.location))
       },
-      Ampersand => |parser: &mut Parser| {
-        parser.consume();
-        let name = parser.expect(TokenKind::Identifier)?.clone();
-        Ok(Expression::ComptimeVariable(name.value, name.location))
-      },
+      Ampersand => Parser::parse_comptime_variable,
       Minus | Bang => Parser::parse_prefix_expression,
       _ => return None,
     };
@@ -273,6 +270,28 @@ impl Parser {
       operator,
       operand: Box::new(operand),
     }))
+  }
+
+  pub(super) fn parse_comptime_variable(&mut self) -> Result<Expression> {
+    self.consume();
+    let path = self.parse_zoglin_resource()?;
+    if self.current().kind == TokenKind::LeftParen {
+      let call = self.parse_function_call(path, true)?;
+      Ok(Expression::FunctionCall(call))
+    } else {
+      match path {
+        ZoglinResource {
+          location,
+          namespace: None,
+          modules,
+          name,
+        } if modules.is_empty() => Ok(Expression::ComptimeVariable(name, location)),
+        ZoglinResource { location, .. } => Err(raise_error(
+          location,
+          "Compile-time variables are not namespaced.",
+        )),
+      }
+    }
   }
 }
 

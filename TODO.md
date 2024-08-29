@@ -1,5 +1,6 @@
 ## Before initial alpha
-- Simple compile-time functions
+- `break` and `continue`
+- Importing compile-time functions
 - Add more functionality to static expressions
 - `@score` & `@condition` builtins
 - Default argument values
