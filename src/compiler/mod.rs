@@ -91,7 +91,7 @@ impl Compiler {
     while index != 0 {
       let scope = &self.scopes[index];
       if valid_function {
-        if comptime {
+        if !comptime {
           if let Some(function_definition) = scope.function_registry.get(first) {
             return Some(function_definition.clone());
           }

@@ -1,4 +1,6 @@
 ## Before initial alpha
+- `@temp_storage` and `@temp_score`
+- Some way to use keywords in identifiers
 - `break` and `continue`
 - Importing compile-time functions
 - Add more functionality to static expressions
