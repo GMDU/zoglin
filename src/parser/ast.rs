@@ -115,7 +115,7 @@ pub enum StaticExpr {
   FunctionRef { path: Option<ZoglinResource> },
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Expression {
   FunctionCall(FunctionCall),
   Boolean(bool, Location),
@@ -169,32 +169,32 @@ impl Expression {
   }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Index {
   pub left: Box<Expression>,
   pub index: Box<Expression>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct RangeIndex {
   pub left: Box<Expression>,
   pub start: Option<Box<Expression>>,
   pub end: Option<Box<Expression>>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Member {
   pub left: Box<Expression>,
   pub member: Box<MemberKind>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum MemberKind {
   Literal(String),
   Dynamic(Expression),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct KeyValue {
   pub location: Location,
   pub key: String,
@@ -209,13 +209,13 @@ pub enum ArrayType {
   Long,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct FunctionCall {
   pub path: ZoglinResource,
   pub arguments: Vec<Expression>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ZoglinResource {
   pub location: Location,
   pub namespace: Option<String>,
@@ -223,7 +223,7 @@ pub struct ZoglinResource {
   pub name: String,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct BinaryOperation {
   pub location: Location,
   pub left: Box<Expression>,
@@ -253,7 +253,7 @@ pub enum Operator {
   OperatorAssign(Box<Operator>),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct UnaryExpression {
   pub location: Location,
   pub operator: UnaryOperator,

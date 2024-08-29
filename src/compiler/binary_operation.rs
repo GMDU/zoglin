@@ -32,48 +32,64 @@ impl Compiler {
       Operator::NotEqual => self.compile_not_equals(binary_operation, context),
       Operator::LogicalAnd => self.compile_logical_and(binary_operation, context),
       Operator::LogicalOr => self.compile_logical_or(binary_operation, context),
-      Operator::Assign => self.compile_assignment(binary_operation, context),
-      Operator::OperatorAssign(_) => todo!(),
+      Operator::Assign => {
+        let right = self.compile_expression(*binary_operation.right, context, false)?;
+        self.compile_assignment(*binary_operation.left, right, context)
+      }
+      Operator::OperatorAssign(ref operator) => {
+        let operator = operator.as_ref().clone();
+        self.compile_operator_assignment(binary_operation, operator, context)
+      }
     }
+  }
+
+  fn compile_operator_assignment(
+    &mut self,
+    mut binary_operation: BinaryOperation,
+    operator: Operator,
+    context: &mut FunctionContext,
+  ) -> Result<Expression> {
+    binary_operation.operator = operator;
+    let left = binary_operation.left.as_ref().clone();
+    let right = self.compile_binary_operation(binary_operation, context)?;
+    self.compile_assignment(left, right, context)
   }
 
   fn compile_assignment(
     &mut self,
-    binary_operation: BinaryOperation,
+    left: ast::Expression,
+    right: Expression,
     context: &mut FunctionContext,
   ) -> Result<Expression> {
-    match *binary_operation.left {
+    match left {
       ast::Expression::Variable(variable) => {
-        let typ = self.compile_expression(*binary_operation.right, context, false)?;
         let storage = StorageLocation::from_zoglin_resource(&context.location, &variable);
         self.set_storage(
           &mut context.code,
           &storage,
-          &typ,
+          &right,
           &context.location.namespace,
         )?;
 
-        Ok(typ)
+        Ok(right)
       }
       ast::Expression::ScoreboardVariable(variable) => {
-        let typ = self.compile_expression(*binary_operation.right, context, false)?;
         let scoreboard = ScoreboardLocation::from_zoglin_resource(&context.location, &variable);
-        self.set_scoreboard(&mut context.code, &scoreboard, &typ)?;
+        self.set_scoreboard(&mut context.code, &scoreboard, &right)?;
         self.used_scoreboards.insert(scoreboard.scoreboard_string());
 
-        Ok(typ)
+        Ok(right)
       }
       ast::Expression::ComptimeVariable(name, _) => {
-        let expr = self.compile_expression(*binary_operation.right, context, false)?;
         self
           .comptime_scopes
           .last_mut()
           .expect("The must be at least one scope")
-          .insert(name, expr.clone());
-        Ok(expr)
+          .insert(name, right.clone());
+        Ok(right)
       }
       _ => Err(raise_error(
-        binary_operation.left.location(),
+        left.location(),
         "Can only assign to variables.",
       )),
     }
@@ -125,7 +141,13 @@ impl Compiler {
         ));
         Ok(ExpressionKind::Scoreboard(scoreboard))
       }
-      _ => self.compile_basic_operator(left, right, '+', &mut context.code, &context.location.namespace),
+      _ => self.compile_basic_operator(
+        left,
+        right,
+        '+',
+        &mut context.code,
+        &context.location.namespace,
+      ),
     }
     .map(|kind| Expression::with_macro(kind, binary_operation.location, needs_macro))
   }
@@ -167,7 +189,13 @@ impl Compiler {
         ));
         Ok(ExpressionKind::Scoreboard(scoreboard))
       }
-      _ => self.compile_basic_operator(left, right, '-', &mut context.code, &context.location.namespace),
+      _ => self.compile_basic_operator(
+        left,
+        right,
+        '-',
+        &mut context.code,
+        &context.location.namespace,
+      ),
     }
     .map(|kind| Expression::with_macro(kind, binary_operation.location, needs_macro))
   }
@@ -200,7 +228,13 @@ impl Compiler {
             * right.numeric_value().expect("Numeric value exists"),
         ))
       }
-      _ => self.compile_basic_operator(left, right, '*', &mut context.code, &context.location.namespace),
+      _ => self.compile_basic_operator(
+        left,
+        right,
+        '*',
+        &mut context.code,
+        &context.location.namespace,
+      ),
     }
     .map(|kind| Expression::with_macro(kind, binary_operation.location, needs_macro))
   }
@@ -233,7 +267,13 @@ impl Compiler {
             / right.numeric_value().expect("Numeric value exists"),
         ))
       }
-      _ => self.compile_basic_operator(left, right, '/', &mut context.code, &context.location.namespace),
+      _ => self.compile_basic_operator(
+        left,
+        right,
+        '/',
+        &mut context.code,
+        &context.location.namespace,
+      ),
     }
     .map(|kind| Expression::with_macro(kind, binary_operation.location, needs_macro))
   }
@@ -266,7 +306,13 @@ impl Compiler {
             % right.numeric_value().expect("Numeric value exists"),
         ))
       }
-      _ => self.compile_basic_operator(left, right, '%', &mut context.code, &context.location.namespace),
+      _ => self.compile_basic_operator(
+        left,
+        right,
+        '%',
+        &mut context.code,
+        &context.location.namespace,
+      ),
     }
     .map(|kind| Expression::with_macro(kind, binary_operation.location, needs_macro))
   }
@@ -314,7 +360,13 @@ impl Compiler {
         ),
         &context.location.namespace,
       ),
-      _ => self.compile_comparison_operator(&mut context.code, left, right, "<", &context.location.namespace),
+      _ => self.compile_comparison_operator(
+        &mut context.code,
+        left,
+        right,
+        "<",
+        &context.location.namespace,
+      ),
     }
     .map(|kind| Expression::with_macro(kind, binary_operation.location, needs_macro))
   }
@@ -362,7 +414,13 @@ impl Compiler {
         ),
         &context.location.namespace,
       ),
-      _ => self.compile_comparison_operator(&mut context.code, left, right, ">", &context.location.namespace),
+      _ => self.compile_comparison_operator(
+        &mut context.code,
+        left,
+        right,
+        ">",
+        &context.location.namespace,
+      ),
     }
     .map(|kind| Expression::with_macro(kind, binary_operation.location, needs_macro))
   }
@@ -404,7 +462,13 @@ impl Compiler {
         format!("..{}", num.numeric_value().expect("Numeric value exists")),
         &context.location.namespace,
       ),
-      _ => self.compile_comparison_operator(&mut context.code, left, right, "<=", &context.location.namespace),
+      _ => self.compile_comparison_operator(
+        &mut context.code,
+        left,
+        right,
+        "<=",
+        &context.location.namespace,
+      ),
     }
     .map(|kind| Expression::with_macro(kind, binary_operation.location, needs_macro))
   }
@@ -446,7 +510,13 @@ impl Compiler {
         format!("{}..", num.numeric_value().expect("Numeric value exists")),
         &context.location.namespace,
       ),
-      _ => self.compile_comparison_operator(&mut context.code, left, right, ">=", &context.location.namespace),
+      _ => self.compile_comparison_operator(
+        &mut context.code,
+        left,
+        right,
+        ">=",
+        &context.location.namespace,
+      ),
     }
     .map(|kind| Expression::with_macro(kind, binary_operation.location, needs_macro))
   }
@@ -471,15 +541,31 @@ impl Compiler {
       (ExpressionKind::Void, _) | (_, ExpressionKind::Void) => {
         Err(raise_error(left.location, "Cannot compare with void."))
       }
-      (ExpressionKind::Storage(_), _) | (_, ExpressionKind::Storage(_)) => {
-        self.storage_comparison(&mut context.code, left, right, true, &context.location.namespace)
-      }
+      (ExpressionKind::Storage(_), _) | (_, ExpressionKind::Storage(_)) => self.storage_comparison(
+        &mut context.code,
+        left,
+        right,
+        true,
+        &context.location.namespace,
+      ),
       (left_kind, right_kind)
         if left_kind.to_type().is_numeric() && right_kind.to_type().is_numeric() =>
       {
-        self.compile_comparison_operator(&mut context.code, left, right, "=", &context.location.namespace)
+        self.compile_comparison_operator(
+          &mut context.code,
+          left,
+          right,
+          "=",
+          &context.location.namespace,
+        )
       }
-      _ => self.storage_comparison(&mut context.code, left, right, true, &context.location.namespace),
+      _ => self.storage_comparison(
+        &mut context.code,
+        left,
+        right,
+        true,
+        &context.location.namespace,
+      ),
     }
     .map(|kind| Expression::with_macro(kind, binary_operation.location, needs_macro))
   }
@@ -504,15 +590,31 @@ impl Compiler {
       (ExpressionKind::Void, _) | (_, ExpressionKind::Void) => {
         Err(raise_error(left.location, "Cannot compare with void."))
       }
-      (ExpressionKind::Storage(_), _) | (_, ExpressionKind::Storage(_)) => {
-        self.storage_comparison(&mut context.code, left, right, false, &context.location.namespace)
-      }
+      (ExpressionKind::Storage(_), _) | (_, ExpressionKind::Storage(_)) => self.storage_comparison(
+        &mut context.code,
+        left,
+        right,
+        false,
+        &context.location.namespace,
+      ),
       (left_kind, right_kind)
         if left_kind.to_type().is_numeric() && right_kind.to_type().is_numeric() =>
       {
-        self.compile_comparison_operator(&mut context.code, left, right, "!=", &context.location.namespace)
+        self.compile_comparison_operator(
+          &mut context.code,
+          left,
+          right,
+          "!=",
+          &context.location.namespace,
+        )
       }
-      _ => self.storage_comparison(&mut context.code, left, right, false, &context.location.namespace),
+      _ => self.storage_comparison(
+        &mut context.code,
+        left,
+        right,
+        false,
+        &context.location.namespace,
+      ),
     }
     .map(|kind| Expression::with_macro(kind, binary_operation.location, needs_macro))
   }
@@ -526,8 +628,10 @@ impl Compiler {
     let right = self.compile_expression(*binary_operation.right, context, false)?;
     let needs_macro = left.needs_macro || right.needs_macro;
 
-    let left_condition = left.to_condition(self, &mut context.code, &context.location.namespace, false)?;
-    let right_condition = right.to_condition(self, &mut context.code, &context.location.namespace, false)?;
+    let left_condition =
+      left.to_condition(self, &mut context.code, &context.location.namespace, false)?;
+    let right_condition =
+      right.to_condition(self, &mut context.code, &context.location.namespace, false)?;
 
     match (left_condition, right_condition) {
       (ConditionKind::Known(false), _) | (_, ConditionKind::Known(false)) => {
@@ -554,8 +658,10 @@ impl Compiler {
     let right = self.compile_expression(*binary_operation.right, context, false)?;
     let needs_macro = left.needs_macro || right.needs_macro;
 
-    let left_condition = left.to_condition(self, &mut context.code, &context.location.namespace, false)?;
-    let right_condition = right.to_condition(self, &mut context.code, &context.location.namespace, false)?;
+    let left_condition =
+      left.to_condition(self, &mut context.code, &context.location.namespace, false)?;
+    let right_condition =
+      right.to_condition(self, &mut context.code, &context.location.namespace, false)?;
 
     match (left_condition, right_condition) {
       (ConditionKind::Known(true), _) | (_, ConditionKind::Known(true)) => {
@@ -671,7 +777,8 @@ impl Compiler {
     let operand = self.compile_expression(*unary_expression.operand, context, false)?;
     let needs_macro = operand.needs_macro;
 
-    let condition = operand.to_condition(self, &mut context.code, &context.location.namespace, true)?;
+    let condition =
+      operand.to_condition(self, &mut context.code, &context.location.namespace, true)?;
 
     let kind = match condition {
       ConditionKind::Known(b) => ExpressionKind::Boolean(!b),
@@ -736,7 +843,8 @@ impl Compiler {
       }
 
       ExpressionKind::Macro(_) => {
-        let temp_storage = self.copy_to_storage(&mut context.code, &operand, &context.location.namespace)?;
+        let temp_storage =
+          self.copy_to_storage(&mut context.code, &operand, &context.location.namespace)?;
         context.code.push(format!(
           "execute store result storage {temp_storage} int -1 run data get storage {temp_storage}"
         ));
