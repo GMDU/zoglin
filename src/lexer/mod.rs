@@ -124,7 +124,9 @@ impl Lexer {
       value = Some(self.tokenise_string());
       self.next_brace_json = false;
     } else if valid_identifier_start(self.current()) {
-      kind = self.tokenise_identifier(position, line, column)?;
+      let (k, v) = self.tokenise_identifier(position, line, column)?;
+      kind = k;
+      value = Some(v);
     } else {
       return Err(raise_error(
         self.location(line, column),
@@ -184,8 +186,18 @@ impl Lexer {
     position: usize,
     line: usize,
     column: usize,
-  ) -> Result<TokenKind> {
-    let mut kind = TokenKind::Identifier;
+  ) -> Result<(TokenKind, String)> {
+    if self.current() == '@' && self.peek(1) == '"' {
+      self.consume_many(2);
+      while self.current() != '"' {
+        self.consume();
+      }
+      self.consume();
+      let ident_value = self.src[position + 2..self.position - 1].to_string();
+      return Ok((TokenKind::Identifier, ident_value));
+    }
+
+    self.consume();
     while valid_identifier_body(self.current()) {
       self.consume();
     }
@@ -198,21 +210,22 @@ impl Lexer {
       ));
     }
 
-    let keyword = KEYWORD_REGISTRY
+    if let Some((_, keyword_kind)) = KEYWORD_REGISTRY
       .iter()
-      .find(|(text, _)| *text == identifier_value);
-    if let Some((_, keyword_kind)) = keyword {
-      kind = *keyword_kind;
+      .find(|(text, _)| *text == identifier_value)
+    {
+      Ok((*keyword_kind, identifier_value.to_string()))
     } else if self.is_newline
       && COMMANDS.contains(&identifier_value)
       && self.next_significant_char() != '('
     {
-      kind = TokenKind::CommandBegin;
       self.position = position;
       self.line = line;
       self.column = column;
+      Ok((TokenKind::CommandBegin, String::new()))
+    } else {
+      Ok((TokenKind::Identifier, identifier_value.to_string()))
     }
-    Ok(kind)
   }
 
   fn skip_whitespace(&mut self) {
@@ -221,16 +234,12 @@ impl Lexer {
     }
   }
 
-  fn next_significant_char(&mut self) -> char {
-    let position = self.position;
-    let line = self.line;
-    let column = self.column;
-    self.skip_whitespace();
-    let current = self.current();
-    self.position = position;
-    self.line = line;
-    self.column = column;
-    current
+  fn next_significant_char(&self) -> char {
+    let mut offset = 0;
+    while self.peek(offset).is_whitespace() {
+      offset += 1;
+    }
+    self.peek(offset)
   }
 
   fn consume(&mut self) -> char {
@@ -491,7 +500,7 @@ impl Lexer {
 }
 
 fn valid_identifier_start(character: char) -> bool {
-  character.is_ascii_alphabetic() || character == '_'
+  character.is_ascii_alphabetic() || character == '_' || character == '@'
 }
 
 fn valid_identifier_body(character: char) -> bool {
