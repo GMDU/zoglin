@@ -194,6 +194,12 @@ impl Lexer {
       }
       self.consume();
       let ident_value = self.src[position + 2..self.position - 1].to_string();
+      if ident_value.is_empty() {
+        return Err(raise_error(
+          self.location(line, column),
+          "Identifiers cannot be empty.",
+        ));
+      }
       return Ok((TokenKind::Identifier, ident_value));
     }
 

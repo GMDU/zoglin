@@ -1,7 +1,5 @@
 use std::{collections::HashMap, fmt::Display};
 
-use regex::Regex;
-
 use crate::{
   error::{raise_error, Location, Result},
   parser::ast::ArrayType,
@@ -208,15 +206,6 @@ impl Expression {
         let storage = state.next_storage(namespace).to_string();
         code.push(format!("data modify storage {storage} set value {{}}"));
         for (key, value) in types {
-          let unescaped_regex = Regex::new("^[A-Za-z_]\\w*$").expect("Regex is valid");
-          let key = if unescaped_regex.is_match(key) {
-            key
-          } else {
-            &format!(
-              "\"{}\"",
-              key.escape_default().to_string().replace("\\'", "'")
-            )
-          };
           match value.to_storage(state, code, namespace)? {
             (expr_code, StorageKind::Modify) => {
               code.push(format!(

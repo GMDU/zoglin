@@ -1,7 +1,8 @@
 namespace diamond
 # include "setup"
 
-fn $add($a, b) {
+fn $@"add"($a, b) {
+  $a:b/@"Cee!-is-the-fourth-letter-of-the-alphabet"
   @hi = &add($a, b)
 }
 

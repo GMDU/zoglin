@@ -2,6 +2,7 @@ use ast::{
   ArrayType, Command, CommandPart, ComptimeFunction, ElseStatement, KeyValue, Parameter,
   ParameterKind, ReturnType, StaticExpr, WhileLoop,
 };
+use name::{validate, validate_or_quote, validate_zoglin_resource, NameKind};
 
 use self::ast::{
   Expression, File, Function, FunctionCall, IfStatement, Import, Item, Module, Namespace, Resource,
@@ -14,6 +15,7 @@ use crate::{
 
 pub mod ast;
 mod binary_operation;
+mod name;
 
 fn json5_to_json(text: &str, location: Location) -> Result<String> {
   let map: serde_json::Value = json5::from_str(text).map_err(|e| raise_error(location, e))?;
@@ -113,7 +115,9 @@ impl Parser {
       .location
       .file
       .clone();
-    let name = self.expect(TokenKind::Identifier)?.value.clone();
+    let name = self.expect(TokenKind::Identifier)?;
+    validate(&name.value, &name.location, NameKind::Namespace)?;
+    let name = name.value.clone();
 
     if self.current().kind == TokenKind::LeftBrace {
       return Ok(vec![self.parse_block_namespace(name)?]);
@@ -193,7 +197,9 @@ impl Parser {
 
   fn parse_module(&mut self) -> Result<Module> {
     self.expect(TokenKind::ModuleKeyword)?;
-    let name = self.expect(TokenKind::Identifier)?.value.clone();
+    let name = self.expect(TokenKind::Identifier)?;
+    validate(&name.value, &name.location, NameKind::Module)?;
+    let name = name.value.clone();
     self.expect(TokenKind::LeftBrace)?;
 
     let mut items = Vec::new();
@@ -207,10 +213,13 @@ impl Parser {
 
   fn parse_import(&mut self) -> Result<Import> {
     self.expect(TokenKind::ImportKeyword)?;
-    let path = self.parse_zoglin_resource()?;
+    let path = self.parse_zoglin_resource(NameKind::Function)?;
     let mut alias = None;
     if self.current().kind == TokenKind::AsKeyword {
       self.consume();
+      // TODO: Maybe validate here? If we try to use a weird alias in other
+      // places in the code, it will probably complain, so we might want to
+      // catch that here
       alias = Some(self.expect(TokenKind::Identifier)?.value.clone());
     }
     Ok(Import { path, alias })
@@ -222,7 +231,9 @@ impl Parser {
     let location = self.current().location.clone();
 
     let content: ResourceContent = if self.current().kind == TokenKind::Identifier {
-      let name = self.expect(TokenKind::Identifier)?.value.clone();
+      let name = self.consume();
+      validate(&name.value, &name.location, NameKind::Resource)?;
+      let name = name.value.clone();
       let token = self.expect(TokenKind::Json)?;
 
       ResourceContent::Text(name, json5_to_json(&token.value, token.location.clone())?)
@@ -262,11 +273,16 @@ impl Parser {
       return Ok(self.consume().value.clone());
     }
 
-    let mut text = self.expect(TokenKind::Identifier)?.value.clone();
+    let text = self.expect(TokenKind::Identifier)?;
+    validate(&text.value, &text.location, NameKind::ResourcePathComponent)?;
+    let mut text = text.value.clone();
+
     while self.current().kind == TokenKind::ForwardSlash {
       text.push('/');
       self.consume();
-      text.push_str(&self.expect(TokenKind::Identifier)?.value);
+      let next = self.expect(TokenKind::Identifier)?;
+      validate(&next.value, &next.location, NameKind::ResourcePathComponent)?;
+      text.push_str(&next.value);
     }
     Ok(text)
   }
@@ -284,7 +300,9 @@ impl Parser {
       TokenKind::Ampersand => todo!(),
       _ => ParameterKind::Storage,
     };
-    let name = self.expect(TokenKind::Identifier)?.value.clone();
+    let name = self.expect(TokenKind::Identifier)?;
+    validate(&name.value, &name.location, NameKind::Parameter(kind))?;
+    let name = name.value.clone();
     Ok(Parameter { name, kind })
   }
 
@@ -313,6 +331,8 @@ impl Parser {
       kind: _,
     } = self.expect(TokenKind::Identifier)?.clone();
 
+    validate(&name, &location, NameKind::Function)?;
+
     self.expect(TokenKind::LeftParen)?;
 
     let arguments = self.parse_list(TokenKind::RightParen, Parser::parse_parameter)?;
@@ -330,11 +350,7 @@ impl Parser {
 
   // Expects `fn &` already to be consumed
   fn parse_comptime_function(&mut self) -> Result<Item> {
-    let Token {
-      value: name,
-      location,
-      kind: _,
-    } = self.expect(TokenKind::Identifier)?.clone();
+    let name = self.expect(TokenKind::Identifier)?.value.clone();
 
     self.expect(TokenKind::LeftParen)?;
 
@@ -348,7 +364,6 @@ impl Parser {
     let items = self.parse_block()?;
 
     Ok(Item::ComptimeFunction(ComptimeFunction {
-      location,
       name,
       parameters,
       items,
@@ -517,18 +532,14 @@ impl Parser {
     let mut key_values = Vec::new();
 
     while !self.eof() && self.current().kind != TokenKind::LeftBrace {
-      if self.current().kind != TokenKind::Identifier && self.current().kind != TokenKind::String {
-        return Err(raise_error(
-          self.current().location.clone(),
-          "Expected compound key.",
-        ));
-      }
-
       let Token {
         value: key,
         location,
         kind: _,
-      } = self.consume().clone();
+      } = self.expect(TokenKind::Identifier)?.clone();
+
+      let key = validate_or_quote(key, &location, NameKind::NBTPathComponent);
+
       self.expect(TokenKind::Colon)?;
       let value = self.parse_expression()?;
       key_values.push(KeyValue {
@@ -550,12 +561,17 @@ impl Parser {
   }
 
   fn parse_identifier(&mut self) -> Result<Expression> {
-    let resource = self.parse_zoglin_resource()?;
+    let resource = self.parse_zoglin_resource(NameKind::Unknown)?;
     if self.current().kind == TokenKind::LeftParen {
+      validate(&resource.name, &resource.location, NameKind::Function)?;
       Ok(Expression::FunctionCall(
         self.parse_function_call(resource, false)?,
       ))
     } else {
+      let mut resource = resource;
+
+      resource.name =
+        validate_or_quote(resource.name, &resource.location, NameKind::StorageVariable);
       Ok(Expression::Variable(resource))
     }
   }
@@ -563,7 +579,7 @@ impl Parser {
   fn parse_scoreboard_variable(&mut self) -> Result<Expression> {
     self.expect(TokenKind::Dollar)?;
     Ok(Expression::ScoreboardVariable(
-      self.parse_zoglin_resource()?,
+      self.parse_zoglin_resource(NameKind::ScoreboardVariable)?,
     ))
   }
 
@@ -571,8 +587,9 @@ impl Parser {
     match self.current().kind {
       TokenKind::Percent => {
         self.consume();
-        let name = self.expect(TokenKind::Identifier)?.value.clone();
-        Ok(StaticExpr::MacroVariable(name))
+        let name = self.expect(TokenKind::Identifier)?;
+        validate(&name.value, &name.location, NameKind::MacroVariable)?;
+        Ok(StaticExpr::MacroVariable(name.value.clone()))
       }
       TokenKind::Ampersand => match self.parse_comptime_variable()? {
         Expression::FunctionCall(call) => Ok(StaticExpr::FunctionCall(call)),
@@ -583,12 +600,12 @@ impl Parser {
         self.consume();
         let path = match self.current().kind {
           TokenKind::CommandString => None,
-          _ => Some(self.parse_zoglin_resource()?),
+          _ => Some(self.parse_zoglin_resource(NameKind::Function)?),
         };
         Ok(StaticExpr::FunctionRef { path })
       }
       _ => {
-        let resource: ZoglinResource = self.parse_zoglin_resource()?;
+        let resource = self.parse_zoglin_resource(NameKind::Resource)?;
         if self.current().kind == TokenKind::LeftParen {
           return Ok(StaticExpr::FunctionCall(
             self.parse_function_call(resource, false)?,
@@ -610,7 +627,7 @@ impl Parser {
     })
   }
 
-  fn parse_zoglin_resource(&mut self) -> Result<ZoglinResource> {
+  fn parse_zoglin_resource(&mut self, kind: NameKind) -> Result<ZoglinResource> {
     let mut resource = ZoglinResource {
       namespace: None,
       location: self.current().location.clone(),
@@ -654,6 +671,7 @@ impl Parser {
         }
       }
     }
+    validate_zoglin_resource(&resource, kind)?;
     Ok(resource)
   }
 

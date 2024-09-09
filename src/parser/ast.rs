@@ -88,7 +88,6 @@ pub enum ReturnType {
 
 #[derive(Debug)]
 pub struct ComptimeFunction {
-  pub location: Location,
   pub name: String,
   pub parameters: Vec<String>,
   pub items: Vec<Statement>,

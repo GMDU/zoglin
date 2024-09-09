@@ -1,11 +1,13 @@
 use crate::error::Result;
 use crate::lexer::token::Token;
+use crate::parser::name::{validate, NameKind};
 use crate::{error::raise_error, lexer::token::TokenKind};
 
 use super::ast::{
   BinaryOperation, Index, Member, MemberKind, RangeIndex, UnaryExpression, UnaryOperator,
   ZoglinResource,
 };
+use super::name::validate_or_quote;
 use super::{
   ast::{Expression, Operator},
   Parser,
@@ -95,6 +97,7 @@ impl Parser {
       Percent => |parser: &mut Parser| {
         parser.consume();
         let name = parser.expect(TokenKind::Identifier)?.clone();
+        validate(&name.value, &name.location, NameKind::MacroVariable)?;
         Ok(Expression::MacroVariable(name.value, name.location))
       },
       Ampersand => Parser::parse_comptime_variable,
@@ -236,7 +239,11 @@ impl Parser {
   fn parse_member_expr(&mut self, left: Expression) -> Result<Expression> {
     self.consume();
     let member = match self.current().kind {
-      TokenKind::Identifier => MemberKind::Literal(self.consume().value.clone()),
+      TokenKind::Identifier => {
+        let token = self.consume();
+        let member = validate_or_quote(token.value.clone(), &token.location, NameKind::NBTPathComponent);
+        MemberKind::Literal(member)
+      }
       TokenKind::LeftSquare => {
         self.consume();
         let expr = self.parse_expression()?;
@@ -274,7 +281,7 @@ impl Parser {
 
   pub(super) fn parse_comptime_variable(&mut self) -> Result<Expression> {
     self.consume();
-    let path = self.parse_zoglin_resource()?;
+    let path = self.parse_zoglin_resource(NameKind::ComptimeVariable)?;
     if self.current().kind == TokenKind::LeftParen {
       let call = self.parse_function_call(path, true)?;
       Ok(Expression::FunctionCall(call))
