@@ -361,7 +361,7 @@ impl Parser {
       Ok(parser.expect(TokenKind::Identifier)?.value.clone())
     })?;
 
-    let items = self.parse_block()?;
+    let items: Vec<Statement> = self.parse_block()?;
 
     Ok(Item::ComptimeFunction(ComptimeFunction {
       name,

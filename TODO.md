@@ -1,6 +1,4 @@
 ## Before initial alpha
-- `@temp_storage` and `@temp_score`
-- Check for valid names in different contexts
 - `break` and `continue`
 - Importing compile-time functions
 - Add more functionality to static expressions

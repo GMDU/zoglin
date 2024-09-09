@@ -1,11 +1,12 @@
 namespace diamond
 # include "setup"
 
-fn $@"add"($a, b) {
-  $a:b/@"Cee!-is-the-fourth-letter-of-the-alphabet"
-  @hi = &add($a, b)
+fn store_on_temp() {
+  &temp = @temp_storage()
+  &set_storage(&temp, 10)
+  return &temp
 }
 
-fn &add(&a, &b) {
-  return &a + &b
+fn &set_storage(&storage, &value) {
+  data modify storage &{&storage} set value &{&value}
 }

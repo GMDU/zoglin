@@ -78,6 +78,7 @@ pub enum TokenKind {
 
   // Values
   Identifier,
+  BuiltinName,
   Byte,
   Short,
   Long,

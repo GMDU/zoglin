@@ -189,9 +189,17 @@ impl Lexer {
   ) -> Result<(TokenKind, String)> {
     if self.current() == '@' && self.peek(1) == '"' {
       self.consume_many(2);
-      while self.current() != '"' {
+      while self.current() != '"' && self.current() != '\0' {
         self.consume();
       }
+
+      if self.current() != '"' {
+        return Err(raise_error(
+          self.location(line, column),
+          "Unterminated quoted identifier",
+        ));
+      }
+
       self.consume();
       let ident_value = self.src[position + 2..self.position - 1].to_string();
       if ident_value.is_empty() {
@@ -203,7 +211,22 @@ impl Lexer {
       return Ok((TokenKind::Identifier, ident_value));
     }
 
-    self.consume();
+    if self.current() == '@' {
+      self.consume();
+      while valid_identifier_body(self.current()) {
+        self.consume();
+      }
+      let ident_value = self.src[position + 1..self.position].to_string();
+      
+      if ident_value.is_empty() {
+        return Err(raise_error(
+          self.location(line, column),
+          "Identifiers cannot be empty.",
+        ));
+      }
+      return Ok((TokenKind::BuiltinName, ident_value));
+    }
+
     while valid_identifier_body(self.current()) {
       self.consume();
     }

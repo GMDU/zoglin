@@ -19,6 +19,7 @@ use self::{
   scope::Scope,
 };
 mod binary_operation;
+mod builtins;
 mod expression;
 mod file_tree;
 mod internals;
@@ -625,6 +626,10 @@ impl Compiler {
       ast::Expression::Index(index) => self.compile_index(index, context)?,
       ast::Expression::RangeIndex(index) => self.compile_range_index(index, context)?,
       ast::Expression::Member(member) => self.compile_member(member, context)?,
+      ast::Expression::BuiltinVariable(_name, _location) => todo!("Builtin variables"),
+      ast::Expression::BuiltinFunction(name, arguments, location) => {
+        self.compile_builtin_function(name, arguments, location, context)?
+      }
     })
   }
 

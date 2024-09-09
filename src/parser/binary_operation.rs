@@ -102,6 +102,20 @@ impl Parser {
       },
       Ampersand => Parser::parse_comptime_variable,
       Minus | Bang => Parser::parse_prefix_expression,
+      BuiltinName => |parser: &mut Parser| {
+        let Token {
+          value: name,
+          location,
+          ..
+        } = parser.consume().clone();
+        if parser.current().kind == TokenKind::LeftParen {
+          parser.consume();
+          let args = parser.parse_list(TokenKind::RightParen, Parser::parse_expression)?;
+          Ok(Expression::BuiltinFunction(name, args, location))
+        } else {
+          Ok(Expression::BuiltinVariable(name, location))
+        }
+      },
       _ => return None,
     };
     Some(function)
@@ -241,7 +255,11 @@ impl Parser {
     let member = match self.current().kind {
       TokenKind::Identifier => {
         let token = self.consume();
-        let member = validate_or_quote(token.value.clone(), &token.location, NameKind::NBTPathComponent);
+        let member = validate_or_quote(
+          token.value.clone(),
+          &token.location,
+          NameKind::NBTPathComponent,
+        );
         MemberKind::Literal(member)
       }
       TokenKind::LeftSquare => {

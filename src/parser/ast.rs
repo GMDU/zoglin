@@ -136,6 +136,8 @@ pub enum Expression {
   String(String, Location),
   Array(ArrayType, Vec<Expression>, Location),
   Compound(Vec<KeyValue>, Location),
+  BuiltinVariable(String, Location),
+  BuiltinFunction(String, Vec<Expression>, Location),
   Variable(ZoglinResource),
   ScoreboardVariable(ZoglinResource),
   MacroVariable(String, Location),
@@ -165,6 +167,8 @@ impl Expression {
       | Expression::Array(_, _, location)
       | Expression::Compound(_, location)
       | Expression::Variable(ZoglinResource { location, .. })
+      | Expression::BuiltinVariable(_, location)
+      | Expression::BuiltinFunction(_, _, location)
       | Expression::ScoreboardVariable(ZoglinResource { location, .. })
       | Expression::MacroVariable(_, location)
       | Expression::ComptimeVariable(_, location)
