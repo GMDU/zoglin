@@ -377,7 +377,7 @@ impl Parser {
         let comment = self.consume_including(&[TokenKind::Comment]).value.clone();
         Statement::Comment(comment)
       }
-      TokenKind::IfKeyword => Statement::IfStatement(self.parse_if_statement()?),
+      TokenKind::IfKeyword => Statement::If(self.parse_if_statement()?),
       TokenKind::WhileKeyword => Statement::WhileLoop(self.parse_while_loop()?),
       TokenKind::ReturnKeyword => Statement::Return(self.parse_return()?),
       _ => Statement::Expression(self.parse_expression()?),

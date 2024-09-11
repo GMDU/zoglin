@@ -96,10 +96,8 @@ impl Compiler {
           if let Some(function_definition) = scope.function_registry.get(first) {
             return Some(function_definition.clone());
           }
-        } else {
-          if let Some(location) = scope.comptime_functions.get(first) {
-            return Some(location.clone());
-          }
+        } else if let Some(location) = scope.comptime_functions.get(first) {
+          return Some(location.clone());
         }
       }
       if let Some(resource_location) = scope.imported_items.get(first) {
@@ -403,7 +401,7 @@ impl Compiler {
       Statement::Expression(expression) => {
         self.compile_expression(expression, context, true)?;
       }
-      Statement::IfStatement(if_statement) => {
+      Statement::If(if_statement) => {
         let mut sub_context = context.clone();
         sub_context.has_nested_returns = false;
         self.comptime_scopes.push(HashMap::new());
@@ -620,7 +618,7 @@ impl Compiler {
       ast::Expression::BinaryOperation(binary_operation) => {
         self.compile_binary_operation(binary_operation, context)?
       }
-      ast::Expression::UnaryExpression(unary_expression) => {
+      ast::Expression::UnaryOperation(unary_expression) => {
         self.compile_unary_expression(unary_expression, context)?
       }
       ast::Expression::Index(index) => self.compile_index(index, context)?,

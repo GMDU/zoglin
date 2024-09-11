@@ -419,7 +419,7 @@ impl Display for StorageLocation {
 impl StorageLocation {
   pub fn new(storage: ResourceLocation, name: String) -> StorageLocation {
     StorageLocation {
-      storage: storage,
+      storage,
       name,
     }
   }
@@ -474,7 +474,7 @@ impl ScoreboardLocation {
     resource: &ZoglinResource,
   ) -> ScoreboardLocation {
     ScoreboardLocation::from_function_location(ResourceLocation::from_zoglin_resource(
-      &fn_loc, resource, true,
+      fn_loc, resource, true,
     ))
   }
 

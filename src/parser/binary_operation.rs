@@ -290,7 +290,7 @@ impl Parser {
       _ => unreachable!(),
     };
     let operand = self.parse_sub_expression(Precedence::Prefix)?;
-    Ok(Expression::UnaryExpression(UnaryExpression {
+    Ok(Expression::UnaryOperation(UnaryExpression {
       location,
       operator,
       operand: Box::new(operand),

@@ -98,7 +98,7 @@ pub enum Statement {
   Command(Command),
   Comment(String),
   Expression(Expression),
-  IfStatement(IfStatement),
+  If(IfStatement),
   WhileLoop(WhileLoop),
   Return(Option<Expression>),
 }
@@ -143,7 +143,7 @@ pub enum Expression {
   MacroVariable(String, Location),
   ComptimeVariable(String, Location),
   BinaryOperation(BinaryOperation),
-  UnaryExpression(UnaryExpression),
+  UnaryOperation(UnaryExpression),
   Index(Index),
   RangeIndex(RangeIndex),
   Member(Member),
@@ -173,7 +173,7 @@ impl Expression {
       | Expression::MacroVariable(_, location)
       | Expression::ComptimeVariable(_, location)
       | Expression::BinaryOperation(BinaryOperation { location, .. })
-      | Expression::UnaryExpression(UnaryExpression { location, .. }) => location.clone(),
+      | Expression::UnaryOperation(UnaryExpression { location, .. }) => location.clone(),
       Expression::Index(index) => index.left.location(),
       Expression::RangeIndex(index) => index.left.location(),
       Expression::Member(member) => member.left.location(),
