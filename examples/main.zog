@@ -1,12 +1,12 @@
 namespace diamond
 # include "setup"
 
-fn store_on_temp() {
-  &temp = @temp_storage()
-  &set_storage(&temp, 10)
-  return &temp
+fn &append(&array, &value) {
+  &temp = @temp_score(&value)
+  data modify storage &{&array} append from storage &{&temp}
 }
 
-fn &set_storage(&storage, &value) {
-  data modify storage &{&storage} set value &{&value}
+fn foo() {
+  array = [1, 2, 3]
+  &append(array, 4)
 }

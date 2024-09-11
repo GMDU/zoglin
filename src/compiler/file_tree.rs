@@ -322,7 +322,7 @@ impl ResourceLocation {
     }
   }
 
-  pub fn name(&self) -> &String {
+  pub fn _name(&self) -> &String {
     self.modules.last().expect("Should have a name")
   }
 
