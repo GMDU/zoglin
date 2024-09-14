@@ -126,5 +126,5 @@ fn resource_location_component(c: char) -> bool {
 }
 
 fn scoreboard_player(name: &str) -> bool {
-  name.chars().next() != Some('@') && !name.chars().any(char::is_whitespace)
+  !name.starts_with('@') && !name.chars().any(char::is_whitespace)
 }

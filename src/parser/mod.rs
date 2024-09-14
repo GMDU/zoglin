@@ -2,7 +2,7 @@ use ast::{
   ArrayType, Command, CommandPart, ComptimeFunction, ElseStatement, KeyValue, Parameter,
   ParameterKind, ReturnType, StaticExpr, WhileLoop,
 };
-use name::{validate, validate_or_quote, validate_zoglin_resource, NameKind};
+use name::{validate, validate_or_quote, NameKind};
 
 use self::ast::{
   Expression, File, Function, FunctionCall, IfStatement, Import, Item, Module, Namespace, Resource,
@@ -16,6 +16,7 @@ use crate::{
 pub mod ast;
 mod binary_operation;
 mod name;
+mod resource;
 
 fn json5_to_json(text: &str, location: Location) -> Result<String> {
   let map: serde_json::Value = json5::from_str(text).map_err(|e| raise_error(location, e))?;
@@ -213,7 +214,7 @@ impl Parser {
 
   fn parse_import(&mut self) -> Result<Import> {
     self.expect(TokenKind::ImportKeyword)?;
-    let path = self.parse_zoglin_resource(NameKind::Function)?;
+    let path = self.parse_import_resource()?;
     let mut alias = None;
     if self.current().kind == TokenKind::AsKeyword {
       self.consume();
@@ -625,54 +626,6 @@ impl Parser {
       arguments,
       comptime,
     })
-  }
-
-  fn parse_zoglin_resource(&mut self, kind: NameKind) -> Result<ZoglinResource> {
-    let mut resource = ZoglinResource {
-      namespace: None,
-      location: self.current().location.clone(),
-      modules: Vec::new(),
-      name: String::new(),
-    };
-    let mut allow_colon: bool = true;
-    if self.current().kind == TokenKind::Colon {
-      self.consume();
-      allow_colon = false;
-      resource.namespace = Some(String::new());
-    } else if self.current().kind == TokenKind::Tilde {
-      self.consume();
-      allow_colon = false;
-      resource.namespace = Some("~".to_string());
-      if self.current().kind == TokenKind::ForwardSlash {
-        self.consume();
-      }
-    }
-    loop {
-      let identifier = self.expect(TokenKind::Identifier)?.value.clone();
-      match self.current().kind {
-        TokenKind::Colon => {
-          self.consume();
-          if allow_colon && self.current().kind == TokenKind::Identifier {
-            resource.namespace = Some(identifier);
-            allow_colon = false;
-          } else {
-            resource.name = identifier;
-            break;
-          }
-        }
-        TokenKind::ForwardSlash => {
-          resource.modules.push(identifier);
-          allow_colon = false;
-          self.consume();
-        }
-        _ => {
-          resource.name = identifier;
-          break;
-        }
-      }
-    }
-    validate_zoglin_resource(&resource, kind)?;
-    Ok(resource)
   }
 
   fn parse_if_statement(&mut self) -> Result<IfStatement> {

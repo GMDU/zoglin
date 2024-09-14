@@ -4,7 +4,7 @@ use crate::parser::ast::{
 
 use super::{
   file_tree::{ResourceLocation, ScoreboardLocation},
-  scope::{ComptimeFunction, FunctionDefinition, Scope},
+  scope::{ComptimeFunction, FunctionDefinition, Imported, Scope},
   Compiler, FunctionContext,
 };
 
@@ -65,7 +65,9 @@ impl Compiler {
           body: items,
         };
         self.add_comptime_function(parent_scope, name, function.location.clone());
-        self.comptime_function_registry.insert(function.location.clone(), function);
+        self
+          .comptime_function_registry
+          .insert(function.location.clone(), function);
       }
       Item::None => {}
     }
@@ -88,13 +90,31 @@ impl Compiler {
     location.modules.pop();
   }
 
-  fn register_import(&mut self, import: &Import, location: &ResourceLocation, scope: usize) {
-    let name = import
-      .alias
-      .clone()
-      .unwrap_or_else(|| import.path.name.clone());
-    let path = ResourceLocation::from_zoglin_resource(location, &import.path, false);
-    self.add_import(scope, name, path);
+  fn register_import(&mut self, import: &Import, _location: &ResourceLocation, scope: usize) {
+    let name = import.alias.clone().unwrap_or_else(|| {
+      import
+        .path
+        .path
+        .last()
+        .expect("Imports must have at least one path component")
+        .clone()
+    });
+    let path = ResourceLocation::new_function(
+      &import.path.namespace,
+      &import
+        .path
+        .path
+        .iter()
+        .map(String::as_str)
+        .collect::<Vec<_>>(),
+    );
+    let imported = if import.path.is_comptime {
+      Imported::Comptime(path)
+    } else {
+      Imported::ModuleOrFunction(path)
+    };
+
+    self.add_import(scope, name, imported);
   }
 
   fn register_function(&mut self, function: &Function, location: &ResourceLocation, scope: usize) {

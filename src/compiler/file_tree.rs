@@ -263,16 +263,14 @@ impl ResourceLocation {
   pub fn from_zoglin_resource(
     base_location: &ResourceLocation,
     resource: &ast::ZoglinResource,
-    function_scoped: bool,
   ) -> ResourceLocation {
+    let base_location = base_location.clone();
+
     if let Some(mut namespace) = resource.namespace.clone() {
       if namespace.is_empty() {
         namespace.clone_from(&base_location.namespace);
       } else if namespace == "~" {
-        let mut location = base_location.clone();
-        if function_scoped {
-          location.modules.pop();
-        }
+        let mut location = base_location;
 
         location.modules.extend(resource.modules.clone());
         return location.with_name(&resource.name);
@@ -286,8 +284,8 @@ impl ResourceLocation {
       }
       .with_name(&resource.name);
     }
-    let mut location: ResourceLocation = base_location.clone();
 
+    let mut location = base_location;
     location.modules.extend(resource.modules.clone());
     location.with_name(&resource.name)
   }
@@ -306,6 +304,7 @@ impl ResourceLocation {
     match self.kind {
       ResourceKind::Function => {
         self.modules.pop().expect("Should have a name");
+        self.kind = ResourceKind::Module;
         self
       }
       ResourceKind::Module => self,
@@ -316,6 +315,7 @@ impl ResourceLocation {
     match self.kind {
       ResourceKind::Function => {
         let name = self.modules.pop().expect("Should have a name");
+        self.kind = ResourceKind::Function;
         Some((self, name))
       }
       ResourceKind::Module => None,
@@ -355,55 +355,6 @@ impl ResourceLocation {
   }
 }
 
-/*
-#[derive(Clone, Debug)]
-pub struct FunctionLocation {
-  pub module: ResourceLocation,
-  pub name: String,
-}
-
-impl Display for FunctionLocation {
-  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    write!(f, "{}", self.module.join(&self.name))
-  }
-}
-
-impl FunctionLocation {
-  pub fn new(module: ResourceLocation, name: &str) -> FunctionLocation {
-    FunctionLocation {
-      module,
-      name: name.to_string(),
-    }
-  }
-
-  pub fn from_resource_location(mut location: ResourceLocation) -> FunctionLocation {
-    let name = location.modules.pop().expect("Mut have a name");
-    FunctionLocation::new(location, &name)
-  }
-
-  pub fn flatten(self) -> ResourceLocation {
-    let mut result = self.module;
-    result.modules.push(self.name);
-    result
-  }
-
-  pub fn from_zoglin_resource(
-    base_location: &ResourceLocation,
-    resource: &ZoglinResource,
-    function_scoped: bool,
-  ) -> FunctionLocation {
-    let mut resource_location = ResourceLocation::from_zoglin_resource(base_location, resource, function_scoped);
-    let name = resource_location
-      .modules
-      .pop()
-      .expect("There will be at least one module");
-    FunctionLocation {
-      module: resource_location,
-      name,
-    }
-  }
-}*/
-
 #[derive(Clone, Debug)]
 pub struct StorageLocation {
   pub storage: ResourceLocation,
@@ -418,10 +369,7 @@ impl Display for StorageLocation {
 
 impl StorageLocation {
   pub fn new(storage: ResourceLocation, name: String) -> StorageLocation {
-    StorageLocation {
-      storage,
-      name,
-    }
+    StorageLocation { storage, name }
   }
 
   pub fn from_zoglin_resource(
@@ -429,7 +377,7 @@ impl StorageLocation {
     resource: &ZoglinResource,
   ) -> StorageLocation {
     StorageLocation::from_function_location(ResourceLocation::from_zoglin_resource(
-      fn_loc, resource, true,
+      fn_loc, resource,
     ))
   }
 
@@ -474,7 +422,7 @@ impl ScoreboardLocation {
     resource: &ZoglinResource,
   ) -> ScoreboardLocation {
     ScoreboardLocation::from_function_location(ResourceLocation::from_zoglin_resource(
-      fn_loc, resource, true,
+      fn_loc, resource,
     ))
   }
 

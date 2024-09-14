@@ -217,7 +217,7 @@ impl Lexer {
         self.consume();
       }
       let ident_value = self.src[position + 1..self.position].to_string();
-      
+
       if ident_value.is_empty() {
         return Err(raise_error(
           self.location(line, column),

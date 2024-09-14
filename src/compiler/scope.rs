@@ -23,8 +23,14 @@ pub struct Scope {
   pub children: HashMap<String, Vec<usize>>,
   pub function_registry: HashMap<String, ResourceLocation>,
   pub comptime_functions: HashMap<String, ResourceLocation>,
-  pub imported_items: HashMap<String, ResourceLocation>,
+  pub imported_items: HashMap<String, Imported>,
   pub comptime_values: HashMap<String, Expression>,
+}
+
+#[derive(Debug)]
+pub enum Imported {
+  Comptime(ResourceLocation),
+  ModuleOrFunction(ResourceLocation),
 }
 
 impl Scope {

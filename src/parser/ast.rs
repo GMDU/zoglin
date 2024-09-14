@@ -38,7 +38,7 @@ pub struct Module {
 
 #[derive(Debug)]
 pub struct Import {
-  pub path: ZoglinResource,
+  pub path: ImportPath,
   pub alias: Option<String>,
 }
 
@@ -234,6 +234,13 @@ pub struct ZoglinResource {
   pub namespace: Option<String>,
   pub modules: Vec<String>,
   pub name: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct ImportPath {
+  pub namespace: String,
+  pub path: Vec<String>,
+  pub is_comptime: bool,
 }
 
 #[derive(Debug, Clone)]

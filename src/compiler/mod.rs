@@ -4,7 +4,7 @@ use std::{collections::HashMap, path::Path};
 
 use expression::{verify_types, ConditionKind, Expression, ExpressionKind, NbtValue};
 use file_tree::{ResourceLocation, ScoreboardLocation, StorageLocation};
-use scope::{ComptimeFunction, FunctionDefinition};
+use scope::{ComptimeFunction, FunctionDefinition, Imported};
 use serde::Serialize;
 
 use crate::parser::ast::{
@@ -100,8 +100,15 @@ impl Compiler {
           return Some(location.clone());
         }
       }
-      if let Some(resource_location) = scope.imported_items.get(first) {
-        return Some(resource_location.clone());
+      if let Some(imported) = scope.imported_items.get(first) {
+        match imported {
+          Imported::ModuleOrFunction(path) if (!comptime || !resource.modules.is_empty()) => {
+            return Some(path.clone())
+          }
+          Imported::Comptime(path) if comptime => return Some(path.clone()),
+
+          _ => {}
+        }
       }
 
       index = scope.parent;
@@ -148,8 +155,8 @@ impl Compiler {
     namespace.get_module(location.modules)
   }
 
-  fn add_import(&mut self, scope: usize, name: String, location: ResourceLocation) {
-    self.scopes[scope].imported_items.insert(name, location);
+  fn add_import(&mut self, scope: usize, name: String, imported: Imported) {
+    self.scopes[scope].imported_items.insert(name, imported);
   }
 
   fn add_item(&mut self, location: ResourceLocation, item: Item) -> Result<()> {
@@ -728,12 +735,8 @@ impl Compiler {
       }
 
       StaticExpr::ResourceRef { resource } => Ok((
-        ResourceLocation::from_zoglin_resource(
-          &context.location.clone().module(),
-          &resource,
-          false,
-        )
-        .to_string(),
+        ResourceLocation::from_zoglin_resource(&context.location.clone().module(), &resource)
+          .to_string(),
         false,
       )),
     }
@@ -917,7 +920,7 @@ impl Compiler {
       }
       return Ok(result);
     } else {
-      resource_location = location.clone();
+      resource_location = location.clone().module();
     }
 
     resource_location.modules.extend(resource.modules);
