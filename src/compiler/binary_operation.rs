@@ -1,7 +1,10 @@
+use ecow::{eco_format, EcoString};
+
 use crate::parser::ast::{self, BinaryOperation, Operator, UnaryExpression, UnaryOperator};
 
 use crate::error::{raise_error, Result};
 
+use super::utils::ToEcoString;
 use super::FunctionContext;
 use super::{
   expression::{Condition, ConditionKind, Expression, ExpressionKind, ScoreKind, StorageKind},
@@ -126,7 +129,7 @@ impl Compiler {
       (num, _) if num.numeric_value().is_some() => {
         let scoreboard =
           self.copy_to_scoreboard(&mut context.code, &right, &context.location.namespace)?;
-        context.code.push(format!(
+        context.code.push(eco_format!(
           "scoreboard players add {scoreboard} {}",
           num.numeric_value().expect("Numeric value exists"),
         ));
@@ -135,7 +138,7 @@ impl Compiler {
       (_, num) if num.numeric_value().is_some() => {
         let scoreboard =
           self.copy_to_scoreboard(&mut context.code, &left, &context.location.namespace)?;
-        context.code.push(format!(
+        context.code.push(eco_format!(
           "scoreboard players add {scoreboard} {}",
           num.numeric_value().expect("Numeric value exists"),
         ));
@@ -183,7 +186,7 @@ impl Compiler {
       (_, num) if num.numeric_value().is_some() => {
         let scoreboard =
           self.copy_to_scoreboard(&mut context.code, &left, &context.location.namespace)?;
-        context.code.push(format!(
+        context.code.push(eco_format!(
           "scoreboard players remove {scoreboard} {}",
           num.numeric_value().expect("Numeric value exists"),
         ));
@@ -345,7 +348,7 @@ impl Compiler {
       (num, _) if num.numeric_value().is_some() => self.compile_match_comparison(
         &mut context.code,
         right,
-        format!(
+        eco_format!(
           "{}..",
           num.numeric_value().expect("Numeric value exists") + 1
         ),
@@ -354,7 +357,7 @@ impl Compiler {
       (_, num) if num.numeric_value().is_some() => self.compile_match_comparison(
         &mut context.code,
         left,
-        format!(
+        eco_format!(
           "..{}",
           num.numeric_value().expect("Numeric value exists") - 1
         ),
@@ -399,7 +402,7 @@ impl Compiler {
       (num, _) if num.numeric_value().is_some() => self.compile_match_comparison(
         &mut context.code,
         right,
-        format!(
+        eco_format!(
           "..{}",
           num.numeric_value().expect("Numeric value exists") - 1
         ),
@@ -408,7 +411,7 @@ impl Compiler {
       (_, num) if num.numeric_value().is_some() => self.compile_match_comparison(
         &mut context.code,
         left,
-        format!(
+        eco_format!(
           "{}..",
           num.numeric_value().expect("Numeric value exists") + 1
         ),
@@ -453,13 +456,13 @@ impl Compiler {
       (num, _) if num.numeric_value().is_some() => self.compile_match_comparison(
         &mut context.code,
         right,
-        format!("{}..", num.numeric_value().expect("Numeric value exists")),
+        eco_format!("{}..", num.numeric_value().expect("Numeric value exists")),
         &context.location.namespace,
       ),
       (_, num) if num.numeric_value().is_some() => self.compile_match_comparison(
         &mut context.code,
         left,
-        format!("..{}", num.numeric_value().expect("Numeric value exists")),
+        eco_format!("..{}", num.numeric_value().expect("Numeric value exists")),
         &context.location.namespace,
       ),
       _ => self.compile_comparison_operator(
@@ -501,13 +504,13 @@ impl Compiler {
       (num, _) if num.numeric_value().is_some() => self.compile_match_comparison(
         &mut context.code,
         right,
-        format!("..{}", num.numeric_value().expect("Numeric value exists")),
+        eco_format!("..{}", num.numeric_value().expect("Numeric value exists")),
         &context.location.namespace,
       ),
       (_, num) if num.numeric_value().is_some() => self.compile_match_comparison(
         &mut context.code,
         left,
-        format!("{}..", num.numeric_value().expect("Numeric value exists")),
+        eco_format!("{}..", num.numeric_value().expect("Numeric value exists")),
         &context.location.namespace,
       ),
       _ => self.compile_comparison_operator(
@@ -676,16 +679,16 @@ impl Compiler {
       }
       (ConditionKind::Check(a), ConditionKind::Check(b)) => {
         let scoreboard = self.next_scoreboard(&context.location.namespace);
-        context.code.push(format!(
+        context.code.push(eco_format!(
           "execute {a} run scoreboard players set {scoreboard} 1",
         ));
-        context.code.push(format!(
+        context.code.push(eco_format!(
           "execute {b} run scoreboard players set {scoreboard} 1",
         ));
 
         Ok(ExpressionKind::Condition(Condition::Match(
           scoreboard,
-          "1".to_string(),
+          "1".to_eco_string(),
         )))
       }
     }
@@ -694,7 +697,7 @@ impl Compiler {
 
   fn storage_comparison(
     &mut self,
-    code: &mut Vec<String>,
+    code: &mut Vec<EcoString>,
     left: Expression,
     right: Expression,
     check_equality: bool,
@@ -703,12 +706,12 @@ impl Compiler {
     let right_storage = self.move_to_storage(code, right, namespace)?;
     let temp_storage = self.copy_to_storage(code, &left, namespace)?;
     let condition_scoreboard = self.next_scoreboard(namespace);
-    code.push(format!(
+    code.push(eco_format!(
       "execute store success score {condition_scoreboard} run data modify storage {temp_storage} set from storage {right_storage}",
     ));
     Ok(ExpressionKind::Condition(Condition::Match(
       condition_scoreboard,
-      if check_equality { "0" } else { "1" }.to_string(),
+      if check_equality { "0" } else { "1" }.to_eco_string(),
     )))
   }
 
@@ -717,12 +720,12 @@ impl Compiler {
     left: Expression,
     right: Expression,
     operator: char,
-    code: &mut Vec<String>,
+    code: &mut Vec<EcoString>,
     namespace: &str,
   ) -> Result<ExpressionKind> {
     let left_scoreboard = self.copy_to_scoreboard(code, &left, namespace)?;
     let right_scoreboard = self.move_to_scoreboard(code, right, namespace)?;
-    code.push(format!(
+    code.push(eco_format!(
       "scoreboard players operation {left_scoreboard} {operator}= {right_scoreboard}"
     ));
     Ok(ExpressionKind::Scoreboard(left_scoreboard))
@@ -730,7 +733,7 @@ impl Compiler {
 
   fn compile_comparison_operator(
     &mut self,
-    code: &mut Vec<String>,
+    code: &mut Vec<EcoString>,
     left: Expression,
     right: Expression,
     operator: &str,
@@ -747,9 +750,9 @@ impl Compiler {
 
   fn compile_match_comparison(
     &mut self,
-    code: &mut Vec<String>,
+    code: &mut Vec<EcoString>,
     value: Expression,
-    range: String,
+    range: EcoString,
     namespace: &str,
   ) -> Result<ExpressionKind> {
     let scoreboard = self.move_to_scoreboard(code, value, namespace)?;
@@ -826,7 +829,7 @@ impl Compiler {
 
       ExpressionKind::Storage(storage) => {
         let temp_storage = self.next_storage(&context.location.namespace);
-        context.code.push(format!(
+        context.code.push(eco_format!(
           "{}execute store result storage {temp_storage} int -1 run data get storage {storage}",
           if needs_macro { "$" } else { "" }
         ));
@@ -835,7 +838,7 @@ impl Compiler {
 
       ExpressionKind::Scoreboard(scoreboard) => {
         let temp_storage = self.next_storage(&context.location.namespace);
-        context.code.push(format!(
+        context.code.push(eco_format!(
           "{}execute store result storage {temp_storage} int -1 run scoreboard players get {scoreboard}",
           if needs_macro { "$" } else { "" }
         ));
@@ -845,7 +848,7 @@ impl Compiler {
       ExpressionKind::Macro(_) => {
         let temp_storage =
           self.copy_to_storage(&mut context.code, &operand, &context.location.namespace)?;
-        context.code.push(format!(
+        context.code.push(eco_format!(
           "execute store result storage {temp_storage} int -1 run data get storage {temp_storage}"
         ));
         ExpressionKind::Storage(temp_storage)
@@ -857,7 +860,7 @@ impl Compiler {
 
   pub(super) fn copy_to_scoreboard(
     &mut self,
-    code: &mut Vec<String>,
+    code: &mut Vec<EcoString>,
     value: &Expression,
     namespace: &str,
   ) -> Result<ScoreboardLocation> {
@@ -868,7 +871,7 @@ impl Compiler {
 
   pub(super) fn move_to_scoreboard(
     &mut self,
-    code: &mut Vec<String>,
+    code: &mut Vec<EcoString>,
     value: Expression,
     namespace: &str,
   ) -> Result<ScoreboardLocation> {
@@ -881,22 +884,22 @@ impl Compiler {
 
   pub(super) fn set_scoreboard(
     &mut self,
-    code: &mut Vec<String>,
+    code: &mut Vec<EcoString>,
     scoreboard: &ScoreboardLocation,
     value: &Expression,
   ) -> Result<()> {
     let (conversion_code, kind) = value.to_score()?;
     match kind {
-      ScoreKind::Direct(operation) => code.push(format!(
+      ScoreKind::Direct(operation) => code.push(eco_format!(
         "scoreboard players {operation} {scoreboard} {conversion_code}",
       )),
-      ScoreKind::DirectMacro(operation) => code.push(format!(
+      ScoreKind::DirectMacro(operation) => code.push(eco_format!(
         "$scoreboard players {operation} {scoreboard} {conversion_code}",
       )),
-      ScoreKind::Indirect => code.push(format!(
+      ScoreKind::Indirect => code.push(eco_format!(
         "execute store result score {scoreboard} run {conversion_code}",
       )),
-      ScoreKind::IndirectMacro => code.push(format!(
+      ScoreKind::IndirectMacro => code.push(eco_format!(
         "$execute store result score {scoreboard} run {conversion_code}",
       )),
     }
@@ -905,7 +908,7 @@ impl Compiler {
 
   pub(super) fn copy_to_storage(
     &mut self,
-    code: &mut Vec<String>,
+    code: &mut Vec<EcoString>,
     value: &Expression,
     namespace: &str,
   ) -> Result<StorageLocation> {
@@ -917,7 +920,7 @@ impl Compiler {
 
   pub(super) fn move_to_storage(
     &mut self,
-    code: &mut Vec<String>,
+    code: &mut Vec<EcoString>,
     value: Expression,
     namespace: &str,
   ) -> Result<StorageLocation> {
@@ -930,23 +933,23 @@ impl Compiler {
 
   pub(super) fn set_storage(
     &mut self,
-    code: &mut Vec<String>,
+    code: &mut Vec<EcoString>,
     storage: &StorageLocation,
     value: &Expression,
     namespace: &str,
   ) -> Result<()> {
     let (conversion_code, kind) = value.to_storage(self, code, namespace)?;
     match kind {
-      StorageKind::Modify => code.push(format!(
+      StorageKind::Modify => code.push(eco_format!(
         "data modify storage {storage} set {conversion_code}",
       )),
-      StorageKind::MacroModify => code.push(format!(
+      StorageKind::MacroModify => code.push(eco_format!(
         "$data modify storage {storage} set {conversion_code}",
       )),
-      StorageKind::Store => code.push(format!(
+      StorageKind::Store => code.push(eco_format!(
         "execute store result storage {storage} int 1 run {conversion_code}",
       )),
-      StorageKind::MacroStore => code.push(format!(
+      StorageKind::MacroStore => code.push(eco_format!(
         "$execute store result storage {storage} int 1 run {conversion_code}",
       )),
     }

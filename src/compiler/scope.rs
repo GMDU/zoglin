@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 
+use ecow::EcoString;
+
 use crate::parser::ast::{Parameter, ReturnType, Statement};
 
 use super::{expression::Expression, file_tree::ResourceLocation};
@@ -14,17 +16,17 @@ pub struct FunctionDefinition {
 #[derive(Clone)]
 pub struct ComptimeFunction {
   pub location: ResourceLocation,
-  pub parameters: Vec<String>,
+  pub parameters: Vec<EcoString>,
   pub body: Vec<Statement>,
 }
 
 pub struct Scope {
   pub parent: usize,
-  pub children: HashMap<String, Vec<usize>>,
-  pub function_registry: HashMap<String, ResourceLocation>,
-  pub comptime_functions: HashMap<String, ResourceLocation>,
-  pub imported_items: HashMap<String, Imported>,
-  pub comptime_values: HashMap<String, Expression>,
+  pub children: HashMap<EcoString, Vec<usize>>,
+  pub function_registry: HashMap<EcoString, ResourceLocation>,
+  pub comptime_functions: HashMap<EcoString, ResourceLocation>,
+  pub imported_items: HashMap<EcoString, Imported>,
+  pub comptime_values: HashMap<EcoString, Expression>,
 }
 
 #[derive(Debug)]
@@ -45,7 +47,7 @@ impl Scope {
     }
   }
 
-  pub fn add_child(&mut self, name: String, child: usize) {
+  pub fn add_child(&mut self, name: EcoString, child: usize) {
     if let Some(children) = self.children.get_mut(&name) {
       children.push(child);
     } else {
@@ -53,7 +55,7 @@ impl Scope {
     }
   }
 
-  pub fn get_child(&mut self, name: &String) -> Option<usize> {
+  pub fn get_child(&mut self, name: &EcoString) -> Option<usize> {
     self
       .children
       .get_mut(name)

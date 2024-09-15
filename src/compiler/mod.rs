@@ -2,6 +2,7 @@ use std::collections::HashSet;
 use std::mem::take;
 use std::{collections::HashMap, path::Path};
 
+use ecow::{eco_format, EcoString};
 use expression::{verify_types, ConditionKind, Expression, ExpressionKind, NbtValue};
 use file_tree::{ResourceLocation, ScoreboardLocation, StorageLocation};
 use scope::{ComptimeFunction, FunctionDefinition, Imported};
@@ -25,17 +26,20 @@ mod file_tree;
 mod internals;
 mod register;
 mod scope;
+mod utils;
+
+use utils::ToEcoString;
 
 #[derive(Default)]
 pub struct Compiler {
-  tick_functions: Vec<String>,
-  load_functions: Vec<String>,
+  tick_functions: Vec<EcoString>,
+  load_functions: Vec<EcoString>,
   scopes: Vec<Scope>,
-  comptime_scopes: Vec<HashMap<String, Expression>>,
+  comptime_scopes: Vec<HashMap<EcoString, Expression>>,
   current_scope: usize,
-  counters: HashMap<String, usize>,
-  namespaces: HashMap<String, Namespace>,
-  used_scoreboards: HashSet<String>,
+  counters: HashMap<EcoString, usize>,
+  namespaces: HashMap<EcoString, Namespace>,
+  used_scoreboards: HashSet<EcoString>,
   function_registry: HashMap<ResourceLocation, FunctionDefinition>,
   comptime_function_registry: HashMap<ResourceLocation, ComptimeFunction>,
 }
@@ -46,23 +50,23 @@ struct FunctionContext {
   return_type: ReturnType,
   is_nested: bool,
   has_nested_returns: bool,
-  code: Vec<String>,
+  code: Vec<EcoString>,
 }
 
 #[derive(Serialize)]
 struct FunctionTag<'a> {
-  values: &'a [String],
+  values: &'a [EcoString],
 }
 
 impl Compiler {
-  fn push_scope(&mut self, name: String, parent: usize) -> usize {
+  fn push_scope(&mut self, name: EcoString, parent: usize) -> usize {
     self.scopes.push(Scope::new(parent));
     let index = self.scopes.len() - 1;
     self.scopes[parent].add_child(name, index);
     index
   }
 
-  fn enter_scope(&mut self, name: &String) {
+  fn enter_scope(&mut self, name: &EcoString) {
     self.current_scope = self.scopes[self.current_scope]
       .get_child(name)
       .expect("Child has already been added");
@@ -72,11 +76,11 @@ impl Compiler {
     self.current_scope = self.scopes[self.current_scope].parent;
   }
 
-  fn add_function(&mut self, scope: usize, name: String, location: ResourceLocation) {
+  fn add_function(&mut self, scope: usize, name: EcoString, location: ResourceLocation) {
     self.scopes[scope].function_registry.insert(name, location);
   }
 
-  fn add_comptime_function(&mut self, scope: usize, name: String, location: ResourceLocation) {
+  fn add_comptime_function(&mut self, scope: usize, name: EcoString, location: ResourceLocation) {
     self.scopes[scope].comptime_functions.insert(name, location);
   }
 
@@ -155,7 +159,7 @@ impl Compiler {
     namespace.get_module(location.modules)
   }
 
-  fn add_import(&mut self, scope: usize, name: String, imported: Imported) {
+  fn add_import(&mut self, scope: usize, name: EcoString, imported: Imported) {
     self.scopes[scope].imported_items.insert(name, imported);
   }
 
@@ -173,13 +177,13 @@ impl Compiler {
         ) if name1 == name2 => {
           return Err(raise_error(
             location.clone(),
-            format!("Function \"{name2}\" is already defined."),
+            eco_format!("Function \"{name2}\" is already defined."),
           ));
         }
         (Item::TextResource(res1), Item::TextResource(res2)) if res1 == res2 => {
           return Err(raise_error(
             res2.location.clone(),
-            format!(
+            eco_format!(
               "{}{} \"{}\" is already defined.",
               res2
                 .kind
@@ -206,24 +210,24 @@ impl Compiler {
       return *counter;
     };
 
-    self.counters.insert(counter_name.to_string(), 0);
+    self.counters.insert(counter_name.to_eco_string(), 0);
     0
   }
 
   fn next_scoreboard(&mut self, namespace: &str) -> ScoreboardLocation {
     self
       .used_scoreboards
-      .insert(format!("zoglin.internal.{namespace}.vars"));
+      .insert(eco_format!("zoglin.internal.{namespace}.vars"));
     ScoreboardLocation {
       scoreboard: ResourceLocation::new_function("zoglin", &["internal", namespace, "vars"]),
-      name: format!("$var_{}", self.next_counter("scoreboard")),
+      name: eco_format!("$var_{}", self.next_counter("scoreboard")),
     }
   }
 
   fn next_storage(&mut self, namespace: &str) -> StorageLocation {
     StorageLocation::new(
       ResourceLocation::new_function("zoglin", &["internal", namespace, "vars"]),
-      format!("var_{}", self.next_counter("storage")),
+      eco_format!("var_{}", self.next_counter("storage")),
     )
   }
 
@@ -234,9 +238,9 @@ impl Compiler {
         "generated",
         namespace,
         function_type,
-        &format!(
+        &eco_format!(
           "fn_{}",
-          self.next_counter(&format!("function:{}", function_type))
+          self.next_counter(&eco_format!("function:{}", function_type))
         ),
       ],
     )
@@ -244,7 +248,7 @@ impl Compiler {
 }
 
 impl Compiler {
-  pub fn compile(mut ast: File, output: &String) -> Result<()> {
+  pub fn compile(mut ast: File, output: &str) -> Result<()> {
     let mut compiler = Compiler::default();
 
     compiler.register(&mut ast);
@@ -265,10 +269,10 @@ impl Compiler {
     let load_text = serde_json::to_string_pretty(&load_json).expect("Json is valid");
 
     let load = Item::TextResource(TextResource {
-      name: "load".to_string(),
-      kind: "tags/function".to_string(),
+      name: "load".to_eco_string(),
+      kind: "tags/function".to_eco_string(),
       is_asset: false,
-      text: load_text,
+      text: load_text.into(),
       location: Location::blank(),
     });
 
@@ -282,10 +286,10 @@ impl Compiler {
       let tick_text = serde_json::to_string_pretty(&tick_json).expect("Json is valid");
 
       let tick: Item = Item::TextResource(TextResource {
-        name: "tick".to_string(),
-        kind: "tags/function".to_string(),
+        name: "tick".to_eco_string(),
+        kind: "tags/function".to_eco_string(),
         is_asset: false,
-        text: tick_text,
+        text: tick_text.into(),
         location: Location::blank(),
       });
       self.add_item(location, tick)?;
@@ -300,7 +304,7 @@ impl Compiler {
   fn compile_namespace(&mut self, namespace: ast::Namespace) -> Result<()> {
     self
       .load_functions
-      .insert(0, format!("zoglin:generated/{}/load", namespace.name));
+      .insert(0, eco_format!("zoglin:generated/{}/load", namespace.name));
 
     self.enter_scope(&namespace.name);
     self.comptime_scopes.push(HashMap::new());
@@ -315,10 +319,10 @@ impl Compiler {
     self.comptime_scopes.pop();
 
     let load_function = Item::Function(Function {
-      name: "load".to_string(),
+      name: "load".to_eco_string(),
       commands: take(&mut self.used_scoreboards)
         .into_iter()
-        .map(|scoreboard| format!("scoreboard objectives add {scoreboard} dummy"))
+        .map(|scoreboard| eco_format!("scoreboard objectives add {scoreboard} dummy"))
         .collect(),
       location: Location::blank(),
     });
@@ -374,17 +378,17 @@ impl Compiler {
         self.add_item(location.clone(), Item::TextResource(resource))
       }
       ast::ResourceContent::File(path, file) => {
-        let file_path = Path::new(&file)
+        let file_path = Path::new(file.as_str())
           .parent()
           .expect("Directory must have a parent");
         let resource = FileResource {
           kind: resource.kind,
           is_asset: resource.is_asset,
           path: file_path
-            .join(path)
+            .join(path.as_str())
             .to_str()
             .expect("Path must be valid")
-            .to_string(),
+            .to_eco_string(),
           location: resource.location,
         };
         self.add_item(location.clone(), Item::FileResource(resource))
@@ -442,9 +446,9 @@ impl Compiler {
       ReturnType::Storage | ReturnType::Scoreboard => {
         "return run scoreboard players reset $should_return"
       }
-      ReturnType::Direct => &format!("return run function {}", self.reset_direct_return()),
+      ReturnType::Direct => &eco_format!("return run function {}", self.reset_direct_return()),
     };
-    context. code.push(format!("execute if score $should_return zoglin.internal.vars matches -2147483648..2147483647 run {return_command}"));
+    context. code.push(eco_format!("execute if score $should_return zoglin.internal.vars matches -2147483648..2147483647 run {return_command}"));
   }
 
   fn compile_ast_function(
@@ -471,7 +475,7 @@ impl Compiler {
     &mut self,
     location: Location,
     fn_location: ResourceLocation,
-    commands: Vec<String>,
+    commands: Vec<EcoString>,
   ) -> Result<()> {
     let (module, name) = fn_location.try_split().expect("Is a function location");
     let function = Function {
@@ -490,8 +494,12 @@ impl Compiler {
     Ok(())
   }
 
-  fn compile_command(&mut self, command: Command, context: &mut FunctionContext) -> Result<String> {
-    let mut result = String::new();
+  fn compile_command(
+    &mut self,
+    command: Command,
+    context: &mut FunctionContext,
+  ) -> Result<EcoString> {
+    let mut result = EcoString::new();
     let mut is_macro = false;
     let mut has_macro_prefix = false;
 
@@ -513,7 +521,7 @@ impl Compiler {
     }
 
     if is_macro && !has_macro_prefix {
-      result.insert(0, '$');
+      result = eco_format!("${result}")
     }
 
     Ok(result)
@@ -534,11 +542,11 @@ impl Compiler {
         let (command, definition) = self.compile_function_call(function_call, context)?;
         match definition.return_type {
           ReturnType::Storage => {
-            let storage = StorageLocation::new(definition.location, "return".to_string());
+            let storage = StorageLocation::new(definition.location, "return".to_eco_string());
             if !ignored {
               context
                 .code
-                .push(format!("data modify storage {storage} set value false",))
+                .push(eco_format!("data modify storage {storage} set value false",))
             }
             context.code.push(command);
             Expression {
@@ -552,7 +560,7 @@ impl Compiler {
             if !ignored {
               context
                 .code
-                .push(format!("scoreboard players set {scoreboard} 0",))
+                .push(eco_format!("scoreboard players set {scoreboard} 0",))
             }
             context.code.push(command);
             Expression {
@@ -563,7 +571,7 @@ impl Compiler {
           }
           ReturnType::Direct => {
             let scoreboard = self.next_scoreboard(&context.location.namespace);
-            context.code.push(format!(
+            context.code.push(eco_format!(
               "execute store result score {scoreboard} run {command}",
             ));
             Expression {
@@ -607,7 +615,7 @@ impl Compiler {
       ast::Expression::MacroVariable(name, location) => Expression::with_macro(
         ExpressionKind::Macro(StorageLocation::new(
           context.location.clone(),
-          format!("__{name}"),
+          eco_format!("__{name}"),
         )),
         location,
         true,
@@ -618,7 +626,7 @@ impl Compiler {
         } else {
           return Err(raise_error(
             location,
-            format!("The compile-time variable {name} is not in scope."),
+            eco_format!("The compile-time variable {name} is not in scope."),
           ));
         }
       }
@@ -633,7 +641,7 @@ impl Compiler {
       ast::Expression::Member(member) => self.compile_member(member, context)?,
       ast::Expression::BuiltinVariable(_name, _location) => todo!("Builtin variables"),
       ast::Expression::BuiltinFunction(name, arguments, location) => {
-        self.compile_builtin_function(name, arguments, location, context)?
+        self.compile_builtin_function(&name, arguments, location, context)?
       }
     })
   }
@@ -702,20 +710,20 @@ impl Compiler {
     &mut self,
     expr: StaticExpr,
     context: &mut FunctionContext,
-  ) -> Result<(String, bool)> {
+  ) -> Result<(EcoString, bool)> {
     match expr {
       StaticExpr::FunctionCall(call) => Ok((self.compile_function_call(call, context)?.0, false)),
       StaticExpr::FunctionRef { path } => Ok((
         if let Some(path) = path {
           self
             .resolve_zoglin_resource(path, &context.location.clone().module(), false)?
-            .to_string()
+            .to_eco_string()
         } else {
-          context.location.to_string()
+          context.location.to_eco_string()
         },
         false,
       )),
-      StaticExpr::MacroVariable(name) => Ok((format!("$(__{name})"), true)),
+      StaticExpr::MacroVariable(name) => Ok((eco_format!("$(__{name})"), true)),
       StaticExpr::ComptimeVariable(name) => {
         if let Some(value) = self.lookup_comptime_variable(&name) {
           value
@@ -729,14 +737,14 @@ impl Compiler {
         } else {
           Err(raise_floating_error(
             // TODO: Add a location here
-            format!("The compile-time variable {name} is not in scope."),
+            eco_format!("The compile-time variable {name} is not in scope."),
           ))
         }
       }
 
       StaticExpr::ResourceRef { resource } => Ok((
         ResourceLocation::from_zoglin_resource(&context.location.clone().module(), &resource)
-          .to_string(),
+          .to_eco_string(),
         false,
       )),
     }
@@ -746,7 +754,7 @@ impl Compiler {
     &mut self,
     function_call: FunctionCall,
     context: &mut FunctionContext,
-  ) -> Result<(String, FunctionDefinition)> {
+  ) -> Result<(EcoString, FunctionDefinition)> {
     let src_location = function_call.path.location.clone();
 
     let path = self.resolve_zoglin_resource(
@@ -768,7 +776,7 @@ impl Compiler {
     if function_call.arguments.len() != function_definition.arguments.len() {
       return Err(raise_error(
         src_location,
-        format!(
+        eco_format!(
           "Incorrect number of arguments. Expected {}, got {}",
           function_definition.arguments.len(),
           function_call.arguments.len()
@@ -803,7 +811,7 @@ impl Compiler {
         }
         ParameterKind::Macro => {
           let storage =
-            StorageLocation::new(parameter_storage.clone(), format!("__{}", parameter.name));
+            StorageLocation::new(parameter_storage.clone(), eco_format!("__{}", parameter.name));
           self.set_storage(
             &mut context.code,
             &storage,
@@ -816,12 +824,12 @@ impl Compiler {
     }
 
     let command = if has_macro_args {
-      format!(
+      eco_format!(
         "function {} with storage {parameter_storage}",
         function_definition.location
       )
     } else {
-      format!("function {}", function_definition.location)
+      eco_format!("function {}", function_definition.location)
     };
     Ok((command, function_definition))
   }
@@ -839,14 +847,14 @@ impl Compiler {
       .get(&resource)
       .ok_or(raise_error(
         source_location.clone(),
-        format!("Compile-time function &{resource} does not exist"),
+        eco_format!("Compile-time function &{resource} does not exist"),
       ))?
       .clone();
 
     if function_call.arguments.len() != comptime_function.parameters.len() {
       return Err(raise_error(
         source_location,
-        format!(
+        eco_format!(
           "Compile-time function &{resource} expects {} arguments, but {} were given",
           comptime_function.parameters.len(),
           function_call.arguments.len()
@@ -936,7 +944,7 @@ impl Compiler {
     if if_statement.child.is_some() {
       let if_function = self.next_function("if", &context.location.namespace);
 
-      context.code.push(format!("function {if_function}"));
+      context.code.push(eco_format!("function {if_function}"));
       let mut sub_context = FunctionContext {
         location: context.location.clone(),
         return_type: context.return_type,
@@ -1023,13 +1031,13 @@ impl Compiler {
       1 => &sub_context.code[0],
       _ => {
         let function = self.next_function("if", &context.location.namespace);
-        let fn_str = function.to_string();
+        let fn_str = function.to_eco_string();
         self.add_function_item(Location::blank(), function, sub_context.code)?;
-        &format!("function {fn_str}")
+        &eco_format!("function {fn_str}")
       }
     };
 
-    context.code.push(format!(
+    context.code.push(eco_format!(
       "execute {condition} {run_str} {command}",
       condition = check_code,
       run_str = if is_child { "run return run" } else { "run" },
@@ -1053,7 +1061,7 @@ impl Compiler {
 
       match context.return_type {
         ReturnType::Storage => {
-          let return_storage = StorageLocation::new(context.location.clone(), "return".to_string());
+          let return_storage = StorageLocation::new(context.location.clone(), "return".to_eco_string());
           self.set_storage(
             &mut context.code,
             &return_storage,
@@ -1090,10 +1098,10 @@ impl Compiler {
 
     if has_value {
       if context.return_type != ReturnType::Direct || context.is_nested {
-        context.code.push("return 0".to_string())
+        context.code.push("return 0".to_eco_string())
       }
     } else {
-      context.code.push("return fail".to_string());
+      context.code.push("return fail".to_eco_string());
     }
 
     Ok(())
@@ -1126,20 +1134,20 @@ impl Compiler {
 
         self.compile_block(&mut sub_context, while_loop.block)?;
 
-        sub_context.code.push(format!("function {fn_location}"));
-        context.code.push(format!("function {fn_location}"));
+        sub_context.code.push(eco_format!("function {fn_location}"));
+        context.code.push(eco_format!("function {fn_location}"));
         self.add_function_item(Location::blank(), fn_location, sub_context.code)?;
       }
 
       ConditionKind::Check(check_code) => {
         let fn_location = self.next_function("while", &context.location.namespace);
-        context.code.push(format!("function {fn_location}"));
+        context.code.push(eco_format!("function {fn_location}"));
         sub_context
           .code
-          .push(format!("execute {check_code} run return 0"));
+          .push(eco_format!("execute {check_code} run return 0"));
 
         self.compile_block(&mut sub_context, while_loop.block)?;
-        sub_context.code.push(format!("function {fn_location}"));
+        sub_context.code.push(eco_format!("function {fn_location}"));
         self.add_function_item(Location::blank(), fn_location, sub_context.code)?;
       }
     }
@@ -1196,7 +1204,7 @@ impl Compiler {
         if index.kind.numeric_value().is_some() =>
       {
         let index = index.kind.numeric_value().expect("Numeric value exists");
-        storage.name = format!("{}[{index}]", storage.name);
+        storage.name = eco_format!("{}[{index}]", storage.name);
         Ok(Expression::new(ExpressionKind::Storage(storage), location))
       }
 
@@ -1219,7 +1227,7 @@ impl Compiler {
     if let ExpressionKind::Macro(index) = index.kind {
       let mut storage =
         self.move_to_storage(&mut context.code, left, &context.location.namespace)?;
-      storage.name = format!("{}[$({})]", storage.name, index.name);
+      storage.name = eco_format!("{}[$({})]", storage.name, index.name);
       return Ok(Expression::with_macro(
         ExpressionKind::Storage(storage),
         location,
@@ -1229,23 +1237,23 @@ impl Compiler {
 
     let dynamic_index = self.dynamic_index();
     let storage = dynamic_index.clone();
-    let fn_command = format!("function {dynamic_index} with storage {storage}");
+    let fn_command = eco_format!("function {dynamic_index} with storage {storage}");
 
     self.set_storage(
       &mut context.code,
-      &StorageLocation::new(storage.clone(), "target".to_string()),
+      &StorageLocation::new(storage.clone(), "target".to_eco_string()),
       &left,
       &context.location.namespace,
     )?;
     self.set_storage(
       &mut context.code,
-      &StorageLocation::new(storage.clone(), "__index".to_string()),
+      &StorageLocation::new(storage.clone(), "__index".to_eco_string()),
       &index,
       &context.location.namespace,
     )?;
     context.code.push(fn_command);
     Ok(Expression::new(
-      ExpressionKind::Storage(StorageLocation::new(storage, "return".to_string())),
+      ExpressionKind::Storage(StorageLocation::new(storage, "return".to_eco_string())),
       location,
     ))
   }
@@ -1323,7 +1331,7 @@ impl Compiler {
         }
 
         Ok(Expression::new(
-          ExpressionKind::String(s[start..end].to_string()),
+          ExpressionKind::String(s[start..end].to_eco_string()),
           location,
         ))
       }
@@ -1406,31 +1414,31 @@ impl Compiler {
     };
 
     let storage = dynamic_index.clone();
-    let fn_command = format!("function {dynamic_index} with storage {storage}");
+    let fn_command = eco_format!("function {dynamic_index} with storage {storage}");
 
     self.set_storage(
       &mut context.code,
-      &StorageLocation::new(storage.clone(), "target".to_string()),
+      &StorageLocation::new(storage.clone(), "target".to_eco_string()),
       &left,
       &context.location.namespace,
     )?;
     self.set_storage(
       &mut context.code,
-      &StorageLocation::new(storage.clone(), "__start".to_string()),
+      &StorageLocation::new(storage.clone(), "__start".to_eco_string()),
       &start,
       &context.location.namespace,
     )?;
     if let Some(end) = end {
       self.set_storage(
         &mut context.code,
-        &StorageLocation::new(storage.clone(), "__end".to_string()),
+        &StorageLocation::new(storage.clone(), "__end".to_eco_string()),
         &end,
         &context.location.namespace,
       )?;
     }
     context.code.push(fn_command);
     Ok(Expression::new(
-      ExpressionKind::Storage(StorageLocation::new(storage, "return".to_string())),
+      ExpressionKind::Storage(StorageLocation::new(storage, "return".to_eco_string())),
       location,
     ))
   }
@@ -1483,7 +1491,7 @@ impl Compiler {
           .get(&member)
           .ok_or(raise_error(
             location,
-            format!("Key '{member}' does not exist"),
+            eco_format!("Key '{member}' does not exist"),
           ))
           .cloned()
       }
@@ -1491,7 +1499,7 @@ impl Compiler {
       ExpressionKind::Storage(mut storage) | ExpressionKind::Macro(mut storage)
         if member_value.is_some() =>
       {
-        storage.name = format!("{}.{}", storage.name, member_value.expect("Value is some"));
+        storage.name = eco_format!("{}.{}", storage.name, member_value.expect("Value is some"));
         Ok(Expression::new(ExpressionKind::Storage(storage), location))
       }
 
@@ -1511,7 +1519,7 @@ impl Compiler {
     if let ExpressionKind::Macro(member) = member.kind {
       let mut storage =
         self.move_to_storage(&mut context.code, left, &context.location.namespace)?;
-      storage.name = format!("{}.\"$({})\"", storage.name, member.name);
+      storage.name = eco_format!("{}.\"$({})\"", storage.name, member.name);
       return Ok(Expression::with_macro(
         ExpressionKind::Storage(storage),
         location,
@@ -1521,23 +1529,23 @@ impl Compiler {
 
     let dynamic_member = self.dynamic_member();
     let storage = dynamic_member.clone();
-    let fn_command = format!("function {dynamic_member} with storage {storage}");
+    let fn_command = eco_format!("function {dynamic_member} with storage {storage}");
 
     self.set_storage(
       &mut context.code,
-      &StorageLocation::new(storage.clone(), "target".to_string()),
+      &StorageLocation::new(storage.clone(), "target".to_eco_string()),
       &left,
       &context.location.namespace,
     )?;
     self.set_storage(
       &mut context.code,
-      &StorageLocation::new(storage.clone(), "__member".to_string()),
+      &StorageLocation::new(storage.clone(), "__member".to_eco_string()),
       &member,
       &context.location.namespace,
     )?;
     context.code.push(fn_command);
     Ok(Expression::new(
-      ExpressionKind::Storage(StorageLocation::new(storage, "return".to_string())),
+      ExpressionKind::Storage(StorageLocation::new(storage, "return".to_eco_string())),
       location,
     ))
   }

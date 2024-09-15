@@ -1,21 +1,20 @@
-use std::rc::Rc;
+use ecow::EcoString;
 
 #[derive(Debug, Clone)]
 pub struct Location {
   pub line: usize,
   pub column: usize,
-  pub file: Rc<str>,
-  pub root: Rc<str>,
+  pub file: EcoString,
+  pub root: EcoString,
 }
 
 impl Location {
   pub fn blank() -> Location {
-    let name: Rc<str> = Rc::from("");
     Location {
       line: 0,
       column: 0,
-      file: name.clone(),
-      root: name,
+      file: EcoString::new(),
+      root: EcoString::new(),
     }
   }
 }

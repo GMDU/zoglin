@@ -1,3 +1,5 @@
+use ecow::EcoString;
+
 use crate::error::Result;
 use crate::lexer::token::TokenKind;
 
@@ -13,17 +15,17 @@ impl Parser {
       namespace: None,
       location: self.current().location.clone(),
       modules: Vec::new(),
-      name: String::new(),
+      name: EcoString::new(),
     };
     let mut allow_colon: bool = true;
     if self.current().kind == TokenKind::Colon {
       self.consume();
       allow_colon = false;
-      resource.namespace = Some(String::new());
+      resource.namespace = Some(EcoString::new());
     } else if self.current().kind == TokenKind::Tilde {
       self.consume();
       allow_colon = false;
-      resource.namespace = Some("~".to_string());
+      resource.namespace = Some("~".into());
       if self.current().kind == TokenKind::ForwardSlash {
         self.consume();
       }

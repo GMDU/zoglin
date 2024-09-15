@@ -1,3 +1,5 @@
+use ecow::EcoString;
+
 use crate::parser::ast::{
   self, File, Function, Import, Item, Module, Namespace, ParameterKind, ReturnType,
 };
@@ -105,7 +107,7 @@ impl Compiler {
         .path
         .path
         .iter()
-        .map(String::as_str)
+        .map(EcoString::as_str)
         .collect::<Vec<_>>(),
     );
     let imported = if import.path.is_comptime {
@@ -151,7 +153,7 @@ impl Compiler {
 
   fn register_comptime_assignment(
     &mut self,
-    name: String,
+    name: EcoString,
     value: ast::Expression,
     location: &ResourceLocation,
     scope: usize,

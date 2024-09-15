@@ -4,6 +4,7 @@ mod error;
 mod lexer;
 mod parser;
 
+use ecow::EcoString;
 use error::Result;
 use std::{
   collections::{HashMap, HashSet},
@@ -64,7 +65,7 @@ fn main() {
   }
 }
 
-fn build(file: &String, output: &String, debug_mode: &str) -> (HashSet<String>, Result<()>) {
+fn build(file: &String, output: &String, debug_mode: &str) -> (HashSet<EcoString>, Result<()>) {
   print!("Building {} into {}... ", file, output);
   let start = SystemTime::now();
   let result = Lexer::new(file);
@@ -170,10 +171,10 @@ fn watch(file: &String, output: &String) {
     thread::sleep(Duration::from_secs(1));
     let mut dependent_files = None;
     for (name, last_modified) in files.iter() {
-      if !Path::new(name).exists() {
+      if !Path::new(name.as_str()).exists() {
         continue;
       }
-      let modified = fs::metadata(name)
+      let modified = fs::metadata(name.as_str())
         .and_then(|metadata| metadata.modified())
         .expect("Path must be valid and readable");
       if &modified != last_modified {
@@ -192,11 +193,11 @@ fn watch(file: &String, output: &String) {
   }
 }
 
-fn get_modification_times(files: HashSet<String>) -> HashMap<String, SystemTime> {
+fn get_modification_times(files: HashSet<EcoString>) -> HashMap<EcoString, SystemTime> {
   files
     .into_iter()
     .map(|name| {
-      let time = fs::metadata(&name)
+      let time = fs::metadata(name.as_str())
         .and_then(|meta| meta.modified())
         .expect("Path must be valid and readable");
       (name, time)

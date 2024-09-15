@@ -1,3 +1,4 @@
+use ecow::{eco_format, EcoString};
 use glob::glob;
 use serde::Serialize;
 use std::{fmt::Display, fs, path::Path};
@@ -31,13 +32,14 @@ const DEFAULT_MCMETA: PackMcmeta = PackMcmeta {
 };
 
 impl FileTree {
-  pub fn generate(&self, root_path: &String) -> Result<()> {
+  pub fn generate(&self, root_path: &str) -> Result<()> {
     let _ = fs::remove_dir_all(root_path);
     let working_path = Path::new(root_path).join("data");
     fs::create_dir_all(working_path).map_err(raise_floating_error)?;
 
     let text = serde_json::to_string_pretty(&DEFAULT_MCMETA).expect("Json is valid");
-    fs::write(Path::new(root_path).join("pack.mcmeta"), text).map_err(raise_floating_error)?;
+    fs::write(Path::new(root_path).join("pack.mcmeta"), text)
+      .map_err(raise_floating_error)?;
 
     for namespace in self.namespaces.iter() {
       namespace.generate(root_path)?;
@@ -48,7 +50,7 @@ impl FileTree {
 
 #[derive(Debug)]
 pub struct Namespace {
-  pub name: String,
+  pub name: EcoString,
   pub items: Vec<Item>,
 }
 
@@ -60,7 +62,7 @@ impl Namespace {
     Ok(())
   }
 
-  pub fn get_module(&mut self, mut path: Vec<String>) -> &mut Vec<Item> {
+  pub fn get_module(&mut self, mut path: Vec<EcoString>) -> &mut Vec<Item> {
     if path.is_empty() {
       return &mut self.items;
     }
@@ -111,7 +113,7 @@ impl Item {
 
 #[derive(Debug)]
 pub struct Module {
-  pub name: String,
+  pub name: EcoString,
   pub items: Vec<Item>,
 }
 
@@ -125,7 +127,7 @@ impl Module {
     Ok(())
   }
 
-  fn get_module(&mut self, mut path: Vec<String>) -> &mut Vec<Item> {
+  fn get_module(&mut self, mut path: Vec<EcoString>) -> &mut Vec<Item> {
     if path.is_empty() {
       return &mut self.items;
     }
@@ -157,8 +159,8 @@ impl Module {
 
 #[derive(Debug)]
 pub struct Function {
-  pub name: String,
-  pub commands: Vec<String>,
+  pub name: EcoString,
+  pub commands: Vec<EcoString>,
   pub location: Location,
 }
 
@@ -166,22 +168,22 @@ impl Function {
   fn generate(&self, root_path: &str, local_path: &ResourceLocation) -> Result<()> {
     let dir_path = Path::new(root_path)
       .join("data")
-      .join(&local_path.namespace)
+      .join(local_path.namespace.as_str())
       .join("function")
       .join(local_path.modules.join("/"));
 
     fs::create_dir_all(&dir_path).map_err(raise_floating_error)?;
-    let file_path = dir_path.join(self.name.clone() + ".mcfunction");
+    let file_path = dir_path.join((self.name.clone() + ".mcfunction").as_str());
     fs::write(file_path, self.commands.join("\n")).map_err(raise_floating_error)
   }
 }
 
 #[derive(Debug)]
 pub struct TextResource {
-  pub name: String,
-  pub kind: String,
+  pub name: EcoString,
+  pub kind: EcoString,
   pub is_asset: bool,
-  pub text: String,
+  pub text: EcoString,
   pub location: Location,
 }
 
@@ -196,21 +198,21 @@ impl TextResource {
     let resource_dir = if self.is_asset { "assets" } else { "data" };
     let dir_path = Path::new(root_path)
       .join(resource_dir)
-      .join(&local_path.namespace)
-      .join(&self.kind)
+      .join(local_path.namespace.as_str())
+      .join(self.kind.as_str())
       .join(local_path.modules.join("/"));
 
     fs::create_dir_all(&dir_path).map_err(raise_floating_error)?;
-    let file_path = dir_path.join(self.name.clone() + ".json");
-    fs::write(file_path, self.text.clone()).map_err(raise_floating_error)
+    let file_path = dir_path.join((self.name.clone() + ".json").as_str());
+    fs::write(file_path, self.text.as_str()).map_err(raise_floating_error)
   }
 }
 
 #[derive(Debug)]
 pub struct FileResource {
-  pub kind: String,
+  pub kind: EcoString,
   pub is_asset: bool,
-  pub path: String,
+  pub path: EcoString,
   pub location: Location,
 }
 
@@ -219,8 +221,8 @@ impl FileResource {
     let resource_dir = if self.is_asset { "assets" } else { "data" };
     let dir_path = Path::new(&root_path)
       .join(resource_dir)
-      .join(&local_path.namespace)
-      .join(&self.kind)
+      .join(local_path.namespace.as_str())
+      .join(self.kind.as_str())
       .join(local_path.modules.join("/"));
 
     fs::create_dir_all(&dir_path).map_err(raise_floating_error)?;
@@ -242,8 +244,8 @@ impl FileResource {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ResourceLocation {
-  pub namespace: String,
-  pub modules: Vec<String>,
+  pub namespace: EcoString,
+  pub modules: Vec<EcoString>,
   kind: ResourceKind,
 }
 
@@ -290,14 +292,14 @@ impl ResourceLocation {
     location.with_name(&resource.name)
   }
 
-  pub fn join(&self, suffix: &str) -> String {
+  pub fn join(&self, suffix: &str) -> EcoString {
     let mut prefix = self.to_string();
     if !self.modules.is_empty() {
       prefix.push('/');
     }
     prefix.push_str(suffix);
 
-    prefix
+    prefix.into()
   }
 
   pub fn module(mut self) -> ResourceLocation {
@@ -311,7 +313,7 @@ impl ResourceLocation {
     }
   }
 
-  pub fn try_split(mut self) -> Option<(ResourceLocation, String)> {
+  pub fn try_split(mut self) -> Option<(ResourceLocation, EcoString)> {
     match self.kind {
       ResourceKind::Function => {
         let name = self.modules.pop().expect("Should have a name");
@@ -322,12 +324,12 @@ impl ResourceLocation {
     }
   }
 
-  pub fn _name(&self) -> &String {
+  pub fn _name(&self) -> &EcoString {
     self.modules.last().expect("Should have a name")
   }
 
   pub fn with_name(mut self, name: &str) -> ResourceLocation {
-    self.modules.push(name.to_string());
+    self.modules.push(name.into());
     ResourceLocation {
       namespace: self.namespace,
       modules: self.modules,
@@ -337,8 +339,11 @@ impl ResourceLocation {
 
   pub fn new_module(namespace: &str, modules: &[&str]) -> Self {
     Self {
-      namespace: namespace.to_string(),
-      modules: modules.iter().map(|module| module.to_string()).collect(),
+      namespace: namespace.into(),
+      modules: modules
+        .into_iter()
+        .map(|&module| EcoString::from(module))
+        .collect(),
       kind: ResourceKind::Module,
     }
   }
@@ -348,8 +353,11 @@ impl ResourceLocation {
       panic!("Should not construct function locations with no name");
     }
     Self {
-      namespace: namespace.to_string(),
-      modules: modules.iter().map(|module| module.to_string()).collect(),
+      namespace: namespace.into(),
+      modules: modules
+        .into_iter()
+        .map(|&module| EcoString::from(module))
+        .collect(),
       kind: ResourceKind::Function,
     }
   }
@@ -358,7 +366,7 @@ impl ResourceLocation {
 #[derive(Clone, Debug)]
 pub struct StorageLocation {
   pub storage: ResourceLocation,
-  pub name: String,
+  pub name: EcoString,
 }
 
 impl Display for StorageLocation {
@@ -368,7 +376,7 @@ impl Display for StorageLocation {
 }
 
 impl StorageLocation {
-  pub fn new(storage: ResourceLocation, name: String) -> StorageLocation {
+  pub fn new(storage: ResourceLocation, name: EcoString) -> StorageLocation {
     StorageLocation { storage, name }
   }
 
@@ -393,7 +401,7 @@ impl StorageLocation {
 #[derive(Clone, Debug)]
 pub struct ScoreboardLocation {
   pub scoreboard: ResourceLocation,
-  pub name: String,
+  pub name: EcoString,
 }
 
 impl Display for ScoreboardLocation {
@@ -409,8 +417,8 @@ impl Display for ScoreboardLocation {
 }
 
 impl ScoreboardLocation {
-  pub fn scoreboard_string(&self) -> String {
-    format!(
+  pub fn scoreboard_string(&self) -> EcoString {
+    eco_format!(
       "{}.{}",
       self.scoreboard.namespace,
       self.scoreboard.modules.join(".")
@@ -430,21 +438,21 @@ impl ScoreboardLocation {
     let (module, name) = location.try_split().expect("Function location");
     ScoreboardLocation {
       scoreboard: module,
-      name: format!("${name}"),
+      name: eco_format!("${name}"),
     }
   }
 
   pub fn new(location: ResourceLocation, name: &str) -> ScoreboardLocation {
     ScoreboardLocation {
       scoreboard: location,
-      name: format!("${name}"),
+      name: eco_format!("${name}"),
     }
   }
 
   pub fn of_internal(name: &str) -> ScoreboardLocation {
     ScoreboardLocation {
       scoreboard: ResourceLocation::new_function("zoglin", &["internal", "vars"]),
-      name: format!("${name}"),
+      name: eco_format!("${name}"),
     }
   }
 }

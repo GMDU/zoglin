@@ -11,7 +11,7 @@ use super::{
 impl Compiler {
   pub(super) fn compile_builtin_function(
     &mut self,
-    name: String,
+    name: &str,
     raw_arguments: Vec<ast::Expression>,
     location: Location,
     context: &mut FunctionContext,
@@ -21,7 +21,7 @@ impl Compiler {
       arguments.push(self.compile_expression(argument, context, false)?);
     }
 
-    match name.as_str() {
+    match name {
       "temp_score" => self.temp_score(arguments, location, context),
       "temp_storage" => self.temp_storage(arguments, location, context),
       _ => Err(raise_error(

@@ -1,5 +1,7 @@
 use std::mem::replace;
 
+use ecow::EcoString;
+
 use crate::error::Location;
 
 #[derive(Debug)]
@@ -9,7 +11,7 @@ pub struct File {
 
 #[derive(Debug)]
 pub struct Namespace {
-  pub name: String,
+  pub name: EcoString,
   pub items: Vec<Item>,
 }
 
@@ -21,7 +23,7 @@ pub enum Item {
   Function(Function),
   ComptimeFunction(ComptimeFunction),
   Resource(Resource),
-  ComptimeAssignment(String, Expression),
+  ComptimeAssignment(EcoString, Expression),
 }
 
 impl Item {
@@ -32,28 +34,28 @@ impl Item {
 
 #[derive(Debug)]
 pub struct Module {
-  pub name: String,
+  pub name: EcoString,
   pub items: Vec<Item>,
 }
 
 #[derive(Debug)]
 pub struct Import {
   pub path: ImportPath,
-  pub alias: Option<String>,
+  pub alias: Option<EcoString>,
 }
 
 #[derive(Debug)]
 pub struct Resource {
   pub is_asset: bool,
   pub location: Location,
-  pub kind: String,
+  pub kind: EcoString,
   pub content: ResourceContent,
 }
 
 #[derive(Debug)]
 pub enum ResourceContent {
-  Text(String, String),
-  File(String, String),
+  Text(EcoString, EcoString),
+  File(EcoString, EcoString),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -66,7 +68,7 @@ pub enum ParameterKind {
 
 #[derive(Debug, Clone)]
 pub struct Parameter {
-  pub name: String,
+  pub name: EcoString,
   pub kind: ParameterKind,
 }
 
@@ -74,7 +76,7 @@ pub struct Parameter {
 pub struct Function {
   pub location: Location,
   pub return_type: ReturnType,
-  pub name: String,
+  pub name: EcoString,
   pub parameters: Vec<Parameter>,
   pub items: Vec<Statement>,
 }
@@ -88,15 +90,15 @@ pub enum ReturnType {
 
 #[derive(Debug)]
 pub struct ComptimeFunction {
-  pub name: String,
-  pub parameters: Vec<String>,
+  pub name: EcoString,
+  pub parameters: Vec<EcoString>,
   pub items: Vec<Statement>,
 }
 
 #[derive(Debug, Clone)]
 pub enum Statement {
   Command(Command),
-  Comment(String),
+  Comment(EcoString),
   Expression(Expression),
   If(IfStatement),
   WhileLoop(WhileLoop),
@@ -110,14 +112,14 @@ pub struct Command {
 
 #[derive(Debug, Clone)]
 pub enum CommandPart {
-  Literal(String),
+  Literal(EcoString),
   Expression(StaticExpr),
 }
 
 #[derive(Debug, Clone)]
 pub enum StaticExpr {
-  MacroVariable(String),
-  ComptimeVariable(String),
+  MacroVariable(EcoString),
+  ComptimeVariable(EcoString),
   FunctionCall(FunctionCall),
   ResourceRef { resource: ZoglinResource },
   FunctionRef { path: Option<ZoglinResource> },
@@ -133,15 +135,15 @@ pub enum Expression {
   Long(i64, Location),
   Float(f32, Location),
   Double(f64, Location),
-  String(String, Location),
+  String(EcoString, Location),
   Array(ArrayType, Vec<Expression>, Location),
   Compound(Vec<KeyValue>, Location),
-  BuiltinVariable(String, Location),
-  BuiltinFunction(String, Vec<Expression>, Location),
+  BuiltinVariable(EcoString, Location),
+  BuiltinFunction(EcoString, Vec<Expression>, Location),
   Variable(ZoglinResource),
   ScoreboardVariable(ZoglinResource),
-  MacroVariable(String, Location),
-  ComptimeVariable(String, Location),
+  MacroVariable(EcoString, Location),
+  ComptimeVariable(EcoString, Location),
   BinaryOperation(BinaryOperation),
   UnaryOperation(UnaryExpression),
   Index(Index),
@@ -202,14 +204,14 @@ pub struct Member {
 
 #[derive(Debug, Clone)]
 pub enum MemberKind {
-  Literal(String),
+  Literal(EcoString),
   Dynamic(Expression),
 }
 
 #[derive(Debug, Clone)]
 pub struct KeyValue {
   pub location: Location,
-  pub key: String,
+  pub key: EcoString,
   pub value: Expression,
 }
 
@@ -231,15 +233,15 @@ pub struct FunctionCall {
 #[derive(Debug, Clone)]
 pub struct ZoglinResource {
   pub location: Location,
-  pub namespace: Option<String>,
-  pub modules: Vec<String>,
-  pub name: String,
+  pub namespace: Option<EcoString>,
+  pub modules: Vec<EcoString>,
+  pub name: EcoString,
 }
 
 #[derive(Debug, Clone)]
 pub struct ImportPath {
-  pub namespace: String,
-  pub path: Vec<String>,
+  pub namespace: EcoString,
+  pub path: Vec<EcoString>,
   pub is_comptime: bool,
 }
 

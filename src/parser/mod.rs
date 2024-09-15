@@ -2,6 +2,7 @@ use ast::{
   ArrayType, Command, CommandPart, ComptimeFunction, ElseStatement, KeyValue, Parameter,
   ParameterKind, ReturnType, StaticExpr, WhileLoop,
 };
+use ecow::EcoString;
 use name::{validate, validate_or_quote, NameKind};
 
 use self::ast::{
@@ -18,9 +19,9 @@ mod binary_operation;
 mod name;
 mod resource;
 
-fn json5_to_json(text: &str, location: Location) -> Result<String> {
+fn json5_to_json(text: &str, location: Location) -> Result<EcoString> {
   let map: serde_json::Value = json5::from_str(text).map_err(|e| raise_error(location, e))?;
-  Ok(serde_json::to_string_pretty(&map).expect("Json is valid, it was just parsed"))
+  Ok(serde_json::to_string_pretty(&map).expect("Json is valid, it was just parsed").into())
 }
 
 pub struct Parser {
@@ -158,7 +159,7 @@ impl Parser {
     false
   }
 
-  fn parse_block_namespace(&mut self, name: String) -> Result<Namespace> {
+  fn parse_block_namespace(&mut self, name: EcoString) -> Result<Namespace> {
     self.expect(TokenKind::LeftBrace)?;
 
     let mut items = Vec::new();
@@ -242,11 +243,11 @@ impl Parser {
       let token = self.expect(TokenKind::String)?;
       let (base_path, path) = if token.value.starts_with('/') {
         (
-          token.location.root.to_string(),
-          token.value[1..].to_string(),
+          token.location.root.clone(),
+          token.value[1..].into(),
         )
       } else {
-        (token.location.file.to_string(), token.value.clone())
+        (token.location.file.clone(), token.value.clone())
       };
       ResourceContent::File(path, base_path)
     };
@@ -269,7 +270,7 @@ impl Parser {
     Ok(items)
   }
 
-  fn parse_resource_path(&mut self) -> Result<String> {
+  fn parse_resource_path(&mut self) -> Result<EcoString> {
     if self.current().kind == TokenKind::Dot {
       return Ok(self.consume().value.clone());
     }

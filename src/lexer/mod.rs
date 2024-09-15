@@ -2,28 +2,29 @@ mod registries;
 pub mod token;
 use crate::error::{raise_error, raise_floating_error, raise_warning, Location, Result};
 
+use ecow::EcoString;
 use glob::glob;
 use registries::{COMMANDS, KEYWORD_REGISTRY, OPERATOR_REGISTRY};
-use std::{collections::HashSet, fs, path::Path, rc::Rc};
+use std::{collections::HashSet, fs, path::Path};
 use token::{Token, TokenKind};
 
 pub struct Lexer {
-  file: Rc<str>,
-  root: Rc<str>,
+  file: EcoString,
+  root: EcoString,
   src: String,
-  pub dependent_files: HashSet<String>,
+  pub dependent_files: HashSet<EcoString>,
   position: usize,
   is_newline: bool,
   next_brace_json: bool,
   line: usize,
   column: usize,
-  include_chain: Vec<String>,
+  include_chain: Vec<EcoString>,
 }
 
 impl Lexer {
   pub fn new(file: &str) -> Result<Lexer> {
     let contents = fs::read_to_string(file).map_err(raise_floating_error)?;
-    let file: Rc<str> = Rc::from(file);
+    let file: EcoString = file.into();
     Ok(Lexer {
       file: file.clone(),
       root: file.clone(),
@@ -34,16 +35,16 @@ impl Lexer {
       line: 1,
       column: 1,
       dependent_files: HashSet::new(),
-      include_chain: vec![file.to_string()],
+      include_chain: vec![file],
     })
   }
 
-  fn child(file: &str, root_path: &str, mut include_chain: Vec<String>) -> Result<Lexer> {
-    include_chain.push(file.to_string());
+  fn child(file: &str, root_path: &str, mut include_chain: Vec<EcoString>) -> Result<Lexer> {
+    include_chain.push(file.into());
     let contents = fs::read_to_string(file).map_err(raise_floating_error)?;
     Ok(Lexer {
-      file: Rc::from(file),
-      root: Rc::from(root_path),
+      file: file.into(),
+      root: root_path.into(),
       src: contents,
       position: 0,
       is_newline: true,
@@ -57,7 +58,7 @@ impl Lexer {
 
   pub fn tokenise(&mut self) -> Result<Vec<Token>> {
     let mut tokens = Vec::new();
-    self.dependent_files.insert(self.file.to_string());
+    self.dependent_files.insert(self.file.clone());
     loop {
       let next = self.next_token()?;
       if next.kind == TokenKind::IncludeKeyword {
@@ -94,16 +95,16 @@ impl Lexer {
     let position = self.position;
     let line = self.line;
     let column = self.column;
-    let mut value = None;
+    let mut value: Option<EcoString> = None;
 
     if self.current() == '\0' {
       kind = TokenKind::EndOfFile;
-      value = Some("\0".to_string());
+      value = Some("\0".into());
     } else if self.current() == '{' && self.next_brace_json {
       kind = TokenKind::Json;
       self.next_brace_json = false;
       if !self.tokenise_json() {
-        value = Some(self.src[position + 1..self.position - 1].to_string());
+        value = Some(self.src[position + 1..self.position - 1].into());
       }
     } else if self.current() == '/' && self.is_newline {
       self.consume();
@@ -139,7 +140,7 @@ impl Lexer {
     }
 
     self.is_newline = false;
-    let value = value.unwrap_or(self.src[position..self.position].to_string());
+    let value = value.unwrap_or(self.src[position..self.position].into());
 
     Ok(Token {
       kind,
@@ -186,7 +187,7 @@ impl Lexer {
     position: usize,
     line: usize,
     column: usize,
-  ) -> Result<(TokenKind, String)> {
+  ) -> Result<(TokenKind, EcoString)> {
     if self.current() == '@' && self.peek(1) == '"' {
       self.consume_many(2);
       while self.current() != '"' && self.current() != '\0' {
@@ -201,7 +202,7 @@ impl Lexer {
       }
 
       self.consume();
-      let ident_value = self.src[position + 2..self.position - 1].to_string();
+      let ident_value: EcoString = self.src[position + 2..self.position - 1].into();
       if ident_value.is_empty() {
         return Err(raise_error(
           self.location(line, column),
@@ -216,7 +217,7 @@ impl Lexer {
       while valid_identifier_body(self.current()) {
         self.consume();
       }
-      let ident_value = self.src[position + 1..self.position].to_string();
+      let ident_value: EcoString = self.src[position + 1..self.position].into();
 
       if ident_value.is_empty() {
         return Err(raise_error(
@@ -243,7 +244,7 @@ impl Lexer {
       .iter()
       .find(|(text, _)| *text == identifier_value)
     {
-      Ok((*keyword_kind, identifier_value.to_string()))
+      Ok((*keyword_kind, identifier_value.into()))
     } else if self.is_newline
       && COMMANDS.contains(&identifier_value)
       && self.next_significant_char() != '('
@@ -251,9 +252,9 @@ impl Lexer {
       self.position = position;
       self.line = line;
       self.column = column;
-      Ok((TokenKind::CommandBegin, String::new()))
+      Ok((TokenKind::CommandBegin, EcoString::new()))
     } else {
-      Ok((TokenKind::Identifier, identifier_value.to_string()))
+      Ok((TokenKind::Identifier, identifier_value.into()))
     }
   }
 
@@ -330,9 +331,9 @@ impl Lexer {
     include_braces
   }
 
-  fn tokenise_string(&mut self) -> String {
+  fn tokenise_string(&mut self) -> EcoString {
     let char = self.current();
-    let mut string = String::new();
+    let mut string = EcoString::new();
     self.consume();
     while self.current() != char {
       if self.current() == '\\' {
@@ -344,9 +345,9 @@ impl Lexer {
     string
   }
 
-  fn parse_number(&mut self) -> (TokenKind, String) {
+  fn parse_number(&mut self) -> (TokenKind, EcoString) {
     let mut kind = TokenKind::Integer;
-    let mut str_value = String::new();
+    let mut str_value = EcoString::new();
 
     while self.current().is_ascii_digit() {
       str_value.push(self.consume());
@@ -406,7 +407,7 @@ impl Lexer {
       return Err(raise_error(token.location, "Expected file name."));
     }
 
-    let mut path: String = token.value;
+    let mut path = token.value;
     if !path.ends_with(".zog") {
       path.push_str(".zog");
     }
@@ -419,7 +420,7 @@ impl Lexer {
       Path::new(&*self.file)
         .parent()
         .expect("Path should be valid")
-        .join(path)
+        .join(path.as_str())
     };
     let mut tokens = Vec::new();
 
@@ -429,11 +430,10 @@ impl Lexer {
       match entry {
         Ok(path) => {
           let path_str = path.to_str().expect("Path should be valid");
-          let path_string = path_str.to_string();
           if let Some(index) = self
             .include_chain
             .iter()
-            .position(|file| &path_string == file)
+            .position(|file| path_str == file)
           {
             if index != (self.include_chain.len() - 1) {
               raise_warning(
@@ -443,7 +443,7 @@ impl Lexer {
             }
             continue;
           }
-          self.dependent_files.insert(path_string);
+          self.dependent_files.insert(path_str.into());
 
           let mut lexer = Lexer::child(path_str, &self.root, self.include_chain.clone())?;
 
@@ -462,7 +462,7 @@ impl Lexer {
   fn parse_command(&mut self) -> Result<Vec<Token>> {
     let mut tokens = Vec::new();
 
-    let mut current_part = String::new();
+    let mut current_part = EcoString::new();
     let mut line = self.line;
     let mut column = self.column;
 
@@ -480,7 +480,7 @@ impl Lexer {
           value: current_part,
           location: self.location(line, column),
         });
-        current_part = String::new();
+        current_part = EcoString::new();
 
         self.consume();
         self.consume();
@@ -511,7 +511,7 @@ impl Lexer {
     });
     tokens.push(Token {
       kind: TokenKind::CommandEnd,
-      value: String::new(),
+      value: EcoString::new(),
       location: self.location(self.line, self.column),
     });
 

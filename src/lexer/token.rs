@@ -1,10 +1,11 @@
 use crate::error;
+use ecow::EcoString;
 use error::Location;
 
 #[derive(Debug, Clone)]
 pub struct Token {
   pub kind: TokenKind,
-  pub value: String,
+  pub value: EcoString,
   pub location: Location,
 }
 

@@ -1,5 +1,7 @@
 use std::{collections::HashMap, fmt::Display};
 
+use ecow::{eco_format, EcoString};
+
 use crate::{
   error::{raise_error, Location, Result},
   parser::ast::ArrayType,
@@ -7,6 +9,7 @@ use crate::{
 
 use super::{
   file_tree::{ScoreboardLocation, StorageLocation},
+  utils::ToEcoString,
   Compiler,
 };
 
@@ -27,7 +30,7 @@ pub enum ExpressionKind {
   Float(f32),
   Double(f64),
   Boolean(bool),
-  String(String),
+  String(EcoString),
   Array {
     values: Vec<Expression>,
     data_type: NbtType,
@@ -35,7 +38,7 @@ pub enum ExpressionKind {
   ByteArray(Vec<Expression>),
   IntArray(Vec<Expression>),
   LongArray(Vec<Expression>),
-  Compound(HashMap<String, Expression>),
+  Compound(HashMap<EcoString, Expression>),
 
   Storage(StorageLocation),
   SubString(StorageLocation, i32, Option<i32>),
@@ -51,9 +54,9 @@ pub enum Condition {
   Greater(ScoreboardLocation, ScoreboardLocation),
   GreaterEq(ScoreboardLocation, ScoreboardLocation),
   Eq(ScoreboardLocation, ScoreboardLocation),
-  Match(ScoreboardLocation, String),
-  Check(String),
-  And(String, String),
+  Match(ScoreboardLocation, EcoString),
+  Check(EcoString),
+  And(EcoString, EcoString),
   Inverted(Box<Condition>),
 }
 
@@ -64,24 +67,24 @@ impl Display for Condition {
 }
 
 impl Condition {
-  fn do_to_string(&self, invert: bool) -> String {
+  fn do_to_string(&self, invert: bool) -> EcoString {
     let check_str = if invert { "unless" } else { "if" };
     match self {
-      Condition::Less(a, b) => format!("{check_str} score {a} < {b}",),
+      Condition::Less(a, b) => eco_format!("{check_str} score {a} < {b}",),
       Condition::LessEq(a, b) => {
-        format!("{check_str} score {a} <= {b}",)
+        eco_format!("{check_str} score {a} <= {b}",)
       }
       Condition::Greater(a, b) => {
-        format!("{check_str} score {a} > {b}",)
+        eco_format!("{check_str} score {a} > {b}",)
       }
       Condition::GreaterEq(a, b) => {
-        format!("{check_str} score {a} >= {b}",)
+        eco_format!("{check_str} score {a} >= {b}",)
       }
       Condition::Eq(a, b) => {
-        format!("{check_str} score {a} = {b}",)
+        eco_format!("{check_str} score {a} = {b}",)
       }
       Condition::Match(score, range) => {
-        format!("{check_str} score {score} matches {range}",)
+        eco_format!("{check_str} score {score} matches {range}",)
       }
       Condition::Check(code) => {
         if invert {
@@ -92,22 +95,22 @@ impl Condition {
       }
       Condition::And(a, b) => {
         if invert {
-          format!("{} {}", Self::invert_code(a), Self::invert_code(b))
+          eco_format!("{} {}", Self::invert_code(a), Self::invert_code(b))
         } else {
-          format!("{a} {b}")
+          eco_format!("{a} {b}")
         }
       }
       Condition::Inverted(condition) => condition.do_to_string(!invert),
     }
   }
 
-  fn invert_code(code: &str) -> String {
+  fn invert_code(code: &str) -> EcoString {
     if let Some(condition) = code.strip_prefix("if") {
-      ["unless", condition].concat()
+      eco_format!("unless {condition}")
     } else if let Some(condition) = code.strip_prefix("unless") {
-      ["if", condition].concat()
+      eco_format!("if {condition}")
     } else {
-      code.to_string()
+      code.into()
     }
   }
 
@@ -137,14 +140,14 @@ pub enum StorageKind {
 }
 
 pub enum ScoreKind {
-  Direct(String),
-  DirectMacro(String),
+  Direct(EcoString),
+  DirectMacro(EcoString),
   Indirect,
   IndirectMacro,
 }
 
 pub enum ConditionKind {
-  Check(String),
+  Check(EcoString),
   Known(bool),
 }
 
@@ -168,9 +171,9 @@ impl Expression {
   pub fn to_storage(
     &self,
     state: &mut Compiler,
-    code: &mut Vec<String>,
+    code: &mut Vec<EcoString>,
     namespace: &str,
-  ) -> Result<(String, StorageKind)> {
+  ) -> Result<(EcoString, StorageKind)> {
     let (conversion_code, kind) = match &self.kind {
       ExpressionKind::Void => {
         return Err(raise_error(
@@ -178,15 +181,15 @@ impl Expression {
           "Cannot assign void to a value",
         ))
       }
-      ExpressionKind::Byte(b) => (format!("value {}b", *b), StorageKind::Modify),
-      ExpressionKind::Short(s) => (format!("value {}s", *s), StorageKind::Modify),
-      ExpressionKind::Integer(i) => (format!("value {}", *i), StorageKind::Modify),
-      ExpressionKind::Long(l) => (format!("value {}l", *l), StorageKind::Modify),
-      ExpressionKind::Float(f) => (format!("value {}f", *f), StorageKind::Modify),
-      ExpressionKind::Double(d) => (format!("value {}d", *d), StorageKind::Modify),
-      ExpressionKind::Boolean(b) => (format!("value {}", *b), StorageKind::Modify),
+      ExpressionKind::Byte(b) => (eco_format!("value {}b", *b), StorageKind::Modify),
+      ExpressionKind::Short(s) => (eco_format!("value {}s", *s), StorageKind::Modify),
+      ExpressionKind::Integer(i) => (eco_format!("value {}", *i), StorageKind::Modify),
+      ExpressionKind::Long(l) => (eco_format!("value {}l", *l), StorageKind::Modify),
+      ExpressionKind::Float(f) => (eco_format!("value {}f", *f), StorageKind::Modify),
+      ExpressionKind::Double(d) => (eco_format!("value {}d", *d), StorageKind::Modify),
+      ExpressionKind::Boolean(b) => (eco_format!("value {}", *b), StorageKind::Modify),
       ExpressionKind::String(s) => (
-        format!("value \"{}\"", s.escape_default()),
+        eco_format!("value \"{}\"", s.escape_default()),
         StorageKind::Modify,
       ),
       ExpressionKind::Array {
@@ -203,56 +206,58 @@ impl Expression {
       }
       // TODO: optimise this, like a lot
       ExpressionKind::Compound(types) => {
-        let storage = state.next_storage(namespace).to_string();
-        code.push(format!("data modify storage {storage} set value {{}}"));
+        let storage = state.next_storage(namespace).to_eco_string();
+        code.push(eco_format!("data modify storage {storage} set value {{}}"));
         for (key, value) in types {
           match value.to_storage(state, code, namespace)? {
             (expr_code, StorageKind::Modify) => {
-              code.push(format!(
+              code.push(eco_format!(
                 "data modify storage {storage}.{key} set {expr_code}"
               ));
             }
             (expr_code, StorageKind::Store) => {
-              code.push(format!(
+              code.push(eco_format!(
                 "execute store result storage {storage}.{key} int 1 run {expr_code}"
               ));
             }
             (expr_code, StorageKind::MacroModify) => {
-              code.push(format!(
+              code.push(eco_format!(
                 "$data modify storage {storage}.{key} set {expr_code}"
               ));
             }
             (expr_code, StorageKind::MacroStore) => {
-              code.push(format!(
+              code.push(eco_format!(
                 "$execute store result storage {storage}.{key} int 1 run {expr_code}"
               ));
             }
           }
         }
-        (format!("from storage {storage}"), StorageKind::Modify)
+        (eco_format!("from storage {storage}"), StorageKind::Modify)
       }
-      ExpressionKind::Storage(storage) => (format!("from storage {storage}"), StorageKind::Modify),
+      ExpressionKind::Storage(storage) => {
+        (eco_format!("from storage {storage}"), StorageKind::Modify)
+      }
       ExpressionKind::SubString(storage, start, end) => (
-        format!(
+        eco_format!(
           "string storage {storage} {start}{}",
           if let Some(end) = end {
-            format!(" {end}")
+            eco_format!(" {end}")
           } else {
-            String::new()
+            EcoString::new()
           }
         ),
         StorageKind::Modify,
       ),
       ExpressionKind::Scoreboard(scoreboard) => (
-        format!("scoreboard players get {scoreboard}",),
+        eco_format!("scoreboard players get {scoreboard}",),
         StorageKind::Store,
       ),
       ExpressionKind::Macro(storage) => (
-        format!("value $({})", storage.name),
+        eco_format!("value $({})", storage.name),
         StorageKind::MacroModify,
       ),
       ExpressionKind::Condition(condition) => {
-        (format!("execute {}", condition), StorageKind::Store)
+        (eco_format!("execute {}", condition), StorageKind::Store)
       }
     };
 
@@ -264,7 +269,7 @@ impl Expression {
     Ok((conversion_code, kind))
   }
 
-  pub fn to_score(&self) -> Result<(String, ScoreKind)> {
+  pub fn to_score(&self) -> Result<(EcoString, ScoreKind)> {
     let (conversion_code, kind) = match &self.kind {
       ExpressionKind::Void => {
         return Err(raise_error(
@@ -272,24 +277,21 @@ impl Expression {
           "Cannot assign void to a value",
         ))
       }
-      ExpressionKind::Byte(b) => (b.to_string(), ScoreKind::Direct("set".to_string())),
-      ExpressionKind::Short(s) => (s.to_string(), ScoreKind::Direct("set".to_string())),
-      ExpressionKind::Integer(i) => (i.to_string(), ScoreKind::Direct("set".to_string())),
-      ExpressionKind::Long(l) => (
-        (*l as i32).to_string(),
-        ScoreKind::Direct("set".to_string()),
-      ),
+      ExpressionKind::Byte(b) => (b.to_eco_string(), ScoreKind::Direct("set".into())),
+      ExpressionKind::Short(s) => (s.to_eco_string(), ScoreKind::Direct("set".into())),
+      ExpressionKind::Integer(i) => (i.to_eco_string(), ScoreKind::Direct("set".into())),
+      ExpressionKind::Long(l) => ((*l as i32).to_eco_string(), ScoreKind::Direct("set".into())),
       ExpressionKind::Float(f) => (
-        (f.floor() as i32).to_string(),
-        ScoreKind::Direct("set".to_string()),
+        (f.floor() as i32).to_eco_string(),
+        ScoreKind::Direct("set".into()),
       ),
       ExpressionKind::Double(d) => (
-        (d.floor() as i32).to_string(),
-        ScoreKind::Direct("set".to_string()),
+        (d.floor() as i32).to_eco_string(),
+        ScoreKind::Direct("set".into()),
       ),
       ExpressionKind::Boolean(b) => (
-        if *b { "1" } else { "0" }.to_string(),
-        ScoreKind::Direct("set".to_string()),
+        if *b { "1" } else { "0" }.to_eco_string(),
+        ScoreKind::Direct("set".into()),
       ),
       ExpressionKind::String(_) | ExpressionKind::SubString(_, _, _) => {
         return Err(raise_error(
@@ -312,19 +314,20 @@ impl Expression {
           "Cannot assign compound to a scoreboard variable",
         ))
       }
-      ExpressionKind::Storage(storage) => {
-        (format!("data get storage {storage}"), ScoreKind::Indirect)
-      }
+      ExpressionKind::Storage(storage) => (
+        eco_format!("data get storage {storage}"),
+        ScoreKind::Indirect,
+      ),
       ExpressionKind::Scoreboard(scoreboard) => (
-        format!("= {scoreboard}"),
-        ScoreKind::Direct("operation".to_string()),
+        eco_format!("= {scoreboard}"),
+        ScoreKind::Direct("operation".into()),
       ),
       ExpressionKind::Macro(storage) => (
-        format!("$({})", storage.name),
-        ScoreKind::DirectMacro("set".to_string()),
+        eco_format!("$({})", storage.name),
+        ScoreKind::DirectMacro("set".into()),
       ),
       ExpressionKind::Condition(condition) => {
-        (format!("execute {}", condition), ScoreKind::Indirect)
+        (eco_format!("execute {}", condition), ScoreKind::Indirect)
       }
     };
 
@@ -339,7 +342,7 @@ impl Expression {
   pub fn to_condition(
     &self,
     compiler: &mut Compiler,
-    code: &mut Vec<String>,
+    code: &mut Vec<EcoString>,
     namespace: &str,
     inverted: bool,
   ) -> Result<ConditionKind> {
@@ -376,20 +379,20 @@ impl Expression {
       ExpressionKind::Condition(condition) => {
         ConditionKind::Check(condition.do_to_string(inverted))
       }
-      ExpressionKind::Scoreboard(scoreboard) => ConditionKind::Check(format!(
+      ExpressionKind::Scoreboard(scoreboard) => ConditionKind::Check(eco_format!(
         "{} score {scoreboard} matches 0",
         if inverted { "if" } else { "unless" },
       )),
       ExpressionKind::Storage(_) => {
         let scoreboard = compiler.copy_to_scoreboard(code, self, namespace)?;
-        ConditionKind::Check(format!(
+        ConditionKind::Check(eco_format!(
           "{} score {scoreboard} matches 0",
           if inverted { "if" } else { "unless" },
         ))
       }
       ExpressionKind::Macro(_) => {
         let scoreboard = compiler.copy_to_scoreboard(code, self, namespace)?;
-        ConditionKind::Check(format!(
+        ConditionKind::Check(eco_format!(
           "{} score {scoreboard} matches 0",
           if inverted { "if" } else { "unless" },
         ))
@@ -397,20 +400,20 @@ impl Expression {
     })
   }
 
-  pub fn to_return_command(&self) -> Result<String> {
+  pub fn to_return_command(&self) -> Result<EcoString> {
     Ok(match &self.kind {
       ExpressionKind::Void => return Err(raise_error(self.location.clone(), "Cannot return void")),
-      ExpressionKind::Byte(value) => format!("return {value}"),
-      ExpressionKind::Short(value) => format!("return {value}"),
-      ExpressionKind::Integer(value) => format!("return {value}"),
-      ExpressionKind::Long(value) => format!("return {}", *value as i32),
-      ExpressionKind::Float(value) => format!("return {}", value.floor() as i32),
-      ExpressionKind::Double(value) => format!("return {}", value.floor() as i32),
+      ExpressionKind::Byte(value) => eco_format!("return {value}"),
+      ExpressionKind::Short(value) => eco_format!("return {value}"),
+      ExpressionKind::Integer(value) => eco_format!("return {value}"),
+      ExpressionKind::Long(value) => eco_format!("return {}", *value as i32),
+      ExpressionKind::Float(value) => eco_format!("return {}", value.floor() as i32),
+      ExpressionKind::Double(value) => eco_format!("return {}", value.floor() as i32),
       ExpressionKind::Boolean(b) => {
         if *b {
-          "return 1".to_string()
+          "return 1".into()
         } else {
-          "return 0".to_string()
+          "return 0".into()
         }
       }
       ExpressionKind::String(_)
@@ -426,14 +429,14 @@ impl Expression {
         ))
       }
       ExpressionKind::Storage(storage) => {
-        format!("return run data get storage {storage}")
+        eco_format!("return run data get storage {storage}")
       }
       ExpressionKind::Scoreboard(scoreboard) => {
-        format!("return run scoreboard players get {scoreboard}")
+        eco_format!("return run scoreboard players get {scoreboard}")
       }
-      ExpressionKind::Macro(name) => format!("$return $({name})"),
+      ExpressionKind::Macro(name) => eco_format!("$return $({name})"),
       ExpressionKind::Condition(condition) => {
-        format!("return run execute {}", condition)
+        eco_format!("return run execute {}", condition)
       }
     })
   }
@@ -450,9 +453,9 @@ pub enum NbtValue {
   ByteArray(Vec<i8>),
   IntArray(Vec<i32>),
   LongArray(Vec<i64>),
-  String(String),
+  String(EcoString),
   List(Vec<NbtValue>),
-  Compound(HashMap<String, NbtValue>),
+  Compound(HashMap<EcoString, NbtValue>),
 }
 
 impl ExpressionKind {
@@ -604,16 +607,16 @@ impl ExpressionKind {
     }
   }*/
 
-  pub fn to_comptime_string(&self, top_level: bool) -> Option<String> {
+  pub fn to_comptime_string(&self, top_level: bool) -> Option<EcoString> {
     Some(match self {
       ExpressionKind::Void => return None,
-      ExpressionKind::Byte(b) => format!("{b}b"),
-      ExpressionKind::Short(s) => format!("{s}s"),
-      ExpressionKind::Integer(i) => i.to_string(),
-      ExpressionKind::Long(l) => format!("{l}l"),
-      ExpressionKind::Float(f) => format!("{f}f"),
-      ExpressionKind::Double(d) => format!("{d}d"),
-      ExpressionKind::Boolean(b) => b.to_string(),
+      ExpressionKind::Byte(b) => eco_format!("{b}b"),
+      ExpressionKind::Short(s) => eco_format!("{s}s"),
+      ExpressionKind::Integer(i) => i.to_eco_string(),
+      ExpressionKind::Long(l) => eco_format!("{l}l"),
+      ExpressionKind::Float(f) => eco_format!("{f}f"),
+      ExpressionKind::Double(d) => eco_format!("{d}d"),
+      ExpressionKind::Boolean(b) => b.to_eco_string(),
       ExpressionKind::String(s) => s.clone(),
       ExpressionKind::Array { values, .. } => return array_to_string(values, ""),
       ExpressionKind::ByteArray(values) => return array_to_string(values, "B; "),
@@ -626,18 +629,18 @@ impl ExpressionKind {
             value
               .kind
               .to_comptime_string(false)
-              .map(|s| format!("{key}: {s}"))
+              .map(|s| eco_format!("{key}: {s}"))
           })
           .collect();
 
         if value_strings.len() != values.len() {
           return None;
         }
-        format!("{{{}}}", value_strings.join(", "))
+        eco_format!("{{{}}}", value_strings.join(", "))
       }
       ExpressionKind::Storage(storage) => {
         if top_level {
-          storage.to_string()
+          storage.to_eco_string()
         } else {
           return None;
         }
@@ -645,7 +648,7 @@ impl ExpressionKind {
       ExpressionKind::SubString(_, _, _) => return None,
       ExpressionKind::Scoreboard(scoreboard) => {
         if top_level {
-          scoreboard.to_string()
+          scoreboard.to_eco_string()
         } else {
           return None;
         }
@@ -653,7 +656,7 @@ impl ExpressionKind {
       ExpressionKind::Macro(_) => return None,
       ExpressionKind::Condition(c) => {
         if top_level {
-          c.to_string()
+          c.to_eco_string()
         } else {
           return None;
         }
@@ -662,7 +665,7 @@ impl ExpressionKind {
   }
 }
 
-fn array_to_string(values: &[Expression], prefix: &str) -> Option<String> {
+fn array_to_string(values: &[Expression], prefix: &str) -> Option<EcoString> {
   let value_strings: Vec<_> = values
     .iter()
     .filter_map(|value| value.kind.to_comptime_string(false))
@@ -671,7 +674,7 @@ fn array_to_string(values: &[Expression], prefix: &str) -> Option<String> {
   if value_strings.len() != values.len() {
     return None;
   }
-  Some(format!("[{prefix}{}]", value_strings.join(", ")))
+  Some(eco_format!("[{prefix}{}]", value_strings.join(", ")))
 }
 
 impl Expression {
@@ -768,48 +771,52 @@ fn array_to_storage(
   data_type: NbtType,
   prefix: &str,
   state: &mut Compiler,
-  code: &mut Vec<String>,
+  code: &mut Vec<EcoString>,
   namespace: &str,
-) -> Result<(String, StorageKind)> {
-  let storage = state.next_storage(namespace).to_string();
-  code.push(format!(
+) -> Result<(EcoString, StorageKind)> {
+  let storage = state.next_storage(namespace).to_eco_string();
+  code.push(eco_format!(
     "data modify storage {storage} set value [{prefix}]"
   ));
   for element in elements {
     match element.to_storage(state, code, namespace)? {
       (expr_code, StorageKind::Modify) => {
-        code.push(format!("data modify storage {storage} append {expr_code}"));
+        code.push(eco_format!(
+          "data modify storage {storage} append {expr_code}"
+        ));
       }
       (expr_code, StorageKind::MacroModify) => {
-        code.push(format!("$data modify storage {storage} append {expr_code}"));
+        code.push(eco_format!(
+          "$data modify storage {storage} append {expr_code}"
+        ));
       }
       (expr_code, StorageKind::Store) => {
-        let temp_storage = state.next_storage(namespace).to_string();
-        code.push(format!(
+        let temp_storage = state.next_storage(namespace).to_eco_string();
+        code.push(eco_format!(
           "execute store result storage {temp_storage} {data_type} 1 run {expr_code}",
           data_type = data_type
             .to_store_string()
             .expect("Only numeric types have an indirect storage kind")
         ));
-        code.push(format!(
+        code.push(eco_format!(
           "data modify storage {storage} append from storage {temp_storage}"
         ));
       }
       (expr_code, StorageKind::MacroStore) => {
-        let temp_storage = state.next_storage(namespace).to_string();
-        code.push(format!(
+        let temp_storage = state.next_storage(namespace).to_eco_string();
+        code.push(eco_format!(
           "$execute store result storage {temp_storage} {data_type} 1 run {expr_code}",
           data_type = data_type
             .to_store_string()
             .expect("Only numeric types have an indirect storage kind")
         ));
-        code.push(format!(
+        code.push(eco_format!(
           "data modify storage {storage} append from storage {temp_storage}"
         ));
       }
     }
   }
-  Ok((format!("from storage {storage}"), StorageKind::Modify))
+  Ok((eco_format!("from storage {storage}"), StorageKind::Modify))
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -831,7 +838,7 @@ pub enum NbtType {
 }
 
 impl NbtType {
-  pub fn to_store_string(self) -> Option<String> {
+  pub fn to_store_string(self) -> Option<EcoString> {
     Some(
       match self {
         NbtType::Byte => "byte",
@@ -850,7 +857,7 @@ impl NbtType {
         | NbtType::List
         | NbtType::Compound => return None,
       }
-      .to_string(),
+      .to_eco_string(),
     )
   }
 

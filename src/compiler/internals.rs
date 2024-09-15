@@ -1,5 +1,7 @@
 use std::sync::OnceLock;
 
+use ecow::{eco_format, EcoString};
+
 use crate::error::Location;
 
 use super::{file_tree::ResourceLocation, Compiler};
@@ -27,7 +29,7 @@ impl Compiler {
             "scoreboard players operation $temp_return zoglin.internal.vars = $should_return zoglin.internal.vars",
             "scoreboard players reset $should_return zoglin.internal.vars", 
             "return run scoreboard players get $temp_return zoglin.internal.vars"
-          ].map(|s| s.to_string())),
+          ].map(EcoString::from)),
         )
         .expect("Function should not already be defined");
       location
@@ -45,7 +47,7 @@ impl Compiler {
           Location::blank(),
           location.clone(),
           vec![
-            format!(
+            eco_format!(
               "$data modify storage zoglin:internal/{VERSION}/dynamic_index return set from storage zoglin:internal/{VERSION}/dynamic_index target[$(__index)]"
             ),
           ],
@@ -66,7 +68,7 @@ impl Compiler {
           Location::blank(),
           location.clone(),
           vec![
-            format!(
+            eco_format!(
               "$data modify storage zoglin:internal/{VERSION}/dynamic_range_index return set string storage zoglin:internal/{VERSION}/dynamic_range_index target $(__start) $(__end)"
             ),
           ],
@@ -87,7 +89,7 @@ impl Compiler {
           Location::blank(),
           location.clone(),
           vec![
-            format!(
+            eco_format!(
               "$data modify storage zoglin:internal/{VERSION}/dynamic_range_index_no_end return set string storage zoglin:internal/{VERSION}/dynamic_range_index_no_end target $(__start)"
             ),
           ],
@@ -108,7 +110,7 @@ impl Compiler {
           Location::blank(),
           location.clone(),
           vec![
-            format!(
+            eco_format!(
               "$data modify storage zoglin:internal/{VERSION}/dynamic_member return set from storage zoglin:internal/{VERSION}/dynamic_member target.\"$(__member)\""
             ),
           ],

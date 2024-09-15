@@ -1,3 +1,5 @@
+use ecow::{eco_format, EcoString};
+
 use crate::error::{raise_error, Error, Location};
 
 use super::ast::{ParameterKind, ZoglinResource};
@@ -20,13 +22,10 @@ pub enum NameKind {
   ComptimeVariable,
 }
 
-pub fn validate_or_quote(name: String, location: &Location, kind: NameKind) -> String {
+pub fn validate_or_quote(name: EcoString, location: &Location, kind: NameKind) -> EcoString {
   match validate(&name, location, kind) {
     Ok(_) => name,
-    Err(_) => format!(
-      "\"{}\"",
-      name.escape_default().to_string().replace("\\'", "'")
-    ),
+    Err(_) => eco_format!("\"{}\"", name.escape_default().to_string().replace("\\'", "'")),
   }
 }
 
