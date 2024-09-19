@@ -1,5 +1,6 @@
 use clap::{self, Arg, Command};
 mod compiler;
+mod config;
 mod error;
 mod lexer;
 mod parser;

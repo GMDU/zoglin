@@ -1,0 +1,29 @@
+{
+  zoglin: "~> 0.1.0",
+  entry: "main.zog",
+  package: {
+    name: "golemscript",
+    version: "0.3.2",
+    summary: "GolemScript - Vanilla programming language",
+    author: "GMDU",
+    contact: 'contact@datapack.dev',
+    supports: "~> 1.20.2",
+    homepage: "https://datapack.dev/projects/golemscript",
+    source: "https://github.com/GMDU/golemscript",
+    issues: "https://github.com/GMDU/golemscript/issues",
+    license: {
+      name: "GPLv3",
+      url: "https://github.com/GMDU/golemscript/blob/main/LICENSE.md"
+    }
+  },
+  meta: {
+    pack: {
+      pack_format: 26,
+      description: "GolemScript: Programming in Minecraft"
+    }
+  },
+  dependencies: {
+    moxlib: "0.5.11",
+    regex: "~> 0.1"
+  }
+}
