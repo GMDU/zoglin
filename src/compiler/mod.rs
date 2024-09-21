@@ -772,17 +772,6 @@ impl Compiler {
       }
     };
 
-    // if function_call.arguments.len() != function_definition.arguments.len() {
-    //   return Err(raise_error(
-    //     src_location,
-    //     eco_format!(
-    //       "Incorrect number of arguments. Expected {}, got {}",
-    //       function_definition.arguments.len(),
-    //       function_call.arguments.len()
-    //     ),
-    //   ));
-    // }
-
     let has_macro_args = function_definition
       .arguments
       .iter()
@@ -874,30 +863,33 @@ impl Compiler {
       ))?
       .clone();
 
-    if function_call.arguments.len() != comptime_function.parameters.len() {
-      return Err(raise_error(
-        source_location,
-        eco_format!(
-          "Compile-time function &{resource} expects {} arguments, but {} were given",
-          comptime_function.parameters.len(),
-          function_call.arguments.len()
-        ),
-      ));
-    }
-
-    let arguments: Vec<_> = function_call
-      .arguments
-      .into_iter()
-      .map(|value| self.compile_expression(value, context, false))
-      .collect();
+    let mut arguments = function_call.arguments.into_iter();
 
     self.comptime_scopes.push(HashMap::new());
-    for (name, value) in comptime_function.parameters.iter().zip(arguments) {
+
+    let mut default_context = FunctionContext {
+      location: comptime_function.location.clone(),
+      return_type: ReturnType::Direct,
+      is_nested: false,
+      has_nested_returns: false,
+      code: Vec::new(),
+    };
+
+    for parameter in comptime_function.parameters {
+      let argument = match (arguments.next(), parameter.default) {
+        (Some(argument), _) => self.compile_expression(argument, context, false)?,
+        (None, Some(default)) => {
+          let expr = self.compile_expression(default, &mut default_context, false)?;
+          context.code.extend(take(&mut default_context.code));
+          expr
+        }
+        (None, None) => return Err(raise_error(source_location, "Expected more arguments")),
+      };
       self
         .comptime_scopes
         .last_mut()
         .expect("The must be at least one scope")
-        .insert(name.clone(), value?);
+        .insert(parameter.name.clone(), argument);
     }
 
     let mut return_value = None;

@@ -303,7 +303,11 @@ impl Parser {
       TokenKind::Ampersand => todo!(),
       _ => ParameterKind::Storage,
     };
-    let Token { value: name, location, .. } = self.expect(TokenKind::Identifier)?.clone();
+    let Token {
+      value: name,
+      location,
+      ..
+    } = self.expect(TokenKind::Identifier)?.clone();
     validate(&name, &location, NameKind::Parameter(kind))?;
 
     let default = if self.current().kind == TokenKind::Equals {
@@ -317,6 +321,37 @@ impl Parser {
       name,
       location,
       kind,
+      default,
+    })
+  }
+
+  fn parse_comptime_parameter(&mut self) -> Result<Parameter> {
+    if self.current().kind == TokenKind::Ampersand {
+      self.consume();
+    }
+
+    let Token {
+      value: name,
+      location,
+      ..
+    } = self.expect(TokenKind::Identifier)?.clone();
+    validate(
+      &name,
+      &location,
+      NameKind::Parameter(ParameterKind::CompileTime),
+    )?;
+
+    let default = if self.current().kind == TokenKind::Equals {
+      self.consume();
+      Some(self.parse_expression()?)
+    } else {
+      None
+    };
+
+    Ok(Parameter {
+      name,
+      location,
+      kind: ParameterKind::CompileTime,
       default,
     })
   }
@@ -381,12 +416,7 @@ impl Parser {
 
     self.expect(TokenKind::LeftParen)?;
 
-    let parameters = self.parse_list(TokenKind::RightParen, |parser| {
-      if parser.current().kind == TokenKind::Ampersand {
-        parser.consume();
-      }
-      Ok(parser.expect(TokenKind::Identifier)?.value.clone())
-    })?;
+    let parameters = self.parse_list(TokenKind::RightParen, Parser::parse_comptime_parameter)?;
 
     let items: Vec<Statement> = self.parse_block()?;
 

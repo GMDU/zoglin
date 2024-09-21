@@ -93,7 +93,7 @@ pub enum ReturnType {
 #[derive(Debug)]
 pub struct ComptimeFunction {
   pub name: EcoString,
-  pub parameters: Vec<EcoString>,
+  pub parameters: Vec<Parameter>,
   pub items: Vec<Statement>,
 }
 

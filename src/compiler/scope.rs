@@ -21,7 +21,7 @@ pub struct CalledFunction {
 #[derive(Clone)]
 pub struct ComptimeFunction {
   pub location: ResourceLocation,
-  pub parameters: Vec<EcoString>,
+  pub parameters: Vec<Parameter>,
   pub body: Vec<Statement>,
 }
 
