@@ -13,6 +13,11 @@ pub struct FunctionDefinition {
   pub return_type: ReturnType,
 }
 
+pub struct CalledFunction {
+  pub location: ResourceLocation,
+  pub return_type: ReturnType,
+}
+
 #[derive(Clone)]
 pub struct ComptimeFunction {
   pub location: ResourceLocation,

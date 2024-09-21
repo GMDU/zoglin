@@ -1,18 +1,11 @@
 namespace diamond
 # include "setup"
 
-import diamond:a/b/&append
-
-module a {
-  module b {
-    fn &append(&array, &value) {
-      &temp = @temp_storage(&value)
-      data modify storage &{&array} append from storage &{&temp}
-    }
-  }
+fn add(a, b = a) {
+  return a + b
 }
 
 fn foo() {
-  a = []
-  &append(a, 10)
+  a = add(1, 2)
+  b = add(a)
 }

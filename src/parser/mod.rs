@@ -21,7 +21,11 @@ mod resource;
 
 fn json5_to_json(text: &str, location: Location) -> Result<EcoString> {
   let map: serde_json::Value = json5::from_str(text).map_err(|e| raise_error(location, e))?;
-  Ok(serde_json::to_string_pretty(&map).expect("Json is valid, it was just parsed").into())
+  Ok(
+    serde_json::to_string_pretty(&map)
+      .expect("Json is valid, it was just parsed")
+      .into(),
+  )
 }
 
 pub struct Parser {
@@ -242,10 +246,7 @@ impl Parser {
     } else {
       let token = self.expect(TokenKind::String)?;
       let (base_path, path) = if token.value.starts_with('/') {
-        (
-          token.location.root.clone(),
-          token.value[1..].into(),
-        )
+        (token.location.root.clone(), token.value[1..].into())
       } else {
         (token.location.file.clone(), token.value.clone())
       };
@@ -302,10 +303,22 @@ impl Parser {
       TokenKind::Ampersand => todo!(),
       _ => ParameterKind::Storage,
     };
-    let name = self.expect(TokenKind::Identifier)?;
-    validate(&name.value, &name.location, NameKind::Parameter(kind))?;
-    let name = name.value.clone();
-    Ok(Parameter { name, kind })
+    let Token { value: name, location, .. } = self.expect(TokenKind::Identifier)?.clone();
+    validate(&name, &location, NameKind::Parameter(kind))?;
+
+    let default = if self.current().kind == TokenKind::Equals {
+      self.consume();
+      Some(self.parse_expression()?)
+    } else {
+      None
+    };
+
+    Ok(Parameter {
+      name,
+      location,
+      kind,
+      default,
+    })
   }
 
   fn parse_function(&mut self) -> Result<Item> {
@@ -337,7 +350,19 @@ impl Parser {
 
     self.expect(TokenKind::LeftParen)?;
 
-    let arguments = self.parse_list(TokenKind::RightParen, Parser::parse_parameter)?;
+    let parameters = self.parse_list(TokenKind::RightParen, Parser::parse_parameter)?;
+
+    let mut found_optional = false;
+    for parameter in parameters.iter() {
+      if parameter.default.is_some() {
+        found_optional = true;
+      } else if found_optional {
+        return Err(raise_error(
+          parameter.location.clone(),
+          "Required parameters cannot come after optional parameters.",
+        ));
+      }
+    }
 
     let items = self.parse_block()?;
 
@@ -345,7 +370,7 @@ impl Parser {
       name,
       return_type,
       location,
-      parameters: arguments,
+      parameters,
       items,
     }))
   }

@@ -5,7 +5,7 @@ use std::{collections::HashMap, path::Path};
 use ecow::{eco_format, EcoString};
 use expression::{verify_types, ConditionKind, Expression, ExpressionKind, NbtValue};
 use file_tree::{ResourceLocation, ScoreboardLocation, StorageLocation};
-use scope::{ComptimeFunction, FunctionDefinition, Imported};
+use scope::{CalledFunction, ComptimeFunction, FunctionDefinition, Imported};
 use serde::Serialize;
 
 use crate::parser::ast::{
@@ -539,10 +539,10 @@ impl Compiler {
       }
       ast::Expression::FunctionCall(function_call) => {
         let location = function_call.path.location.clone();
-        let (command, definition) = self.compile_function_call(function_call, context)?;
-        match definition.return_type {
+        let (command, called) = self.compile_function_call(function_call, context)?;
+        match called.return_type {
           ReturnType::Storage => {
-            let storage = StorageLocation::new(definition.location, "return".to_eco_string());
+            let storage = StorageLocation::new(called.location, "return".to_eco_string());
             if !ignored {
               context
                 .code
@@ -556,7 +556,7 @@ impl Compiler {
             }
           }
           ReturnType::Scoreboard => {
-            let scoreboard = ScoreboardLocation::new(definition.location, "return");
+            let scoreboard = ScoreboardLocation::new(called.location, "return");
             if !ignored {
               context
                 .code
@@ -754,7 +754,7 @@ impl Compiler {
     &mut self,
     function_call: FunctionCall,
     context: &mut FunctionContext,
-  ) -> Result<(EcoString, FunctionDefinition)> {
+  ) -> Result<(EcoString, CalledFunction)> {
     let src_location = function_call.path.location.clone();
 
     let path = self.resolve_zoglin_resource(
@@ -762,27 +762,26 @@ impl Compiler {
       &context.location.clone().module(),
       false,
     )?;
-    let mut function_definition =
-      if let Some(function_definition) = self.function_registry.get(&path) {
-        function_definition.clone()
-      } else {
-        FunctionDefinition {
-          location: path.clone(),
-          arguments: Vec::new(),
-          return_type: ReturnType::Direct,
-        }
-      };
+    let function_definition = if let Some(function_definition) = self.function_registry.get(&path) {
+      function_definition.clone()
+    } else {
+      FunctionDefinition {
+        location: path.clone(),
+        arguments: Vec::new(),
+        return_type: ReturnType::Direct,
+      }
+    };
 
-    if function_call.arguments.len() != function_definition.arguments.len() {
-      return Err(raise_error(
-        src_location,
-        eco_format!(
-          "Incorrect number of arguments. Expected {}, got {}",
-          function_definition.arguments.len(),
-          function_call.arguments.len()
-        ),
-      ));
-    }
+    // if function_call.arguments.len() != function_definition.arguments.len() {
+    //   return Err(raise_error(
+    //     src_location,
+    //     eco_format!(
+    //       "Incorrect number of arguments. Expected {}, got {}",
+    //       function_definition.arguments.len(),
+    //       function_call.arguments.len()
+    //     ),
+    //   ));
+    // }
 
     let has_macro_args = function_definition
       .arguments
@@ -790,32 +789,50 @@ impl Compiler {
       .any(|param| param.kind == ParameterKind::Macro);
     let parameter_storage = function_definition.location.clone();
 
-    for (parameter, argument) in take(&mut function_definition.arguments)
-      .into_iter()
-      .zip(function_call.arguments)
-    {
-      let expr = self.compile_expression(argument, context, false)?;
+    let mut arguments = function_call.arguments.into_iter();
+
+    let mut default_context = FunctionContext {
+      location: function_definition.location.clone(),
+      return_type: ReturnType::Direct,
+      is_nested: false,
+      has_nested_returns: false,
+      code: Vec::new(),
+    };
+
+    for parameter in function_definition.arguments {
+      let argument = match (arguments.next(), parameter.default) {
+        (Some(arg), _) => self.compile_expression(arg, context, false)?,
+        (None, Some(parameter)) => {
+          let expr = self.compile_expression(parameter, &mut default_context, false)?;
+          context.code.extend(take(&mut default_context.code));
+          expr
+        }
+        (None, None) => return Err(raise_error(src_location, "Expected more arguments")),
+      };
+
       match parameter.kind {
         ParameterKind::Storage => {
           let storage = StorageLocation::new(parameter_storage.clone(), parameter.name);
           self.set_storage(
             &mut context.code,
             &storage,
-            &expr,
+            &argument,
             &context.location.namespace,
           )?;
         }
         ParameterKind::Scoreboard => {
           let scoreboard = ScoreboardLocation::new(parameter_storage.clone(), &parameter.name);
-          self.set_scoreboard(&mut context.code, &scoreboard, &expr)?;
+          self.set_scoreboard(&mut context.code, &scoreboard, &argument)?;
         }
         ParameterKind::Macro => {
-          let storage =
-            StorageLocation::new(parameter_storage.clone(), eco_format!("__{}", parameter.name));
+          let storage = StorageLocation::new(
+            parameter_storage.clone(),
+            eco_format!("__{}", parameter.name),
+          );
           self.set_storage(
             &mut context.code,
             &storage,
-            &expr,
+            &argument,
             &context.location.namespace,
           )?;
         }
@@ -831,7 +848,13 @@ impl Compiler {
     } else {
       eco_format!("function {}", function_definition.location)
     };
-    Ok((command, function_definition))
+    Ok((
+      command,
+      CalledFunction {
+        location: function_definition.location,
+        return_type: function_definition.return_type,
+      },
+    ))
   }
 
   fn compile_comptime_call(
@@ -1061,7 +1084,8 @@ impl Compiler {
 
       match context.return_type {
         ReturnType::Storage => {
-          let return_storage = StorageLocation::new(context.location.clone(), "return".to_eco_string());
+          let return_storage =
+            StorageLocation::new(context.location.clone(), "return".to_eco_string());
           self.set_storage(
             &mut context.code,
             &return_storage,
