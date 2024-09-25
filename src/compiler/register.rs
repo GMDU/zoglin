@@ -158,13 +158,7 @@ impl Compiler {
     location: &ResourceLocation,
     scope: usize,
   ) {
-    let mut context = FunctionContext {
-      location: location.clone(),
-      return_type: ReturnType::Direct,
-      is_nested: false,
-      has_nested_returns: false,
-      code: Vec::new(),
-    };
+    let mut context = FunctionContext::new(location.clone(), ReturnType::Direct);
     // TODO: Add some sort of validation
     let compiled_value = self
       .compile_expression(value, &mut context, false)
