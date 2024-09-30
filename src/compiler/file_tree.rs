@@ -196,12 +196,16 @@ impl PartialEq for TextResource {
 impl TextResource {
   fn generate(&self, root_path: &str, local_path: &ResourceLocation) -> Result<()> {
     let resource_dir = if self.is_asset { "assets" } else { "data" };
-    let dir_path = Path::new(root_path)
+    let mut dir_path = Path::new(root_path)
       .join(resource_dir)
-      .join(local_path.namespace.as_str())
-      .join(self.kind.as_str())
-      .join(local_path.modules.join("/"));
+      .join(local_path.namespace.as_str());
 
+    if self.kind.as_str() != "." {
+      dir_path.push(self.kind.as_str());
+    }
+
+    dir_path.push(local_path.modules.join("/"));
+    
     fs::create_dir_all(&dir_path).map_err(raise_floating_error)?;
     let file_path = dir_path.join((self.name.clone() + ".json").as_str());
     fs::write(file_path, self.text.as_str()).map_err(raise_floating_error)
@@ -219,11 +223,15 @@ pub struct FileResource {
 impl FileResource {
   fn generate(&self, root_path: &str, local_path: &ResourceLocation) -> Result<()> {
     let resource_dir = if self.is_asset { "assets" } else { "data" };
-    let dir_path = Path::new(&root_path)
+    let mut dir_path = Path::new(&root_path)
       .join(resource_dir)
-      .join(local_path.namespace.as_str())
-      .join(self.kind.as_str())
-      .join(local_path.modules.join("/"));
+      .join(local_path.namespace.as_str());
+
+    if self.kind.as_str() != "." {
+      dir_path.push(self.kind.as_str());
+    }
+    
+    dir_path.push(local_path.modules.join("/"));
 
     fs::create_dir_all(&dir_path).map_err(raise_floating_error)?;
     for entry in glob(&self.path).map_err(|e| raise_error(self.location.clone(), e.msg))? {
