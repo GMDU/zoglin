@@ -39,7 +39,7 @@ pub struct Compiler {
   current_scope: usize,
   counters: HashMap<EcoString, usize>,
   namespaces: HashMap<EcoString, Namespace>,
-  used_scoreboards: HashSet<EcoString>,
+  used_scoreboards: HashSet<UsedScoreboard>,
   function_registry: HashMap<ResourceLocation, FunctionDefinition>,
   comptime_function_registry: HashMap<ResourceLocation, ComptimeFunction>,
 }
@@ -56,6 +56,18 @@ struct FunctionContext {
 #[derive(Serialize)]
 struct FunctionTag<'a> {
   values: &'a [EcoString],
+}
+
+#[derive(Eq, Hash, PartialEq)]
+pub struct UsedScoreboard {
+  name: EcoString,
+  criteria: EcoString,
+}
+
+impl UsedScoreboard {
+  pub fn new_dummy(name: EcoString) -> UsedScoreboard {
+    UsedScoreboard{name, criteria: "dummy".into()}
+  }
 }
 
 impl Compiler {
@@ -82,6 +94,14 @@ impl Compiler {
 
   fn add_comptime_function(&mut self, scope: usize, name: EcoString, location: ResourceLocation) {
     self.scopes[scope].comptime_functions.insert(name, location);
+  }
+
+  fn use_scoreboard(&mut self, name: EcoString, criteria: EcoString) {
+    self.used_scoreboards.insert(UsedScoreboard{name, criteria});
+  }
+
+  fn use_scoreboard_dummy(&mut self, name: EcoString) {
+    self.used_scoreboards.insert(UsedScoreboard::new_dummy(name));
   }
 
   fn lookup_resource(&self, resource: &ZoglinResource, comptime: bool) -> Option<ResourceLocation> {
@@ -215,9 +235,7 @@ impl Compiler {
   }
 
   fn next_scoreboard(&mut self, namespace: &str) -> ScoreboardLocation {
-    self
-      .used_scoreboards
-      .insert(eco_format!("zoglin.internal.{namespace}.vars"));
+    self.use_scoreboard_dummy(eco_format!("zoglin.internal.{namespace}.vars"));
     ScoreboardLocation {
       scoreboard: ResourceLocation::new_function("zoglin", &["internal", namespace, "vars"]),
       name: eco_format!("$var_{}", self.next_counter("scoreboard")),
@@ -322,7 +340,8 @@ impl Compiler {
       name: "load".to_eco_string(),
       commands: take(&mut self.used_scoreboards)
         .into_iter()
-        .map(|scoreboard| eco_format!("scoreboard objectives add {scoreboard} dummy"))
+        .map(|scoreboard|
+          eco_format!("scoreboard objectives add {} {}", scoreboard.name, scoreboard.criteria))
         .collect(),
       location: Location::blank(),
     });
@@ -1087,7 +1106,7 @@ impl Compiler {
         }
         ReturnType::Scoreboard => {
           let scoreboard = ScoreboardLocation::new(context.location.clone(), "return");
-          self.used_scoreboards.insert(scoreboard.scoreboard_string());
+          self.use_scoreboard_dummy(scoreboard.scoreboard_string());
           self.set_scoreboard(&mut context.code, &scoreboard, &expression)?;
         }
         ReturnType::Direct => {

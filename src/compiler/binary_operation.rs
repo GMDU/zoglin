@@ -79,7 +79,7 @@ impl Compiler {
       ast::Expression::ScoreboardVariable(variable) => {
         let scoreboard = ScoreboardLocation::from_zoglin_resource(&context.location, &variable);
         self.set_scoreboard(&mut context.code, &scoreboard, &right)?;
-        self.used_scoreboards.insert(scoreboard.scoreboard_string());
+        self.use_scoreboard_dummy(scoreboard.scoreboard_string());
 
         Ok(right)
       }
