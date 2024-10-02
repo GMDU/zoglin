@@ -5,8 +5,19 @@ use error::Location;
 #[derive(Debug, Clone)]
 pub struct Token {
   pub kind: TokenKind,
-  pub value: EcoString,
+  pub value: Option<EcoString>,
+  pub raw: EcoString,
   pub location: Location,
+}
+
+impl Token {
+  pub fn get_value(&self) -> &EcoString {
+    self.value.as_ref().unwrap_or(&self.raw)
+  }
+
+  pub fn take_value(self) -> EcoString {
+    self.value.unwrap_or(self.raw)
+  }
 }
 
 #[derive(PartialEq, Debug, Clone, Copy)]

@@ -122,8 +122,8 @@ impl Parser {
       .file
       .clone();
     let name = self.expect(TokenKind::Identifier)?;
-    validate(&name.value, &name.location, NameKind::Namespace)?;
-    let name = name.value.clone();
+    validate(name.get_value(), &name.location, NameKind::Namespace)?;
+    let name = name.get_value().clone();
 
     if self.current().kind == TokenKind::LeftBrace {
       return Ok(vec![self.parse_block_namespace(name)?]);
@@ -195,7 +195,7 @@ impl Parser {
 
   fn parse_comptime_assignment(&mut self) -> Result<Item> {
     self.consume();
-    let name = self.expect(TokenKind::Identifier)?.value.clone();
+    let name = self.expect(TokenKind::Identifier)?.get_value().clone();
     self.expect(TokenKind::Equals)?;
     let value = self.parse_expression()?;
     Ok(Item::ComptimeAssignment(name, value))
@@ -204,8 +204,8 @@ impl Parser {
   fn parse_module(&mut self) -> Result<Module> {
     self.expect(TokenKind::ModuleKeyword)?;
     let name = self.expect(TokenKind::Identifier)?;
-    validate(&name.value, &name.location, NameKind::Module)?;
-    let name = name.value.clone();
+    validate(&name.get_value(), &name.location, NameKind::Module)?;
+    let name = name.get_value().clone();
     self.expect(TokenKind::LeftBrace)?;
 
     let mut items = Vec::new();
@@ -226,7 +226,7 @@ impl Parser {
       // TODO: Maybe validate here? If we try to use a weird alias in other
       // places in the code, it will probably complain, so we might want to
       // catch that here
-      alias = Some(self.expect(TokenKind::Identifier)?.value.clone());
+      alias = Some(self.expect(TokenKind::Identifier)?.get_value().clone());
     }
     Ok(Import { path, alias })
   }
@@ -238,17 +238,17 @@ impl Parser {
 
     let content: ResourceContent = if self.current().kind == TokenKind::Identifier {
       let name = self.consume();
-      validate(&name.value, &name.location, NameKind::Resource)?;
-      let name = name.value.clone();
+      validate(&name.get_value(), &name.location, NameKind::Resource)?;
+      let name = name.get_value().clone();
       let token = self.expect(TokenKind::Json)?;
 
-      ResourceContent::Text(name, json5_to_json(&token.value, token.location.clone())?)
+      ResourceContent::Text(name, json5_to_json(&token.get_value(), token.location.clone())?)
     } else {
       let token = self.expect(TokenKind::String)?;
-      let (base_path, path) = if token.value.starts_with('/') {
-        (token.location.root.clone(), token.value[1..].into())
+      let (base_path, path) = if token.get_value().starts_with('/') {
+        (token.location.root.clone(), token.get_value()[1..].into())
       } else {
-        (token.location.file.clone(), token.value.clone())
+        (token.location.file.clone(), token.get_value().clone())
       };
       ResourceContent::File(path, base_path)
     };
@@ -273,19 +273,19 @@ impl Parser {
 
   fn parse_resource_path(&mut self) -> Result<EcoString> {
     if self.current().kind == TokenKind::Dot {
-      return Ok(self.consume().value.clone());
+      return Ok(self.consume().get_value().clone());
     }
 
     let text = self.expect(TokenKind::Identifier)?;
-    validate(&text.value, &text.location, NameKind::ResourcePathComponent)?;
-    let mut text = text.value.clone();
+    validate(&text.get_value(), &text.location, NameKind::ResourcePathComponent)?;
+    let mut text = text.get_value().clone();
 
     while self.current().kind == TokenKind::ForwardSlash {
       text.push('/');
       self.consume();
       let next = self.expect(TokenKind::Identifier)?;
-      validate(&next.value, &next.location, NameKind::ResourcePathComponent)?;
-      text.push_str(&next.value);
+      validate(&next.get_value(), &next.location, NameKind::ResourcePathComponent)?;
+      text.push_str(&next.get_value());
     }
     Ok(text)
   }
@@ -303,11 +303,9 @@ impl Parser {
       TokenKind::Ampersand => todo!(),
       _ => ParameterKind::Storage,
     };
-    let Token {
-      value: name,
-      location,
-      ..
-    } = self.expect(TokenKind::Identifier)?.clone();
+    let token = self.expect(TokenKind::Identifier)?.clone();
+    let name = token.get_value().clone();
+    let location = token.location;
     validate(&name, &location, NameKind::Parameter(kind))?;
 
     let default = if self.current().kind == TokenKind::Equals {
@@ -318,7 +316,7 @@ impl Parser {
     };
 
     Ok(Parameter {
-      name,
+      name: name.clone(),
       location,
       kind,
       default,
@@ -330,11 +328,9 @@ impl Parser {
       self.consume();
     }
 
-    let Token {
-      value: name,
-      location,
-      ..
-    } = self.expect(TokenKind::Identifier)?.clone();
+    let token = self.expect(TokenKind::Identifier)?.clone();
+    let name = token.get_value().clone();
+    let location = token.location;
     validate(
       &name,
       &location,
@@ -349,7 +345,7 @@ impl Parser {
     };
 
     Ok(Parameter {
-      name,
+      name: name.clone(),
       location,
       kind: ParameterKind::CompileTime,
       default,
@@ -375,12 +371,9 @@ impl Parser {
       _ => ReturnType::Storage,
     };
 
-    let Token {
-      value: name,
-      location,
-      kind: _,
-    } = self.expect(TokenKind::Identifier)?.clone();
-
+    let token = self.expect(TokenKind::Identifier)?.clone();
+    let name = token.get_value().clone();
+    let location = token.location;
     validate(&name, &location, NameKind::Function)?;
 
     self.expect(TokenKind::LeftParen)?;
@@ -402,7 +395,7 @@ impl Parser {
     let items = self.parse_block()?;
 
     Ok(Item::Function(Function {
-      name,
+      name: name.clone(),
       return_type,
       location,
       parameters,
@@ -412,7 +405,7 @@ impl Parser {
 
   // Expects `fn &` already to be consumed
   fn parse_comptime_function(&mut self) -> Result<Item> {
-    let name = self.expect(TokenKind::Identifier)?.value.clone();
+    let name = self.expect(TokenKind::Identifier)?.get_value().clone();
 
     self.expect(TokenKind::LeftParen)?;
 
@@ -431,7 +424,7 @@ impl Parser {
     Ok(match self.current_including(&[TokenKind::Comment]).kind {
       TokenKind::CommandBegin => Statement::Command(self.parse_command()?),
       TokenKind::Comment => {
-        let comment = self.consume_including(&[TokenKind::Comment]).value.clone();
+        let comment = self.consume_including(&[TokenKind::Comment]).get_value().clone();
         Statement::Comment(comment)
       }
       TokenKind::IfKeyword => Statement::If(self.parse_if_statement()?),
@@ -447,7 +440,7 @@ impl Parser {
 
     while self.current().kind != TokenKind::CommandEnd {
       match self.current().kind {
-        TokenKind::CommandString => parts.push(CommandPart::Literal(self.consume().value.clone())),
+        TokenKind::CommandString => parts.push(CommandPart::Literal(self.consume().get_value().clone())),
         _ => parts.push(CommandPart::Expression(self.parse_static_expr()?)),
       }
     }
@@ -467,60 +460,60 @@ impl Parser {
 
     Ok(match current.kind {
       TokenKind::Byte => {
-        let value = current.value.parse().map_err(|_| {
+        let value = current.get_value().parse().map_err(|_| {
           raise_error(
             current.location.clone(),
-            format!("Value {} is too large for a byte.", current.value),
+            format!("Value {} is too large for a byte.", current.get_value()),
           )
         })?;
         Expression::Byte(value, current.location.clone())
       }
       TokenKind::Short => {
-        let value = current.value.parse().map_err(|_| {
+        let value = current.get_value().parse().map_err(|_| {
           raise_error(
             current.location.clone(),
-            format!("Value {} is too large for a short.", current.value),
+            format!("Value {} is too large for a short.", current.get_value()),
           )
         })?;
         Expression::Short(value, current.location.clone())
       }
-      TokenKind::Integer => match current.value.parse() {
+      TokenKind::Integer => match current.get_value().parse() {
         Ok(value) => Expression::Integer(value, current.location.clone()),
         Err(_) => {
-          let value = current.value.parse().map_err(|_| {
+          let value = current.get_value().parse().map_err(|_| {
             raise_error(
               current.location.clone(),
-              format!("Value {} is too large for a int.", current.value),
+              format!("Value {} is too large for a int.", current.get_value()),
             )
           })?;
 
-          raise_warning(current.location.clone(), format!("Value {} is too large for an int, automatically converting to a long. If this is intentional, suffix it with 'l'.", current.value));
+          raise_warning(current.location.clone(), format!("Value {} is too large for an int, automatically converting to a long. If this is intentional, suffix it with 'l'.", current.get_value()));
           Expression::Long(value, current.location.clone())
         }
       },
       TokenKind::Long => {
-        let value = current.value.parse().map_err(|_| {
+        let value = current.get_value().parse().map_err(|_| {
           raise_error(
             current.location.clone(),
-            format!("Value {} is too large for a long", current.value),
+            format!("Value {} is too large for a long", current.get_value()),
           )
         })?;
         Expression::Long(value, current.location.clone())
       }
       TokenKind::Float => {
-        let value = current.value.parse().map_err(|_| {
+        let value = current.get_value().parse().map_err(|_| {
           raise_error(
             current.location.clone(),
-            format!("Value {} is too large for a float.", current.value),
+            format!("Value {} is too large for a float.", current.get_value()),
           )
         })?;
         Expression::Float(value, current.location.clone())
       }
       TokenKind::Double => {
-        let value = current.value.parse().map_err(|_| {
+        let value = current.get_value().parse().map_err(|_| {
           raise_error(
             current.location.clone(),
-            format!("Value {} is too large for a double.", current.value),
+            format!("Value {} is too large for a double.", current.get_value()),
           )
         })?;
         Expression::Double(value, current.location.clone())
@@ -539,7 +532,7 @@ impl Parser {
 
   fn parse_string(&mut self) -> Result<Expression> {
     let token = self.consume().clone();
-    Ok(Expression::String(token.value, token.location))
+    Ok(Expression::String(token.get_value().clone(), token.location))
   }
 
   fn parse_array(&mut self) -> Result<Expression> {
@@ -548,14 +541,14 @@ impl Parser {
     let array_type = if self.peek(1).kind == TokenKind::Semicolon
       && self.current().kind == TokenKind::Identifier
     {
-      let array_type = match self.current().value.as_str() {
+      let array_type = match self.current().get_value().as_str() {
         "B" | "b" => ArrayType::Byte,
         "I" | "i" => ArrayType::Int,
         "L" | "l" => ArrayType::Long,
         _ => {
           return Err(raise_error(
             self.current().location.clone(),
-            format!("\"{}\" is not a valid array type.", self.current().value),
+            format!("\"{}\" is not a valid array type.", self.current().get_value()),
           ))
         }
       };
@@ -589,13 +582,11 @@ impl Parser {
     let mut key_values = Vec::new();
 
     while !self.eof() && self.current().kind != TokenKind::LeftBrace {
-      let Token {
-        value: key,
-        location,
-        kind: _,
-      } = self.expect(TokenKind::Identifier)?.clone();
+      let token = self.expect(TokenKind::Identifier)?.clone();
+      let key = token.get_value().clone();
+      let location = token.location;
 
-      let key = validate_or_quote(key, &location, NameKind::NBTPathComponent);
+      let key = validate_or_quote(key.clone(), &location, NameKind::NBTPathComponent);
 
       self.expect(TokenKind::Colon)?;
       let value = self.parse_expression()?;
@@ -645,8 +636,8 @@ impl Parser {
       TokenKind::Percent => {
         self.consume();
         let name = self.expect(TokenKind::Identifier)?;
-        validate(&name.value, &name.location, NameKind::MacroVariable)?;
-        Ok(StaticExpr::MacroVariable(name.value.clone()))
+        validate(&name.get_value(), &name.location, NameKind::MacroVariable)?;
+        Ok(StaticExpr::MacroVariable(name.get_value().clone()))
       }
       TokenKind::Ampersand => match self.parse_comptime_variable()? {
         Expression::FunctionCall(call) => Ok(StaticExpr::FunctionCall(call)),

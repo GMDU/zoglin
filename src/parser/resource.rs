@@ -31,7 +31,7 @@ impl Parser {
       }
     }
     loop {
-      let identifier = self.expect(TokenKind::Identifier)?.value.clone();
+      let identifier = self.expect(TokenKind::Identifier)?.get_value().clone();
       match self.current().kind {
         TokenKind::Colon => {
           self.consume();
@@ -62,31 +62,31 @@ impl Parser {
     let mut path = Vec::new();
     let mut is_comptime = false;
     let namespace = self.expect(TokenKind::Identifier)?;
-    validate(&namespace.value, &namespace.location, NameKind::Namespace)?;
-    let namespace = namespace.value.clone();
+    validate(namespace.get_value(), &namespace.location, NameKind::Namespace)?;
+    let namespace = namespace.get_value().clone();
     self.expect(TokenKind::Colon)?;
 
     loop {
       if self.current().kind == TokenKind::Ampersand {
         self.consume();
         is_comptime = true;
-        let name = self.expect(TokenKind::Identifier)?.value.clone();
+        let name = self.expect(TokenKind::Identifier)?.get_value().clone();
         path.push(name);
         break;
       }
 
       let identifier = self.expect(TokenKind::Identifier)?.clone();
       if self.current().kind == TokenKind::ForwardSlash {
-        validate(&identifier.value, &identifier.location, NameKind::Module)?;
-        path.push(identifier.value.clone());
+        validate(identifier.get_value(), &identifier.location, NameKind::Module)?;
+        path.push(identifier.take_value());
         self.consume();
       } else {
         validate(
-          &identifier.value,
+          identifier.get_value(),
           &identifier.location,
           NameKind::ResourcePathComponent,
         )?;
-        path.push(identifier.value.clone());
+        path.push(identifier.get_value().clone());
         break;
       }
     }
