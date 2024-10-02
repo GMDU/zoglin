@@ -38,8 +38,7 @@ impl FileTree {
     fs::create_dir_all(working_path).map_err(raise_floating_error)?;
 
     let text = serde_json::to_string_pretty(&DEFAULT_MCMETA).expect("Json is valid");
-    fs::write(Path::new(root_path).join("pack.mcmeta"), text)
-      .map_err(raise_floating_error)?;
+    fs::write(Path::new(root_path).join("pack.mcmeta"), text).map_err(raise_floating_error)?;
 
     for namespace in self.namespaces.iter() {
       namespace.generate(root_path)?;
@@ -205,7 +204,7 @@ impl TextResource {
     }
 
     dir_path.push(local_path.modules.join("/"));
-    
+
     fs::create_dir_all(&dir_path).map_err(raise_floating_error)?;
     let file_path = dir_path.join((self.name.clone() + ".json").as_str());
     fs::write(file_path, self.text.as_str()).map_err(raise_floating_error)
@@ -230,7 +229,7 @@ impl FileResource {
     if self.kind.as_str() != "." {
       dir_path.push(self.kind.as_str());
     }
-    
+
     dir_path.push(local_path.modules.join("/"));
 
     fs::create_dir_all(&dir_path).map_err(raise_floating_error)?;
@@ -280,10 +279,15 @@ impl ResourceLocation {
       if namespace.is_empty() {
         namespace.clone_from(&base_location.namespace);
       } else if namespace == "~" {
-        let mut location = base_location;
+        let mut location = base_location.module();
 
         location.modules.extend(resource.modules.clone());
-        return location.with_name(&resource.name);
+        let name = if resource.name.is_empty() {
+          &location.modules.pop().expect("TODO: Make this work for namespaces")
+        } else {
+          &resource.name
+        };
+        return location.with_name(&name);
       }
 
       let modules = resource.modules.clone();

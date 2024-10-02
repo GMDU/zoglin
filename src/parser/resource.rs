@@ -17,7 +17,9 @@ impl Parser {
       modules: Vec::new(),
       name: EcoString::new(),
     };
-    let mut allow_colon: bool = true;
+    let mut allow_colon = true;
+    let mut done = false;
+
     if self.current().kind == TokenKind::Colon {
       self.consume();
       allow_colon = false;
@@ -28,9 +30,12 @@ impl Parser {
       resource.namespace = Some("~".into());
       if self.current().kind == TokenKind::ForwardSlash {
         self.consume();
+      } else {
+        done = true;
       }
     }
-    loop {
+
+    while !done {
       let identifier = self.expect(TokenKind::Identifier)?.value.clone();
       match self.current().kind {
         TokenKind::Colon => {
@@ -40,20 +45,23 @@ impl Parser {
             allow_colon = false;
           } else {
             resource.name = identifier;
-            break;
+            done = true;
           }
         }
+
         TokenKind::ForwardSlash => {
           resource.modules.push(identifier);
           allow_colon = false;
           self.consume();
         }
+
         _ => {
           resource.name = identifier;
-          break;
+          done = true;
         }
       }
     }
+
     validate_zoglin_resource(&resource, kind)?;
     Ok(resource)
   }
