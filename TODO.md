@@ -1,5 +1,7 @@
 ## Before initial alpha
-- `@assign`, `@score` & `@condition` builtins
+- `@condition` builtin
+- Builtin functions at module level
+- More permissive resources
 - `break` and `continue`
 - Project config
 - Integrate stdlib
