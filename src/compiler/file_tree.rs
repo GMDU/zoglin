@@ -450,21 +450,21 @@ impl ScoreboardLocation {
     let (module, name) = location.try_split().expect("Function location");
     ScoreboardLocation {
       scoreboard: module,
-      name: eco_format!("${name}"),
+      name: eco_format!("{name}"),
     }
   }
 
   pub fn new(location: ResourceLocation, name: &str) -> ScoreboardLocation {
     ScoreboardLocation {
       scoreboard: location,
-      name: eco_format!("${name}"),
+      name: eco_format!("{name}"),
     }
   }
 
   pub fn of_internal(name: &str) -> ScoreboardLocation {
     ScoreboardLocation {
       scoreboard: ResourceLocation::new_function("zoglin", &["internal", "vars"]),
-      name: eco_format!("${name}"),
+      name: eco_format!("{name}"),
     }
   }
 }

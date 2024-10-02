@@ -97,17 +97,15 @@ impl Parser {
       Percent => |parser: &mut Parser| {
         parser.consume();
         let name = parser.expect(TokenKind::Identifier)?.clone();
-        validate(&name.value, &name.location, NameKind::MacroVariable)?;
-        Ok(Expression::MacroVariable(name.value, name.location))
+        validate(name.get_value(), &name.location, NameKind::MacroVariable)?;
+        Ok(Expression::MacroVariable(name.get_value().clone(), name.location))
       },
       Ampersand => Parser::parse_comptime_variable,
       Minus | Bang => Parser::parse_prefix_expression,
       BuiltinName => |parser: &mut Parser| {
-        let Token {
-          value: name,
-          location,
-          ..
-        } = parser.consume().clone();
+        let token = parser.consume().clone();
+        let name = token.get_value().clone();
+        let location = token.location;
         if parser.current().kind == TokenKind::LeftParen {
           parser.consume();
           let args = parser.parse_list(TokenKind::RightParen, Parser::parse_expression)?;
@@ -191,7 +189,7 @@ impl Parser {
     let Token {
       location,
       kind,
-      value: _,
+      ..
     } = self.consume().clone();
     let operator = Parser::match_operator(kind);
     let precedence = Parser::match_precedence(kind);
@@ -256,7 +254,7 @@ impl Parser {
       TokenKind::Identifier => {
         let token = self.consume();
         let member = validate_or_quote(
-          token.value.clone(),
+          token.get_value().clone(),
           &token.location,
           NameKind::NBTPathComponent,
         );
