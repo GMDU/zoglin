@@ -2,7 +2,7 @@ use ast::{
   ArrayType, Command, CommandPart, ComptimeFunction, ElseStatement, KeyValue, Parameter,
   ParameterKind, ReturnType, StaticExpr, WhileLoop,
 };
-use ecow::EcoString;
+use ecow::{eco_format, EcoString};
 use name::{validate, validate_or_quote, NameKind};
 
 use self::ast::{
@@ -626,9 +626,46 @@ impl Parser {
 
   fn parse_scoreboard_variable(&mut self) -> Result<Expression> {
     self.expect(TokenKind::Dollar)?;
+
+    let mut resource: ZoglinResource;
+
+    if self.current().kind == TokenKind::LeftSquare {
+      let name = self.parse_scoreboard_variable_name()?;
+      resource = ZoglinResource{
+        namespace: None, location: self.current().location.clone(), modules: Vec::new(), name
+      }
+    } else {
+      resource = self.parse_zoglin_resource(NameKind::ScoreboardVariable)?;
+
+      if self.current().kind == TokenKind::LeftSquare {
+        let name = self.parse_scoreboard_variable_name()?;
+        resource.modules.push(resource.name);
+        resource.name = name;
+      } else {
+        resource.name = eco_format!("${}", resource.name);
+      }
+    }
+
     Ok(Expression::ScoreboardVariable(
-      self.parse_zoglin_resource(NameKind::ScoreboardVariable)?,
+      resource
     ))
+  }
+
+  fn parse_scoreboard_variable_name(&mut self) -> Result<EcoString> {
+    self.expect(TokenKind::LeftSquare)?;
+    let mut square_count = 0;
+    let mut output = EcoString::new();
+
+    while square_count > 0 || self.current().kind != TokenKind::RightSquare {
+      if self.current().kind == TokenKind::LeftSquare { square_count += 1; }
+      if self.current().kind == TokenKind::RightSquare { square_count -= 1; }
+
+      output.push_str(&self.consume().raw);
+    }
+
+    self.expect(TokenKind::RightSquare)?;
+
+    Ok(output)
   }
 
   fn parse_static_expr(&mut self) -> Result<StaticExpr> {

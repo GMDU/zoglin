@@ -575,7 +575,7 @@ impl Compiler {
             }
           }
           ReturnType::Scoreboard => {
-            let scoreboard = ScoreboardLocation::new(called.location, "return");
+            let scoreboard = ScoreboardLocation::new(called.location, "$return");
             if !ignored {
               context
                 .code
@@ -829,7 +829,9 @@ impl Compiler {
           )?;
         }
         ParameterKind::Scoreboard => {
-          let scoreboard = ScoreboardLocation::new(parameter_storage.clone(), &parameter.name);
+          let scoreboard = ScoreboardLocation::new(
+            parameter_storage.clone(), &eco_format!("${}", &parameter.name)
+          );
           self.set_scoreboard(&mut context.code, &scoreboard, &argument)?;
         }
         ParameterKind::Macro => {
@@ -1105,7 +1107,7 @@ impl Compiler {
           )?;
         }
         ReturnType::Scoreboard => {
-          let scoreboard = ScoreboardLocation::new(context.location.clone(), "return");
+          let scoreboard = ScoreboardLocation::new(context.location.clone(), "$return");
           self.use_scoreboard_dummy(scoreboard.scoreboard_string());
           self.set_scoreboard(&mut context.code, &scoreboard, &expression)?;
         }
@@ -1113,7 +1115,7 @@ impl Compiler {
           if context.is_nested {
             self.set_scoreboard(
               &mut context.code,
-              &ScoreboardLocation::of_internal("should_return"),
+              &ScoreboardLocation::of_internal("$should_return"),
               &expression,
             )?;
           } else {
@@ -1126,7 +1128,7 @@ impl Compiler {
     if context.return_type != ReturnType::Direct && context.is_nested {
       self.set_scoreboard(
         &mut context.code,
-        &ScoreboardLocation::of_internal("should_return"),
+        &ScoreboardLocation::of_internal("$should_return"),
         &Expression::new(ExpressionKind::Integer(1), Location::blank()),
       )?;
     }
