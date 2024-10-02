@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 use std::mem::take;
+use std::ops::{Deref, DerefMut};
 use std::{collections::HashMap, path::Path};
 
 use ecow::{eco_format, EcoString};
@@ -44,13 +45,99 @@ pub struct Compiler {
   comptime_function_registry: HashMap<ResourceLocation, ComptimeFunction>,
 }
 
-#[derive(Clone)]
-struct FunctionContext {
-  location: ResourceLocation,
+enum RefOrOwned<'a, T> {
+  Ref(&'a mut T),
+  Owned(T),
+}
+
+impl<'a, T> RefOrOwned<'a, T> {
+  fn moved(self) -> T {
+    match self {
+      RefOrOwned::Ref(_) => panic!("Cannot move a reference"),
+      RefOrOwned::Owned(t) => t,
+    }
+  }
+}
+
+impl<'a, T> From<T> for RefOrOwned<'a, T> {
+  fn from(value: T) -> Self {
+    RefOrOwned::Owned(value)
+  }
+}
+
+impl<'a, T> From<&'a mut T> for RefOrOwned<'a, T> {
+  fn from(value: &'a mut T) -> Self {
+    RefOrOwned::Ref(value)
+  }
+}
+
+impl<'a, T> AsRef<T> for RefOrOwned<'a, T> {
+  fn as_ref(&self) -> &T {
+    match self {
+      RefOrOwned::Ref(r) => r,
+      RefOrOwned::Owned(v) => v,
+    }
+  }
+}
+
+impl<'a, T> AsMut<T> for RefOrOwned<'a, T> {
+  fn as_mut(&mut self) -> &mut T {
+    match self {
+      RefOrOwned::Ref(r) => r,
+      RefOrOwned::Owned(v) => v,
+    }
+  }
+}
+
+impl<'a, T> Deref for RefOrOwned<'a, T> {
+  type Target = T;
+
+  fn deref(&self) -> &Self::Target {
+    self.as_ref()
+  }
+}
+
+impl<'a, T> DerefMut for RefOrOwned<'a, T> {
+  fn deref_mut(&mut self) -> &mut Self::Target {
+    self.as_mut()
+  }
+}
+
+struct FunctionContext<'a> {
+  location: RefOrOwned<'a, ResourceLocation>,
   return_type: ReturnType,
   is_nested: bool,
-  has_nested_returns: bool,
-  code: Vec<EcoString>,
+  has_nested_returns: RefOrOwned<'a, bool>,
+  code: RefOrOwned<'a, Vec<EcoString>>,
+}
+
+impl<'a> FunctionContext<'a> {
+  fn new(location: ResourceLocation, return_type: ReturnType) -> FunctionContext<'a> {
+    FunctionContext {
+      location: RefOrOwned::Owned(location),
+      return_type,
+      is_nested: false,
+      has_nested_returns: RefOrOwned::Owned(false),
+      code: RefOrOwned::Owned(Vec::new()),
+    }
+  }
+
+  fn child<'b>(&'b mut self, inherits_code: bool) -> FunctionContext<'b>
+  where
+    'a: 'b,
+  {
+    FunctionContext {
+      location: self.location.as_mut().into(),
+      return_type: self.return_type,
+      is_nested: true,
+      has_nested_returns: self.has_nested_returns.as_mut().into(),
+      code: if inherits_code {
+        self.code.as_mut().into()
+      } else {
+        RefOrOwned::Owned(Vec::new())
+      },
+    }
+  }
 }
 
 #[derive(Serialize)]
@@ -432,25 +519,25 @@ impl Compiler {
         self.compile_expression(expression, context, true)?;
       }
       Statement::If(if_statement) => {
-        let mut sub_context = context.clone();
-        sub_context.has_nested_returns = false;
+        let mut sub_context = context.child(true);
+        sub_context.has_nested_returns = RefOrOwned::Owned(false);
+
         self.comptime_scopes.push(HashMap::new());
         self.compile_if_statement(if_statement, &mut sub_context)?;
-        context.code = sub_context.code;
-        if sub_context.has_nested_returns {
-          context.has_nested_returns = true;
+        if *sub_context.has_nested_returns {
+          *context.has_nested_returns = true;
           self.generate_nested_return(context);
         }
         self.comptime_scopes.pop();
       }
       Statement::WhileLoop(while_loop) => {
-        let mut sub_context: FunctionContext = context.clone();
-        sub_context.has_nested_returns = false;
+        let mut sub_context = context.child(true);
+        sub_context.has_nested_returns = RefOrOwned::Owned(false);
+
         self.comptime_scopes.push(HashMap::new());
         self.compile_while_loop(while_loop, &mut sub_context)?;
-        context.code = sub_context.code;
-        if sub_context.has_nested_returns {
-          context.has_nested_returns = true;
+        if *sub_context.has_nested_returns {
+          *context.has_nested_returns = true;
           self.generate_nested_return(context);
         }
         self.comptime_scopes.pop();
@@ -476,18 +563,16 @@ impl Compiler {
     location: &ResourceLocation,
   ) -> Result<()> {
     let fn_location = location.clone().with_name(&function.name);
-    let mut context = FunctionContext {
-      location: fn_location,
-      return_type: function.return_type,
-      is_nested: false,
-      has_nested_returns: false,
-      code: Vec::new(),
-    };
+    let mut context = FunctionContext::new(fn_location, function.return_type);
     self.comptime_scopes.push(HashMap::new());
 
     self.compile_block(&mut context, function.items)?;
     self.comptime_scopes.pop();
-    self.add_function_item(function.location, context.location, context.code)
+    self.add_function_item(
+      function.location,
+      context.location.moved(),
+      context.code.moved(),
+    )
   }
 
   fn add_function_item(
@@ -799,20 +884,15 @@ impl Compiler {
 
     let mut arguments = function_call.arguments.into_iter();
 
-    let mut default_context = FunctionContext {
-      location: function_definition.location.clone(),
-      return_type: ReturnType::Direct,
-      is_nested: false,
-      has_nested_returns: false,
-      code: Vec::new(),
-    };
+    let mut default_context =
+      FunctionContext::new(function_definition.location.clone(), ReturnType::Direct);
 
     for parameter in function_definition.arguments {
       let argument = match (arguments.next(), parameter.default) {
         (Some(arg), _) => self.compile_expression(arg, context, false)?,
         (None, Some(parameter)) => {
           let expr = self.compile_expression(parameter, &mut default_context, false)?;
-          context.code.extend(take(&mut default_context.code));
+          context.code.extend(take(default_context.code.as_mut()));
           expr
         }
         (None, None) => return Err(raise_error(src_location, "Expected more arguments")),
@@ -888,20 +968,15 @@ impl Compiler {
 
     self.comptime_scopes.push(HashMap::new());
 
-    let mut default_context = FunctionContext {
-      location: comptime_function.location.clone(),
-      return_type: ReturnType::Direct,
-      is_nested: false,
-      has_nested_returns: false,
-      code: Vec::new(),
-    };
+    let mut default_context =
+      FunctionContext::new(comptime_function.location.clone(), ReturnType::Direct);
 
     for parameter in comptime_function.parameters {
       let argument = match (arguments.next(), parameter.default) {
         (Some(argument), _) => self.compile_expression(argument, context, false)?,
         (None, Some(default)) => {
           let expr = self.compile_expression(default, &mut default_context, false)?;
-          context.code.extend(take(&mut default_context.code));
+          context.code.extend(take(default_context.code.as_mut()));
           expr
         }
         (None, None) => return Err(raise_error(source_location, "Expected more arguments")),
@@ -981,13 +1056,7 @@ impl Compiler {
       let if_function = self.next_function("if", &context.location.namespace);
 
       context.code.push(eco_format!("function {if_function}"));
-      let mut sub_context = FunctionContext {
-        location: context.location.clone(),
-        return_type: context.return_type,
-        is_nested: true,
-        has_nested_returns: context.has_nested_returns,
-        code: Vec::new(),
-      };
+      let mut sub_context = context.child(false);
 
       let mut if_statement = if_statement;
       loop {
@@ -997,7 +1066,6 @@ impl Compiler {
           &mut sub_context,
           true,
         )?;
-        context.has_nested_returns = sub_context.has_nested_returns;
         match if_statement.child {
           Some(ElseStatement::IfStatement(if_stmt)) => {
             if_statement = *if_stmt;
@@ -1019,7 +1087,7 @@ impl Compiler {
         module,
         Item::Function(Function {
           name,
-          commands: sub_context.code,
+          commands: sub_context.code.moved(),
           location: Location::blank(),
         }),
       )?;
@@ -1053,32 +1121,26 @@ impl Compiler {
         ConditionKind::Check(check_code) => check_code,
       };
 
-    let mut sub_context = FunctionContext {
-      location: context.location.clone(),
-      return_type: context.return_type,
-      is_nested: true,
-      has_nested_returns: context.has_nested_returns,
-      code: Vec::new(),
-    };
+    let mut sub_context = context.child(false);
     self.compile_block(&mut sub_context, body)?;
 
     let command = match sub_context.code.len() {
       0 => return Ok(()),
       1 => &sub_context.code[0],
       _ => {
-        let function = self.next_function("if", &context.location.namespace);
+        let function = self.next_function("if", &sub_context.location.namespace);
         let fn_str = function.to_eco_string();
-        self.add_function_item(Location::blank(), function, sub_context.code)?;
+        self.add_function_item(Location::blank(), function, sub_context.code.moved())?;
         &eco_format!("function {fn_str}")
       }
     };
 
-    context.code.push(eco_format!(
+    let execute_command = eco_format!(
       "execute {condition} {run_str} {command}",
       condition = check_code,
       run_str = if is_child { "run return run" } else { "run" },
-    ));
-    context.has_nested_returns = sub_context.has_nested_returns;
+    );
+    context.code.push(execute_command);
     Ok(())
   }
 
@@ -1088,7 +1150,7 @@ impl Compiler {
     context: &mut FunctionContext,
   ) -> Result<()> {
     if context.is_nested {
-      context.has_nested_returns = true;
+      *context.has_nested_returns = true;
     }
 
     let has_value = value.is_some();
@@ -1149,47 +1211,43 @@ impl Compiler {
     while_loop: WhileLoop,
     context: &mut FunctionContext,
   ) -> Result<()> {
-    let mut sub_context = FunctionContext {
-      location: context.location.clone(),
-      return_type: context.return_type,
-      is_nested: true,
-      has_nested_returns: context.has_nested_returns,
-      code: Vec::new(),
-    };
-
-    let condition = self.compile_expression(while_loop.condition, context, false)?;
+    let mut sub_context = context.child(false);
+    let condition = self.compile_expression(while_loop.condition, &mut sub_context, false)?;
 
     match condition.to_condition(
       self,
       &mut sub_context.code,
-      &context.location.namespace,
+      &sub_context.location.namespace,
       true,
     )? {
       ConditionKind::Known(false) => {}
       ConditionKind::Known(true) => {
-        let fn_location = self.next_function("while", &context.location.namespace);
+        let fn_location = self.next_function("while", &sub_context.location.namespace);
 
         self.compile_block(&mut sub_context, while_loop.block)?;
 
         sub_context.code.push(eco_format!("function {fn_location}"));
-        context.code.push(eco_format!("function {fn_location}"));
-        self.add_function_item(Location::blank(), fn_location, sub_context.code)?;
+        let function_call = eco_format!("function {fn_location}");
+        self.add_function_item(Location::blank(), fn_location, sub_context.code.moved())?;
+
+        context.code.push(function_call);
       }
 
       ConditionKind::Check(check_code) => {
-        let fn_location = self.next_function("while", &context.location.namespace);
-        context.code.push(eco_format!("function {fn_location}"));
+        let fn_location = self.next_function("while", &sub_context.location.namespace);
         sub_context
           .code
           .push(eco_format!("execute {check_code} run return 0"));
 
         self.compile_block(&mut sub_context, while_loop.block)?;
         sub_context.code.push(eco_format!("function {fn_location}"));
-        self.add_function_item(Location::blank(), fn_location, sub_context.code)?;
+
+        let function_call = eco_format!("function {fn_location}");
+        self.add_function_item(Location::blank(), fn_location, sub_context.code.moved())?;
+
+        context.code.push(function_call);
       }
     }
-
-    context.has_nested_returns = sub_context.has_nested_returns;
 
     Ok(())
   }

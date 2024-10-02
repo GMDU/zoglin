@@ -1,11 +1,8 @@
 namespace diamond
 # include "setup"
 
-fn &add(&a, b = &a) {
-  return &a + &b
-}
-
-fn foo() {
-  &a = &add(1, 2)
-  b = &add(&a)
+module foo {
+  fn bar() {
+    ~ = 10
+  }
 }
