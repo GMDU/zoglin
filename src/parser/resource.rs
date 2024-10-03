@@ -34,7 +34,7 @@ impl Parser {
         done = true;
       }
     }
-    loop {
+    while !done {
       let identifier = self.expect(TokenKind::Identifier)?.get_value().clone();
       match self.current().kind {
         TokenKind::Colon => {
