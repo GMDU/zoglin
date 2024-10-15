@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+use std::hash::Hash;
 use std::mem::take;
 use std::ops::{Deref, DerefMut};
 use std::{collections::HashMap, path::Path};
@@ -40,6 +41,7 @@ pub struct Compiler {
   current_scope: usize,
   counters: HashMap<EcoString, usize>,
   namespaces: HashMap<EcoString, Namespace>,
+  // TODO: Refactor used scoreboards to be a HashMap
   used_scoreboards: HashSet<UsedScoreboard>,
   function_registry: HashMap<ResourceLocation, FunctionDefinition>,
   comptime_function_registry: HashMap<ResourceLocation, ComptimeFunction>,
@@ -145,7 +147,7 @@ struct FunctionTag<'a> {
   values: &'a [EcoString],
 }
 
-#[derive(Eq, Hash, PartialEq)]
+#[derive(Eq)]
 pub struct UsedScoreboard {
   name: EcoString,
   criteria: EcoString,
@@ -154,6 +156,18 @@ pub struct UsedScoreboard {
 impl UsedScoreboard {
   pub fn new_dummy(name: EcoString) -> UsedScoreboard {
     UsedScoreboard{name, criteria: "dummy".into()}
+  }
+}
+
+impl PartialEq for UsedScoreboard {
+  fn eq(&self, other: &Self) -> bool {
+    self.name == other.name
+  }
+}
+
+impl Hash for UsedScoreboard {
+  fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+    self.name.hash(state)
   }
 }
 
@@ -184,7 +198,12 @@ impl Compiler {
   }
 
   fn use_scoreboard(&mut self, name: EcoString, criteria: EcoString) {
-    self.used_scoreboards.insert(UsedScoreboard{name, criteria});
+    let exists = self.used_scoreboards.insert(UsedScoreboard{name: name.clone(), criteria: criteria.clone()});
+    if criteria != "dummy" && !exists {
+      let scoreboard = UsedScoreboard{name, criteria};
+      self.used_scoreboards.remove(&scoreboard);
+      self.used_scoreboards.insert(scoreboard);
+    }
   }
 
   fn use_scoreboard_dummy(&mut self, name: EcoString) {
