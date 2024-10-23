@@ -140,11 +140,12 @@ impl Lexer {
     }
 
     self.is_newline = false;
-    let value = value.unwrap_or(self.src[position..self.position].into());
+    let raw = self.src[position..self.position].into();
 
     Ok(Token {
       kind,
       value,
+      raw,
       location: self.location(line, column),
     })
   }
@@ -407,7 +408,7 @@ impl Lexer {
       return Err(raise_error(token.location, "Expected file name."));
     }
 
-    let mut path = token.value;
+    let mut path = token.get_value().clone();
     if !path.ends_with(".zog") {
       path.push_str(".zog");
     }
@@ -477,7 +478,8 @@ impl Lexer {
       if self.current() == '&' && self.peek(1) == '{' {
         tokens.push(Token {
           kind: TokenKind::CommandString,
-          value: current_part,
+          value: None,
+          raw: current_part,
           location: self.location(line, column),
         });
         current_part = EcoString::new();
@@ -506,12 +508,14 @@ impl Lexer {
 
     tokens.push(Token {
       kind: TokenKind::CommandString,
-      value: current_part,
+      value: None,
+      raw: current_part,
       location: self.location(line, column),
     });
     tokens.push(Token {
       kind: TokenKind::CommandEnd,
-      value: EcoString::new(),
+      value: None,
+      raw: EcoString::new(),
       location: self.location(self.line, self.column),
     });
 
