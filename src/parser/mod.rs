@@ -422,7 +422,7 @@ impl Parser {
 
   fn parse_statement(&mut self) -> Result<Statement> {
     Ok(match self.current_including(&[TokenKind::Comment]).kind {
-      TokenKind::CommandBegin => Statement::Command(self.parse_command()?),
+      TokenKind::CommandBegin(_) => Statement::Command(self.parse_command()?),
       TokenKind::Comment => {
         let comment = self.consume_including(&[TokenKind::Comment]).get_value().clone();
         Statement::Comment(comment)
@@ -435,7 +435,14 @@ impl Parser {
   }
 
   fn parse_command(&mut self) -> Result<Command> {
-    self.expect(TokenKind::CommandBegin)?;
+    let next = self.consume();
+    if next.kind != TokenKind::CommandBegin(true) && next.kind != TokenKind::CommandBegin(false) {
+      return Err(raise_error(
+        next.location.clone(),
+        format!("Expected {:?}, got {:?}", TokenKind::CommandBegin(true), next.kind),
+      ));
+    }
+    
     let mut parts = Vec::new();
 
     while self.current().kind != TokenKind::CommandEnd {

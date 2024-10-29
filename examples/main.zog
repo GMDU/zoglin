@@ -3,6 +3,9 @@ namespace diamond
 
 module foo {
   fn bar() {
-    ~ = 10
+    `data modify storage foo:bar baz set value [
+      "a", "b", "c",
+      "d", "e", "f"
+    ]`
   }
 }

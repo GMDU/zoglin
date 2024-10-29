@@ -61,18 +61,22 @@ impl Lexer {
     self.dependent_files.insert(self.file.clone());
     loop {
       let next = self.next_token()?;
-      if next.kind == TokenKind::IncludeKeyword {
-        tokens.extend(self.parse_include()?);
-      } else if next.kind == TokenKind::CommandBegin {
-        tokens.push(next);
-        tokens.extend(self.parse_command()?);
-      } else {
-        tokens.push(next);
-        if tokens.last().expect("Tokens was just pushed to").kind == TokenKind::EndOfFile {
-          break;
+      
+      match next.kind {
+        TokenKind::IncludeKeyword => {tokens.extend(self.parse_include()?);},
+        TokenKind::CommandBegin(backtick) => {
+          tokens.push(next);
+          tokens.extend(self.parse_command(backtick)?);
         }
-      }
+        _ => {
+          tokens.push(next);
+          if tokens.last().expect("Tokens was just pushed to").kind == TokenKind::EndOfFile {
+            break;
+          }
+        }
+      };
     }
+
     Ok(tokens)
   }
 
@@ -106,9 +110,9 @@ impl Lexer {
       if !self.tokenise_json() {
         value = Some(self.src[position + 1..self.position - 1].into());
       }
-    } else if self.current() == '/' && self.is_newline {
+    } else if self.current() == '`' && self.is_newline {
       self.consume();
-      kind = TokenKind::CommandBegin;
+      kind = TokenKind::CommandBegin(true);
     } else if self.current() == '#' {
       while !self.current_is_delim() {
         self.consume();
@@ -253,7 +257,7 @@ impl Lexer {
       self.position = position;
       self.line = line;
       self.column = column;
-      Ok((TokenKind::CommandBegin, EcoString::new()))
+      Ok((TokenKind::CommandBegin(false), EcoString::new()))
     } else {
       Ok((TokenKind::Identifier, identifier_value.into()))
     }
@@ -460,14 +464,14 @@ impl Lexer {
     Ok(tokens)
   }
 
-  fn parse_command(&mut self) -> Result<Vec<Token>> {
+  fn parse_command(&mut self, backtick: bool) -> Result<Vec<Token>> {
     let mut tokens = Vec::new();
 
     let mut current_part = EcoString::new();
     let mut line = self.line;
     let mut column = self.column;
 
-    while !self.current_is_delim() {
+    while if backtick {self.current() != '`'} else {!self.current_is_delim()} {
       if self.current() == '\\' && self.peek(1) == '&' {
         self.consume();
         current_part.push(self.current());
@@ -518,6 +522,10 @@ impl Lexer {
       raw: EcoString::new(),
       location: self.location(self.line, self.column),
     });
+
+    if backtick {
+      self.consume();
+    }
 
     Ok(tokens)
   }
