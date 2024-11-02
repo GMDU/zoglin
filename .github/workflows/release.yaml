@@ -77,8 +77,6 @@ jobs:
             rm zoglin
           fi
 
-          openssl dgst -r -sha256 -out "$ARCHIVE".sha256 "$ARCHIVE"
-          openssl dgst -r -sha512 -out "$ARCHIVE".sha512 "$ARCHIVE"
           echo "ASSET=$ARCHIVE" >> $GITHUB_ENV
 
       - name: Upload release archive
@@ -91,5 +89,3 @@ jobs:
           fail_on_unmatched_files: true
           files: |
             ${{ env.ASSET }}
-            ${{ env.ASSET }}.sha256
-            ${{ env.ASSET }}.sha512
