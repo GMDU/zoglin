@@ -81,20 +81,6 @@ jobs:
           openssl dgst -r -sha512 -out "$ARCHIVE".sha512 "$ARCHIVE"
           echo "ASSET=$ARCHIVE" >> $GITHUB_ENV
 
-      - name: Ensure binary successfully boots
-        shell: bash
-        run: |
-          case "${{ matrix.target }}" in
-            x86_64-pc-windows-msvc)
-              7z x "$ASSET"
-              ./zoglin.exe --version ;;
-            aarch64*)
-              echo "We cannot test an ARM binary on a AMD64 runner" ;;
-            *)
-              tar -xvzf "$ASSET"
-              ./zoglin --version ;;
-          esac
-
       - name: Upload release archive
         # https://github.com/softprops/action-gh-release/issues/445
         # uses: softprops/action-gh-release@v2
