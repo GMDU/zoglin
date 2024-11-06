@@ -1,6 +1,6 @@
 site_name: Zoglin Docs
 site_url: https://zoglin.dev/
-repo_url: https://github.com/GMDU/zoglin-docs/
+repo_url: https://github.com/GMDU/zoglin/
 theme:
   name: material
   palette: 
