@@ -1,4 +1,6 @@
 # Welcome to Zoglin
+*The result of bringing MCFunction in to the overworld...*
+
 **Zoglin is a little language that compiles into a datapack.**
 It focuses on creating simple, clean abstractions for datapack concepts,
 to allow the user to craft the datapack they desire.
