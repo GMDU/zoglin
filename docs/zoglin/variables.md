@@ -1,6 +1,6 @@
 # Variables
 
-Variables are used to store data in Zoglin. There are two primary types of variables: Scoreboard variables and Storage variables. (There are other types: See [Function Arguments](02-functions.md#arguments) for macro variables, and [Compile Time](05-compile-time.md) for comptime variables.)
+Variables are used to store data in Zoglin. There are two primary types of variables: Scoreboard variables and Storage variables. (There are other types: See [Function Arguments](functions.md#arguments) for macro variables, and [Compile Time](compile-time.md) for comptime variables.)
 
 As the names suggest, Scoreboard variables store data in scoreboards, and Storage variable store data in data storages. The type of a variable is defined by a prefix to the variable name.
 

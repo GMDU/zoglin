@@ -32,3 +32,13 @@ extra:
       link: https://github.com/GMDU
 extra_css:
   - stylesheets/extra.css
+nav:
+  - 'index.md'
+  - 'faq.md'
+  - 'getting-started.md'
+  - Zoglin:
+    - 'zoglin/project-structure.md'
+    - 'zoglin/functions.md'
+    - 'zoglin/resources.md'
+    - 'zoglin/variables.md'
+    - 'zoglin/compile-time.md'
