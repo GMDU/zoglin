@@ -6,6 +6,7 @@
 - Project config
 - Integrate stdlib
 - Add more functionality to static expressions
+- Pipe operator (`|>`) and underscore (`_`) syntax
 
 ## Before initial release
 - Unit tests
