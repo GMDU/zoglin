@@ -1,12 +1,7 @@
-namespace diamond
-# include "setup"
+    namespace example
 
-fn &do_a_thing(a, b, c) {
-  @set(&a, 19)
-  &b = @temp_storage(b)
-  return &a + &b + &c
-}
-
-fn foo() {
-  a = &do_a_thing(1, 2, 10)
-}
+    fn load() {
+      a = 10
+      $b = a
+      c = a + $b
+    }
