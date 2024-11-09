@@ -1,0 +1,5 @@
+namespace hello_world
+
+fn load() {
+  tellraw @a "Hello, world!"
+}
