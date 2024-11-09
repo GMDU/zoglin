@@ -39,6 +39,8 @@ nav:
   - Zoglin:
     - 'zoglin/project-structure.md'
     - 'zoglin/functions.md'
-    - 'zoglin/resources.md'
+    - 'zoglin/resource-locations.md'
+    - 'zoglin/statements.md'
     - 'zoglin/variables.md'
     - 'zoglin/compile-time.md'
+    - 'zoglin/resources.md'
