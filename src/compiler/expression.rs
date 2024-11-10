@@ -174,6 +174,10 @@ impl Expression {
     code: &mut Vec<EcoString>,
     namespace: &str,
   ) -> Result<(EcoString, StorageKind)> {
+    if let Some(string) = self.kind.to_comptime_string(false) {
+      return Ok((eco_format!("value {string}"), StorageKind::Modify));
+    }
+
     let (conversion_code, kind) = match &self.kind {
       ExpressionKind::Void => {
         return Err(raise_error(
@@ -196,13 +200,13 @@ impl Expression {
         values, data_type, ..
       } => array_to_storage(values, *data_type, "", state, code, namespace)?,
       ExpressionKind::ByteArray(a) => {
-        array_to_storage(a, NbtType::Byte, "B;", state, code, namespace)?
+        array_to_storage(a, NbtType::Byte, "B; ", state, code, namespace)?
       }
       ExpressionKind::IntArray(a) => {
-        array_to_storage(a, NbtType::Int, "I;", state, code, namespace)?
+        array_to_storage(a, NbtType::Int, "I; ", state, code, namespace)?
       }
       ExpressionKind::LongArray(a) => {
-        array_to_storage(a, NbtType::Long, "L;", state, code, namespace)?
+        array_to_storage(a, NbtType::Long, "L; ", state, code, namespace)?
       }
       // TODO: optimise this, like a lot
       ExpressionKind::Compound(types) => {
@@ -765,7 +769,7 @@ fn compare_expr_array(l_values: &[Expression], r_values: &[Expression]) -> Optio
   }
 }
 
-// TODO: optimise this, like a lot
+// TODO: Know the storage we are writing to, so we don't need a temp variable
 fn array_to_storage(
   elements: &[Expression],
   data_type: NbtType,
@@ -775,47 +779,59 @@ fn array_to_storage(
   namespace: &str,
 ) -> Result<(EcoString, StorageKind)> {
   let storage = state.next_storage(namespace).to_eco_string();
-  code.push(eco_format!(
-    "data modify storage {storage} set value [{prefix}]"
-  ));
-  for element in elements {
-    match element.to_storage(state, code, namespace)? {
+
+  let mut constant_elements = Vec::new();
+  let mut computed_elements_code = Vec::new();
+
+  for (i, element) in elements.iter().enumerate() {
+    if let Some(value) = element.kind.to_comptime_string(false) {
+      constant_elements.push(value);
+      continue;
+    }
+
+    match element.to_storage(state, &mut computed_elements_code, namespace)? {
       (expr_code, StorageKind::Modify) => {
-        code.push(eco_format!(
-          "data modify storage {storage} append {expr_code}"
+        computed_elements_code.push(eco_format!(
+          "data modify storage {storage} insert {i} {expr_code}"
         ));
       }
       (expr_code, StorageKind::MacroModify) => {
-        code.push(eco_format!(
-          "$data modify storage {storage} append {expr_code}"
+        computed_elements_code.push(eco_format!(
+          "$data modify storage {storage} insert {i} {expr_code}"
         ));
       }
       (expr_code, StorageKind::Store) => {
         let temp_storage = state.next_storage(namespace).to_eco_string();
-        code.push(eco_format!(
+        computed_elements_code.push(eco_format!(
           "execute store result storage {temp_storage} {data_type} 1 run {expr_code}",
           data_type = data_type
             .to_store_string()
             .expect("Only numeric types have an indirect storage kind")
         ));
-        code.push(eco_format!(
-          "data modify storage {storage} append from storage {temp_storage}"
+        computed_elements_code.push(eco_format!(
+          "data modify storage {storage} insert {i} from storage {temp_storage}"
         ));
       }
       (expr_code, StorageKind::MacroStore) => {
         let temp_storage = state.next_storage(namespace).to_eco_string();
-        code.push(eco_format!(
+        computed_elements_code.push(eco_format!(
           "$execute store result storage {temp_storage} {data_type} 1 run {expr_code}",
           data_type = data_type
             .to_store_string()
             .expect("Only numeric types have an indirect storage kind")
         ));
-        code.push(eco_format!(
-          "data modify storage {storage} append from storage {temp_storage}"
+        computed_elements_code.push(eco_format!(
+          "data modify storage {storage} insert {i} from storage {temp_storage}"
         ));
       }
     }
   }
+
+  code.push(eco_format!(
+    "data modify storage {storage} set value [{prefix}{elements}]",
+    elements = constant_elements.join(", ")
+  ));
+  code.extend(computed_elements_code);
   Ok((eco_format!("from storage {storage}"), StorageKind::Modify))
 }
 
