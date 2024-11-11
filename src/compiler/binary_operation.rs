@@ -4,6 +4,7 @@ use crate::parser::ast::{self, BinaryOperation, Operator, UnaryExpression, Unary
 
 use crate::error::{raise_error, Result};
 
+use super::expression::NbtType;
 use super::utils::ToEcoString;
 use super::FunctionContext;
 use super::{
@@ -938,21 +939,6 @@ impl Compiler {
     value: &Expression,
     namespace: &str,
   ) -> Result<()> {
-    let (conversion_code, kind) = value.to_storage(self, code, namespace)?;
-    match kind {
-      StorageKind::Modify => code.push(eco_format!(
-        "data modify storage {storage} set {conversion_code}",
-      )),
-      StorageKind::MacroModify => code.push(eco_format!(
-        "$data modify storage {storage} set {conversion_code}",
-      )),
-      StorageKind::Store => code.push(eco_format!(
-        "execute store result storage {storage} int 1 run {conversion_code}",
-      )),
-      StorageKind::MacroStore => code.push(eco_format!(
-        "$execute store result storage {storage} int 1 run {conversion_code}",
-      )),
-    }
-    Ok(())
+    value.to_storage(self, code, storage, "set", NbtType::Unknown)
   }
 }
