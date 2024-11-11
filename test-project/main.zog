@@ -1,8 +1,6 @@
 namespace example
 
 fn load() {
-  foo = 1
-  $bar = 2b
-  a = {a: 1, b: 2, c: foo}
-  b = [L; 1L, 2L, 3L, $bar]
+  &value = 10
+  data modify storage example:load something set value &{&value}
 }

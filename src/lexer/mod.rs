@@ -431,11 +431,7 @@ impl Lexer {
       match entry {
         Ok(path) => {
           let path_str = path.to_str().expect("Path should be valid");
-          if let Some(index) = self
-            .include_chain
-            .iter()
-            .position(|file| path_str == file)
-          {
+          if let Some(index) = self.include_chain.iter().position(|file| path_str == file) {
             if index != (self.include_chain.len() - 1) {
               raise_warning(
                 token.location.clone(),
@@ -468,42 +464,57 @@ impl Lexer {
     let mut column = self.column;
 
     while !self.current_is_delim() {
-      if self.current() == '\\' && self.peek(1) == '&' {
-        self.consume();
-        current_part.push(self.current());
-        self.consume();
-        continue;
-      }
-
-      if self.current() == '&' && self.peek(1) == '{' {
-        tokens.push(Token {
-          kind: TokenKind::CommandString,
-          value: None,
-          raw: current_part,
-          location: self.location(line, column),
-        });
-        current_part = EcoString::new();
-
-        self.consume();
-        self.consume();
-        let mut brace_level = 0;
-        while self.current() != '}' || brace_level > 0 {
-          let next = self.next_token()?;
-          if next.kind == TokenKind::LeftBrace {
-            brace_level += 1;
-          } else if next.kind == TokenKind::RightBrace {
-            brace_level -= 1;
-          }
-          tokens.push(next);
+      match (self.current(), self.peek(1)) {
+        ('\\', '\\' | '&') => {
+          self.consume();
+          current_part.push(self.current());
+          self.consume();
         }
-        self.consume();
+        ('&', '{') => {
+          tokens.push(Token {
+            kind: TokenKind::CommandString,
+            value: None,
+            raw: current_part,
+            location: self.location(line, column),
+          });
+          current_part = EcoString::new();
 
-        line = self.line;
-        column = self.column;
-        continue;
+          self.consume();
+          self.consume();
+          let mut brace_level = 0;
+          while self.current() != '}' || brace_level > 0 {
+            let next = self.next_token()?;
+            if next.kind == TokenKind::LeftBrace {
+              brace_level += 1;
+            } else if next.kind == TokenKind::RightBrace {
+              brace_level -= 1;
+            }
+            tokens.push(next);
+          }
+          self.consume();
+
+          line = self.line;
+          column = self.column;
+        }
+        ('&', next) if valid_identifier_start(next) => {
+          tokens.push(Token {
+            kind: TokenKind::CommandString,
+            value: None,
+            raw: current_part,
+            location: self.location(line, column),
+          });
+          current_part = EcoString::new();
+
+          tokens.push(self.next_token()?);
+          tokens.push(self.next_token()?);
+
+          line = self.line;
+          column = self.column;
+        }
+        _ => {
+          current_part.push(self.consume());
+        }
       }
-
-      current_part.push(self.consume());
     }
 
     tokens.push(Token {
