@@ -87,7 +87,6 @@ impl Compiler {
         &mut context.code,
         &storage,
         value,
-        &context.location.namespace,
       )?,
     }
 
@@ -185,7 +184,6 @@ impl Compiler {
         &mut context.code,
         &storage_location,
         &src,
-        &context.location.namespace,
       )?,
       ExpressionKind::Scoreboard(scoreboard_location) => {
         self.set_scoreboard(&mut context.code, &scoreboard_location, &src)?

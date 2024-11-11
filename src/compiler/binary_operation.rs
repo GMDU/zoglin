@@ -8,7 +8,7 @@ use super::expression::NbtType;
 use super::utils::ToEcoString;
 use super::FunctionContext;
 use super::{
-  expression::{Condition, ConditionKind, Expression, ExpressionKind, ScoreKind, StorageKind},
+  expression::{Condition, ConditionKind, Expression, ExpressionKind, ScoreKind},
   file_tree::{ScoreboardLocation, StorageLocation},
   Compiler,
 };
@@ -72,7 +72,6 @@ impl Compiler {
           &mut context.code,
           &storage,
           &right,
-          &context.location.namespace,
         )?;
 
         Ok(right)
@@ -914,7 +913,7 @@ impl Compiler {
     namespace: &str,
   ) -> Result<StorageLocation> {
     let storage = self.next_storage(namespace);
-    self.set_storage(code, &storage, value, namespace)?;
+    self.set_storage(code, &storage, value)?;
 
     Ok(storage)
   }
@@ -937,7 +936,6 @@ impl Compiler {
     code: &mut Vec<EcoString>,
     storage: &StorageLocation,
     value: &Expression,
-    namespace: &str,
   ) -> Result<()> {
     value.to_storage(self, code, storage, "set", NbtType::Unknown)
   }
