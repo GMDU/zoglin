@@ -11,18 +11,18 @@ features similar to those found in more traditional programming languages.
 
 === "Zoglin (.zog)"
     ```zoglin title="main.zog"
-    namespace example {
-      module foo {
-        fn bar() {
-          # Set 'baz' to 'Hello, World!'
-          baz = "Hello, World!"
+    namespace example
+    
+    module foo {
+      fn bar() {
+        # Set 'baz' to 'Hello, World!'
+        baz = "Hello, World!"
 
-          # Set 'qux' to 123
-          $qux = 123
+        # Set 'qux' to 123
+        $qux = 123
 
-          # Run the tellraw command
-          tellraw @a "Lorem ipsum dolor sit amet"
-        }
+        # Run the tellraw command
+        tellraw @a "Lorem ipsum dolor sit amet"
       }
     }
     ```
