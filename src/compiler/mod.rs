@@ -155,7 +155,10 @@ pub struct UsedScoreboard {
 
 impl UsedScoreboard {
   pub fn new_dummy(name: EcoString) -> UsedScoreboard {
-    UsedScoreboard{name, criteria: "dummy".into()}
+    UsedScoreboard {
+      name,
+      criteria: "dummy".into(),
+    }
   }
 }
 
@@ -198,16 +201,21 @@ impl Compiler {
   }
 
   fn use_scoreboard(&mut self, name: EcoString, criteria: EcoString) {
-    let exists = self.used_scoreboards.insert(UsedScoreboard{name: name.clone(), criteria: criteria.clone()});
+    let exists = self.used_scoreboards.insert(UsedScoreboard {
+      name: name.clone(),
+      criteria: criteria.clone(),
+    });
     if criteria != "dummy" && !exists {
-      let scoreboard = UsedScoreboard{name, criteria};
+      let scoreboard = UsedScoreboard { name, criteria };
       self.used_scoreboards.remove(&scoreboard);
       self.used_scoreboards.insert(scoreboard);
     }
   }
 
   fn use_scoreboard_dummy(&mut self, name: EcoString) {
-    self.used_scoreboards.insert(UsedScoreboard::new_dummy(name));
+    self
+      .used_scoreboards
+      .insert(UsedScoreboard::new_dummy(name));
   }
 
   fn lookup_resource(&self, resource: &ZoglinResource, comptime: bool) -> Option<ResourceLocation> {
@@ -446,8 +454,13 @@ impl Compiler {
       name: "load".to_eco_string(),
       commands: take(&mut self.used_scoreboards)
         .into_iter()
-        .map(|scoreboard|
-          eco_format!("scoreboard objectives add {} {}", scoreboard.name, scoreboard.criteria))
+        .map(|scoreboard| {
+          eco_format!(
+            "scoreboard objectives add {} {}",
+            scoreboard.name,
+            scoreboard.criteria
+          )
+        })
         .collect(),
       location: Location::blank(),
     });
@@ -835,7 +848,21 @@ impl Compiler {
     context: &mut FunctionContext,
   ) -> Result<(EcoString, bool)> {
     match expr {
-      StaticExpr::FunctionCall(call) => Ok((self.compile_function_call(call, context)?.0, false)),
+      StaticExpr::FunctionCall(call) => {
+        if call.comptime {
+          let value = self
+            .compile_comptime_call(call, context)?
+            .kind
+            .to_comptime_string(true)
+            .ok_or(raise_floating_error(
+              // TODO: Add location
+              "This value cannot be statically resolved.",
+            ))?;
+          Ok((value, false))
+        } else {
+          Ok((self.compile_function_call(call, context)?.0, false))
+        }
+      }
       StaticExpr::FunctionRef { path } => Ok((
         if let Some(path) = path {
           self
@@ -920,15 +947,12 @@ impl Compiler {
       match parameter.kind {
         ParameterKind::Storage => {
           let storage = StorageLocation::new(parameter_storage.clone(), parameter.name);
-          self.set_storage(
-            &mut context.code,
-            &storage,
-            &argument,
-          )?;
+          self.set_storage(&mut context.code, &storage, &argument)?;
         }
         ParameterKind::Scoreboard => {
           let scoreboard = ScoreboardLocation::new(
-            parameter_storage.clone(), &eco_format!("${}", &parameter.name)
+            parameter_storage.clone(),
+            &eco_format!("${}", &parameter.name),
           );
           self.set_scoreboard(&mut context.code, &scoreboard, &argument)?;
         }
@@ -937,11 +961,7 @@ impl Compiler {
             parameter_storage.clone(),
             eco_format!("__{}", parameter.name),
           );
-          self.set_storage(
-            &mut context.code,
-            &storage,
-            &argument,
-          )?;
+          self.set_storage(&mut context.code, &storage, &argument)?;
         }
         ParameterKind::CompileTime => todo!(),
       }
@@ -1178,11 +1198,7 @@ impl Compiler {
         ReturnType::Storage => {
           let return_storage =
             StorageLocation::new(context.location.clone(), "return".to_eco_string());
-          self.set_storage(
-            &mut context.code,
-            &return_storage,
-            &expression,
-          )?;
+          self.set_storage(&mut context.code, &return_storage, &expression)?;
         }
         ReturnType::Scoreboard => {
           let scoreboard = ScoreboardLocation::new(context.location.clone(), "$return");

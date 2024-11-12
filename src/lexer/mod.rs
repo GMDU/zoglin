@@ -465,7 +465,7 @@ impl Lexer {
 
     while !self.current_is_delim() {
       match (self.current(), self.peek(1)) {
-        ('\\', '\\' | '&') => {
+        ('\\', '\\' | '&' | '%') => {
           self.consume();
           current_part.push(self.current());
           self.consume();
@@ -497,6 +497,35 @@ impl Lexer {
           column = self.column;
         }
         ('&', next) if valid_identifier_start(next) => {
+          tokens.push(Token {
+            kind: TokenKind::CommandString,
+            value: None,
+            raw: current_part,
+            location: self.location(line, column),
+          });
+          current_part = EcoString::new();
+
+          tokens.push(self.next_token()?);
+          tokens.push(self.next_token()?);
+
+          if self.current() == '(' {
+            tokens.push(self.next_token()?);
+            let mut bracket_level = 1;
+            while bracket_level > 0 {
+              let next = self.next_token()?;
+              if next.kind == TokenKind::LeftParen {
+                bracket_level += 1;
+              } else if next.kind == TokenKind::RightParen {
+                bracket_level -= 1;
+              }
+              tokens.push(next);
+            }
+          }
+
+          line = self.line;
+          column = self.column;
+        }
+        ('%', next) if valid_identifier_start(next) => {
           tokens.push(Token {
             kind: TokenKind::CommandString,
             value: None,
