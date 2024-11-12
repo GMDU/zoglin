@@ -5,8 +5,9 @@ A datapack pre-processor focused on power and simplicity.
 It is written in Rust, so it is ✨ *blazingly fast* 🚀.
 
 ## Current Progress
-Zoglin is under active development, and no releases have been
-made so far.
+Zoglin is under active development, and is currently in Alpha.
+
+Check the [Github Releases](https://github.com/GMDU/zoglin/releases) for the latest release.
 
 - CLI ✅
 - Namespaces ✅
@@ -50,6 +51,9 @@ made so far.
   - Templates
   - Builtin functions
 
+**The following documentation was created entirely for planning purposes.
+Features listed may not be implemented or may differ to the program.**
+  
 ## Namespaces
 Namespaces are defined using the `namespace` block.
 

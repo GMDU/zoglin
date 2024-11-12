@@ -172,8 +172,15 @@ impl Expression {
     &self,
     state: &mut Compiler,
     code: &mut Vec<EcoString>,
-    namespace: &str,
-  ) -> Result<(EcoString, StorageKind)> {
+    storage: &StorageLocation,
+    operation: &str,
+    data_type: NbtType,
+  ) -> Result<()> {
+    if let Some(string) = self.kind.to_comptime_string(false) {
+      code.push(eco_format!("data modify storage {storage} {operation} value {string}"));
+      return Ok(());
+    }
+
     let (conversion_code, kind) = match &self.kind {
       ExpressionKind::Void => {
         return Err(raise_error(
@@ -194,45 +201,18 @@ impl Expression {
       ),
       ExpressionKind::Array {
         values, data_type, ..
-      } => array_to_storage(values, *data_type, "", state, code, namespace)?,
+      } => return array_to_storage(values, "", state, code, storage, *data_type),
       ExpressionKind::ByteArray(a) => {
-        array_to_storage(a, NbtType::Byte, "B;", state, code, namespace)?
+        return array_to_storage(a, "B; ", state, code, storage, NbtType::Byte)
       }
       ExpressionKind::IntArray(a) => {
-        array_to_storage(a, NbtType::Int, "I;", state, code, namespace)?
+        return array_to_storage(a, "I; ", state, code, storage, NbtType::Int)
       }
       ExpressionKind::LongArray(a) => {
-        array_to_storage(a, NbtType::Long, "L;", state, code, namespace)?
+        return array_to_storage(a, "L; ", state, code, storage, NbtType::Long)
       }
-      // TODO: optimise this, like a lot
-      ExpressionKind::Compound(types) => {
-        let storage = state.next_storage(namespace).to_eco_string();
-        code.push(eco_format!("data modify storage {storage} set value {{}}"));
-        for (key, value) in types {
-          match value.to_storage(state, code, namespace)? {
-            (expr_code, StorageKind::Modify) => {
-              code.push(eco_format!(
-                "data modify storage {storage}.{key} set {expr_code}"
-              ));
-            }
-            (expr_code, StorageKind::Store) => {
-              code.push(eco_format!(
-                "execute store result storage {storage}.{key} int 1 run {expr_code}"
-              ));
-            }
-            (expr_code, StorageKind::MacroModify) => {
-              code.push(eco_format!(
-                "$data modify storage {storage}.{key} set {expr_code}"
-              ));
-            }
-            (expr_code, StorageKind::MacroStore) => {
-              code.push(eco_format!(
-                "$execute store result storage {storage}.{key} int 1 run {expr_code}"
-              ));
-            }
-          }
-        }
-        (eco_format!("from storage {storage}"), StorageKind::Modify)
+      ExpressionKind::Compound(elements) => {
+        return compound_to_storage(elements, state, code, storage)
       }
       ExpressionKind::Storage(storage) => {
         (eco_format!("from storage {storage}"), StorageKind::Modify)
@@ -266,7 +246,49 @@ impl Expression {
       (StorageKind::Store, true) => StorageKind::MacroStore,
       _ => kind,
     };
-    Ok((conversion_code, kind))
+
+    let store_type = data_type.to_store_string().unwrap_or("int".into());
+
+    match kind {
+      StorageKind::Modify => code.push(eco_format!(
+        "data modify storage {storage} {operation} {conversion_code}",
+      )),
+      StorageKind::MacroModify => code.push(eco_format!(
+        "$data modify storage {storage} {operation} {conversion_code}",
+      )),
+      StorageKind::Store => {
+        if operation == "set" {
+          code.push(eco_format!(
+            "execute store result storage {storage} {store_type} 1 run {conversion_code}",
+          ))
+        } else {
+          let temp_storage = state.next_storage(&storage.storage.namespace);
+          code.push(eco_format!(
+            "execute store result storage {temp_storage} {store_type} 1 run {conversion_code}",
+          ));
+          code.push(eco_format!(
+            "data modify storage {storage} {operation} from storage {temp_storage}",
+          ))
+        }
+      },
+      StorageKind::MacroStore => {
+        if operation == "set" {
+          code.push(eco_format!(
+            "$execute store result storage {storage} {store_type} 1 run {conversion_code}",
+          ))
+        } else {
+          let temp_storage = state.next_storage(&storage.storage.namespace);
+          code.push(eco_format!(
+            "$execute store result storage {temp_storage} {store_type} 1 run {conversion_code}",
+          ));
+          code.push(eco_format!(
+            "data modify storage {storage} {operation} from storage {temp_storage}",
+          ))
+        }
+      },
+    }
+
+    Ok(())
   }
 
   pub fn to_score(&self) -> Result<(EcoString, ScoreKind)> {
@@ -581,32 +603,6 @@ impl ExpressionKind {
     }
   }
 
-  /*pub fn comptime_compatible(&self, top_level: bool) -> bool {
-    match self {
-      ExpressionKind::Void => false,
-      ExpressionKind::Byte(_)
-      | ExpressionKind::Short(_)
-      | ExpressionKind::Integer(_)
-      | ExpressionKind::Long(_)
-      | ExpressionKind::Float(_)
-      | ExpressionKind::Double(_)
-      | ExpressionKind::Boolean(_)
-      | ExpressionKind::String(_) => true,
-      ExpressionKind::Array { values, .. }
-      | ExpressionKind::ByteArray(values)
-      | ExpressionKind::IntArray(values)
-      | ExpressionKind::LongArray(values) => {
-        values.iter().all(|v| v.kind.comptime_compatible(false))
-      }
-      ExpressionKind::Compound(map) => map.values().all(|v| v.kind.comptime_compatible(false)),
-      ExpressionKind::SubString(_, _, _) => false,
-      ExpressionKind::Storage(_) |
-      ExpressionKind::Scoreboard(_) |
-      ExpressionKind::Condition(_) => top_level,
-      ExpressionKind::Macro(_) => false,
-    }
-  }*/
-
   pub fn to_comptime_string(&self, top_level: bool) -> Option<EcoString> {
     Some(match self {
       ExpressionKind::Void => return None,
@@ -765,58 +761,59 @@ fn compare_expr_array(l_values: &[Expression], r_values: &[Expression]) -> Optio
   }
 }
 
-// TODO: optimise this, like a lot
 fn array_to_storage(
   elements: &[Expression],
-  data_type: NbtType,
   prefix: &str,
   state: &mut Compiler,
   code: &mut Vec<EcoString>,
-  namespace: &str,
-) -> Result<(EcoString, StorageKind)> {
-  let storage = state.next_storage(namespace).to_eco_string();
-  code.push(eco_format!(
-    "data modify storage {storage} set value [{prefix}]"
-  ));
-  for element in elements {
-    match element.to_storage(state, code, namespace)? {
-      (expr_code, StorageKind::Modify) => {
-        code.push(eco_format!(
-          "data modify storage {storage} append {expr_code}"
-        ));
-      }
-      (expr_code, StorageKind::MacroModify) => {
-        code.push(eco_format!(
-          "$data modify storage {storage} append {expr_code}"
-        ));
-      }
-      (expr_code, StorageKind::Store) => {
-        let temp_storage = state.next_storage(namespace).to_eco_string();
-        code.push(eco_format!(
-          "execute store result storage {temp_storage} {data_type} 1 run {expr_code}",
-          data_type = data_type
-            .to_store_string()
-            .expect("Only numeric types have an indirect storage kind")
-        ));
-        code.push(eco_format!(
-          "data modify storage {storage} append from storage {temp_storage}"
-        ));
-      }
-      (expr_code, StorageKind::MacroStore) => {
-        let temp_storage = state.next_storage(namespace).to_eco_string();
-        code.push(eco_format!(
-          "$execute store result storage {temp_storage} {data_type} 1 run {expr_code}",
-          data_type = data_type
-            .to_store_string()
-            .expect("Only numeric types have an indirect storage kind")
-        ));
-        code.push(eco_format!(
-          "data modify storage {storage} append from storage {temp_storage}"
-        ));
-      }
+  storage: &StorageLocation,
+  data_type: NbtType,
+) -> Result<()> {
+  let mut constant_elements = Vec::new();
+  let mut computed_elements_code = Vec::new();
+
+  for (i, element) in elements.iter().enumerate() {
+    if let Some(value) = element.kind.to_comptime_string(false) {
+      constant_elements.push(value);
+      continue;
     }
+
+    element.to_storage(state, &mut computed_elements_code, storage, &eco_format!("insert {i}"), data_type)?
   }
-  Ok((eco_format!("from storage {storage}"), StorageKind::Modify))
+
+  code.push(eco_format!(
+    "data modify storage {storage} set value [{prefix}{elements}]",
+    elements = constant_elements.join(", ")
+  ));
+  code.extend(computed_elements_code);
+  Ok(())
+}
+
+fn compound_to_storage(
+  elements: &HashMap<EcoString, Expression>,
+  state: &mut Compiler,
+  code: &mut Vec<EcoString>,
+  storage: &StorageLocation,
+) -> Result<()> {
+  let mut constant_elements = Vec::new();
+  let mut computed_elements_code = Vec::new();
+
+  for (key, value) in elements {
+    if let Some(value) = value.kind.to_comptime_string(false) {
+      constant_elements.push(eco_format!("{key}: {value}"));
+      continue;
+    }
+
+    let mut element_location = storage.clone();
+    element_location.name = eco_format!("{}.{}", element_location.name, key);
+
+    value.to_storage(state, &mut computed_elements_code, &element_location, "set", NbtType::Unknown)?
+  }
+
+  code.push(eco_format!("data modify storage {storage} set value {{{}}}", constant_elements.join(", ")));
+  code.extend(computed_elements_code);
+
+  Ok(())
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]

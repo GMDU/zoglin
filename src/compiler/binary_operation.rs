@@ -4,10 +4,11 @@ use crate::parser::ast::{self, BinaryOperation, Operator, UnaryExpression, Unary
 
 use crate::error::{raise_error, Result};
 
+use super::expression::NbtType;
 use super::utils::ToEcoString;
 use super::FunctionContext;
 use super::{
-  expression::{Condition, ConditionKind, Expression, ExpressionKind, ScoreKind, StorageKind},
+  expression::{Condition, ConditionKind, Expression, ExpressionKind, ScoreKind},
   file_tree::{ScoreboardLocation, StorageLocation},
   Compiler,
 };
@@ -71,7 +72,6 @@ impl Compiler {
           &mut context.code,
           &storage,
           &right,
-          &context.location.namespace,
         )?;
 
         Ok(right)
@@ -913,7 +913,7 @@ impl Compiler {
     namespace: &str,
   ) -> Result<StorageLocation> {
     let storage = self.next_storage(namespace);
-    self.set_storage(code, &storage, value, namespace)?;
+    self.set_storage(code, &storage, value)?;
 
     Ok(storage)
   }
@@ -936,23 +936,7 @@ impl Compiler {
     code: &mut Vec<EcoString>,
     storage: &StorageLocation,
     value: &Expression,
-    namespace: &str,
   ) -> Result<()> {
-    let (conversion_code, kind) = value.to_storage(self, code, namespace)?;
-    match kind {
-      StorageKind::Modify => code.push(eco_format!(
-        "data modify storage {storage} set {conversion_code}",
-      )),
-      StorageKind::MacroModify => code.push(eco_format!(
-        "$data modify storage {storage} set {conversion_code}",
-      )),
-      StorageKind::Store => code.push(eco_format!(
-        "execute store result storage {storage} int 1 run {conversion_code}",
-      )),
-      StorageKind::MacroStore => code.push(eco_format!(
-        "$execute store result storage {storage} int 1 run {conversion_code}",
-      )),
-    }
-    Ok(())
+    value.to_storage(self, code, storage, "set", NbtType::Unknown)
   }
 }

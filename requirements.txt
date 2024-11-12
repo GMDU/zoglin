@@ -1,0 +1,2 @@
+mkdocs-material==9.5.43
+zoglin_pygments_plugin @ git+https://github.com/GMDU/zoglin-pygments-plugin.git

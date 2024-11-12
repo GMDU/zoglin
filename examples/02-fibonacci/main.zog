@@ -1,0 +1,21 @@
+namespace fibonacci
+
+fn load() {
+  sequence = fibonacci(20)
+  tellraw @a {"storage": "&{fn}", "nbt": "sequence", "separator": "\n"}
+}
+
+fn fibonacci($n) {
+  $a = 0
+  $b = 1
+  result = [$a, $b]
+
+  $i = 0
+  while $i < $n {
+    c = $a + $b
+    data modify storage &{fn} result append from storage &{fn} c
+    $a = $b
+    $b = c
+  }
+  return result
+}

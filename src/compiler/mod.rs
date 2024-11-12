@@ -927,7 +927,6 @@ impl Compiler {
             &mut context.code,
             &storage,
             &argument,
-            &context.location.namespace,
           )?;
         }
         ParameterKind::Scoreboard => {
@@ -945,7 +944,6 @@ impl Compiler {
             &mut context.code,
             &storage,
             &argument,
-            &context.location.namespace,
           )?;
         }
         ParameterKind::CompileTime => todo!(),
@@ -1187,7 +1185,6 @@ impl Compiler {
             &mut context.code,
             &return_storage,
             &expression,
-            &context.location.namespace,
           )?;
         }
         ReturnType::Scoreboard => {
@@ -1360,13 +1357,11 @@ impl Compiler {
       &mut context.code,
       &StorageLocation::new(storage.clone(), "target".to_eco_string()),
       &left,
-      &context.location.namespace,
     )?;
     self.set_storage(
       &mut context.code,
       &StorageLocation::new(storage.clone(), "__index".to_eco_string()),
       &index,
-      &context.location.namespace,
     )?;
     context.code.push(fn_command);
     Ok(Expression::new(
@@ -1537,20 +1532,17 @@ impl Compiler {
       &mut context.code,
       &StorageLocation::new(storage.clone(), "target".to_eco_string()),
       &left,
-      &context.location.namespace,
     )?;
     self.set_storage(
       &mut context.code,
       &StorageLocation::new(storage.clone(), "__start".to_eco_string()),
       &start,
-      &context.location.namespace,
     )?;
     if let Some(end) = end {
       self.set_storage(
         &mut context.code,
         &StorageLocation::new(storage.clone(), "__end".to_eco_string()),
         &end,
-        &context.location.namespace,
       )?;
     }
     context.code.push(fn_command);
@@ -1652,13 +1644,11 @@ impl Compiler {
       &mut context.code,
       &StorageLocation::new(storage.clone(), "target".to_eco_string()),
       &left,
-      &context.location.namespace,
     )?;
     self.set_storage(
       &mut context.code,
       &StorageLocation::new(storage.clone(), "__member".to_eco_string()),
       &member,
-      &context.location.namespace,
     )?;
     context.code.push(fn_command);
     Ok(Expression::new(

@@ -1,11 +1,12 @@
-use ecow::EcoString;
 use crate::{
   error::{raise_error, Location, Result},
   parser::ast,
 };
+use ecow::EcoString;
 
 use super::{
-  expression::{Expression, ExpressionKind}, Compiler, FunctionContext
+  expression::{Expression, ExpressionKind},
+  Compiler, FunctionContext,
 };
 
 impl Compiler {
@@ -25,6 +26,7 @@ impl Compiler {
       "temp_score" => self.temp_score(arguments, location, context),
       "temp_storage" => self.temp_storage(arguments, location, context),
       "scoreboard" => self.def_scoreboard(arguments, location, context),
+      "set" => self.set(arguments, location, context),
       _ => Err(raise_error(
         location,
         format!("Builtin function '@{name}' does not exist."),
@@ -85,7 +87,6 @@ impl Compiler {
         &mut context.code,
         &storage,
         value,
-        &context.location.namespace,
       )?,
     }
 
@@ -107,8 +108,12 @@ impl Compiler {
         ),
       ));
     };
-  
-    let name: EcoString = match &arguments.first().unwrap().kind {
+
+    let name: EcoString = match &arguments
+      .first()
+      .expect("There must be at least one argument")
+      .kind
+    {
       ExpressionKind::Storage(storage_location) => {
         let storage = &storage_location.storage;
         let mut path = vec![storage.namespace.clone()];
@@ -116,29 +121,80 @@ impl Compiler {
         path.push(storage_location.name.clone());
 
         path.join(".").into()
-      },
-      _ => {return Err(raise_error(location, "Invalid argument. Expected zoglin path."))},
+      }
+      _ => {
+        return Err(raise_error(
+          location,
+          "Invalid argument. Expected zoglin path.",
+        ))
+      }
     };
 
     match arguments.get(1) {
-      Some(expression) => {
-        match &expression.kind {
-          ExpressionKind::String(critera) => {
-            self.use_scoreboard(name, critera.clone());
-          }
-          _ => {return Err(raise_error(location, "Invalid argument. Expected string."))}
+      Some(expression) => match &expression.kind {
+        ExpressionKind::String(critera) => {
+          self.use_scoreboard(name, critera.clone());
         }
+        _ => return Err(raise_error(location, "Invalid argument. Expected string.")),
       },
       None => {
         self.use_scoreboard_dummy(name);
       }
     };
-    
+
+    Ok(Expression::new(ExpressionKind::Void, location))
+  }
+
+  fn set(
+    &mut self,
+    arguments: Vec<Expression>,
+    location: Location,
+    context: &mut FunctionContext,
+  ) -> Result<Expression> {
+    check_args(&location, 2, arguments.len())?;
+
+    let [dst, src]: [Expression; 2] = arguments
+      .try_into()
+      .unwrap_or_else(|_| panic!("There must be exactly two arguments"));
+
+    match dst.kind {
+      ExpressionKind::Void
+      | ExpressionKind::Byte(_)
+      | ExpressionKind::Short(_)
+      | ExpressionKind::Integer(_)
+      | ExpressionKind::Long(_)
+      | ExpressionKind::Float(_)
+      | ExpressionKind::Double(_)
+      | ExpressionKind::Boolean(_)
+      | ExpressionKind::String(_)
+      | ExpressionKind::Array { .. }
+      | ExpressionKind::ByteArray(_)
+      | ExpressionKind::IntArray(_)
+      | ExpressionKind::LongArray(_)
+      | ExpressionKind::SubString(_, _, _)
+      | ExpressionKind::Macro(_)
+      | ExpressionKind::Condition(_)
+      | ExpressionKind::Compound(_) => {
+        return Err(raise_error(
+          location,
+          "`@set` can only be used on scoreboards and storages.",
+        ))
+      }
+      ExpressionKind::Storage(storage_location) => self.set_storage(
+        &mut context.code,
+        &storage_location,
+        &src,
+      )?,
+      ExpressionKind::Scoreboard(scoreboard_location) => {
+        self.set_scoreboard(&mut context.code, &scoreboard_location, &src)?
+      }
+    }
+
     Ok(Expression::new(ExpressionKind::Void, location))
   }
 }
 
-fn _check_args(location: &Location, expected: usize, got: usize) -> Result<()> {
+fn check_args(location: &Location, expected: usize, got: usize) -> Result<()> {
   if expected == got {
     Ok(())
   } else {

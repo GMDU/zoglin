@@ -1,0 +1,91 @@
+name: release
+on:
+  push:
+    tags:
+      - "v*"
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-D warnings"
+
+jobs:
+  build-release:
+    name: build-release
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        target:
+          - x86_64-unknown-linux-musl
+          - aarch64-unknown-linux-musl
+          - x86_64-apple-darwin
+          - aarch64-apple-darwin
+          - x86_64-pc-windows-msvc
+        toolchain: [stable]
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            use-cross: true
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-musl
+            use-cross: true
+          # macos>=14 runs exclusively on aarch64 and will thus fail to execute properly for x64
+          - os: macos-13
+            target: x86_64-apple-darwin
+            use-cross: false
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            use-cross: false
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            use-cross: false
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ matrix.toolchain }}
+          target: ${{ matrix.target }}
+
+      - name: Handle Rust dependencies caching
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: v1-${{ matrix.target }}
+
+      - name: Build release binary
+        uses: clechasseur/rs-cargo@v2
+        with:
+          command: build
+          args: --release --target ${{ matrix.target }}
+          use-cross: ${{ matrix.use-cross }}
+
+      - name: Build archive
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF#refs/tags/}"
+
+          if [ "${{ matrix.os }}" = "windows-latest" ]; then
+            ARCHIVE="zoglin-$VERSION-${{ matrix.target }}.zip"
+            cp "target/${{ matrix.target }}/release/zoglin.exe" "zoglin.exe"
+            7z a "$ARCHIVE" "zoglin.exe"
+            rm zoglin.exe
+          else
+            ARCHIVE="zoglin-$VERSION-${{ matrix.target }}.tar.gz"
+            cp "target/${{ matrix.target }}/release/zoglin" "zoglin"
+            tar -czvf "$ARCHIVE" "zoglin"
+            rm zoglin
+          fi
+
+          echo "ASSET=$ARCHIVE" >> $GITHUB_ENV
+
+      - name: Upload release archive
+        # https://github.com/softprops/action-gh-release/issues/445
+        # uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@0bd7e8b279c9b5b36661d552472fbbfe671fe26e
+        with:
+          draft: true
+          prerelease: false
+          fail_on_unmatched_files: true
+          files: |
+            ${{ env.ASSET }}
