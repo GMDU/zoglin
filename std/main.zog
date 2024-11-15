@@ -1,0 +1,7 @@
+namespace std
+
+fn load() {
+  math/constants()
+}
+
+module math { include "src/math" }
