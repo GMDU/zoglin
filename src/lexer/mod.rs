@@ -5,7 +5,7 @@ use crate::error::{raise_error, raise_floating_error, raise_warning, Location, R
 use ecow::EcoString;
 use glob::glob;
 use registries::{COMMANDS, KEYWORD_REGISTRY, OPERATOR_REGISTRY};
-use std::{collections::HashSet, fs, path::Path};
+use std::{collections::HashSet, fs, path::Path, str};
 use token::{Token, TokenKind};
 
 pub struct Lexer {
@@ -466,13 +466,23 @@ impl Lexer {
     let mut current_part = EcoString::new();
     let mut line = self.line;
     let mut column = self.column;
+    let mut string_char: Option<char> = None;
+    let mut last_was_whitespace: bool = false;
 
     while if backtick {self.current() != '`'} else {!self.current_is_delim()} {
-      match (self.current(), self.peek(1)) {
+      let current = self.current();
+
+      match (current, self.peek(1)) {
         ('\\', '\\' | '&' | '%' | '`') => {
           self.consume();
           current_part.push(self.current());
           self.consume();
+        }
+        ('\\', '\'' | '"') => {
+          if string_char.is_some() {
+            current_part.push(self.consume());
+          }
+          current_part.push(self.consume());
         }
         ('&', '{') => {
           tokens.push(Token {
@@ -544,10 +554,33 @@ impl Lexer {
           line = self.line;
           column = self.column;
         }
-        _ => {
+        ('\'' | '"', _) => {
+          if let Some(value) = string_char {
+            if value == self.current() {
+              string_char = None;
+            }
+          } else {
+            string_char = Some(self.current());
+          }
           current_part.push(self.consume());
         }
+        (current, _) => {
+          if current == '\n' {
+            current_part.push(' ');
+            self.consume();
+          } else if current.is_ascii_whitespace() {
+            if last_was_whitespace && !string_char.is_some()  {
+              self.consume();
+            } else {
+              current_part.push(self.consume());
+            }
+          } else {
+            current_part.push(self.consume());
+          }
+        }
       }
+
+      last_was_whitespace = current.is_ascii_whitespace();
     }
 
     tokens.push(Token {

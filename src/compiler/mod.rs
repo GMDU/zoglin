@@ -656,8 +656,7 @@ impl Compiler {
       }
     }
 
-    let words: Vec<_> = result.split_ascii_whitespace().collect();
-    result = words.join(" ").to_eco_string();
+    result = result.trim().into();
 
     if is_macro && !has_macro_prefix {
       result = eco_format!("${result}")
