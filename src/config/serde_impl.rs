@@ -259,7 +259,7 @@ fn parse_version<E: de::Error>(
     VersionParseState::Extra => {
       let mut rest = String::new();
       while let Some(c) = chars.peek() {
-        if !matches!(c, '0'..'9' | 'a'..'z' | 'A'..'Z' | '-' | '_' | '.' ) {
+        if !matches!(c, '0'..='9' | 'a'..='z' | 'A'..='Z' | '-' | '_' | '.' ) {
           break;
         }
         rest.push(*c);
