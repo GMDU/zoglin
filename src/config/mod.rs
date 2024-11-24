@@ -102,7 +102,7 @@ impl Version {
         extra: None,
       } => Version {
         major: *major + 1,
-        minor: minor.clone(),
+        minor: *minor,
         patch: None,
         extra: None,
       },
@@ -114,7 +114,7 @@ impl Version {
       } => Version {
         major: *major,
         minor: Some(minor + 1),
-        patch: patch.clone(),
+        patch: *patch,
         extra: None,
       },
       Version {
@@ -130,8 +130,8 @@ impl Version {
         extra: Some(_),
       } => Version {
         major: *major,
-        minor: minor.clone(),
-        patch: patch.clone(),
+        minor: *minor,
+        patch: *patch,
         extra: None,
       },
     }

@@ -204,7 +204,7 @@ impl Parser {
   fn parse_module(&mut self) -> Result<Module> {
     self.expect(TokenKind::ModuleKeyword)?;
     let name = self.expect(TokenKind::Identifier)?;
-    validate(&name.get_value(), &name.location, NameKind::Module)?;
+    validate(name.get_value(), &name.location, NameKind::Module)?;
     let name = name.get_value().clone();
     self.expect(TokenKind::LeftBrace)?;
 
@@ -238,13 +238,13 @@ impl Parser {
 
     let content: ResourceContent = if self.current().kind == TokenKind::Identifier {
       let name = self.consume();
-      validate(&name.get_value(), &name.location, NameKind::Resource)?;
+      validate(name.get_value(), &name.location, NameKind::Resource)?;
       let name = name.get_value().clone();
       let token = self.expect(TokenKind::Json)?;
 
       ResourceContent::Text(
         name,
-        json5_to_json(&token.get_value(), token.location.clone())?,
+        json5_to_json(token.get_value(), token.location.clone())?,
       )
     } else {
       let token = self.expect(TokenKind::String)?;
@@ -281,7 +281,7 @@ impl Parser {
 
     let text = self.expect(TokenKind::Identifier)?;
     validate(
-      &text.get_value(),
+      text.get_value(),
       &text.location,
       NameKind::ResourcePathComponent,
     )?;
@@ -292,11 +292,11 @@ impl Parser {
       self.consume();
       let next = self.expect(TokenKind::Identifier)?;
       validate(
-        &next.get_value(),
+        next.get_value(),
         &next.location,
         NameKind::ResourcePathComponent,
       )?;
-      text.push_str(&next.get_value());
+      text.push_str(next.get_value());
     }
     Ok(text)
   }
@@ -700,7 +700,7 @@ impl Parser {
       TokenKind::Percent => {
         self.consume();
         let name = self.expect(TokenKind::Identifier)?;
-        validate(&name.get_value(), &name.location, NameKind::MacroVariable)?;
+        validate(name.get_value(), &name.location, NameKind::MacroVariable)?;
         Ok(StaticExpr::MacroVariable(name.get_value().clone()))
       }
       TokenKind::Ampersand => match self.parse_comptime_variable()? {

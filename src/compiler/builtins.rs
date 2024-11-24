@@ -95,7 +95,7 @@ impl Compiler {
     location: Location,
     _context: &mut FunctionContext,
   ) -> Result<Expression> {
-    if arguments.len() > 2 || arguments.len() < 1 {
+    if arguments.len() > 2 || arguments.is_empty() {
       return Err(raise_error(
         location,
         format!(
