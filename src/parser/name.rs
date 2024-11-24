@@ -25,7 +25,10 @@ pub enum NameKind {
 pub fn validate_or_quote(name: EcoString, location: &Location, kind: NameKind) -> EcoString {
   match validate(&name, location, kind) {
     Ok(_) => name,
-    Err(_) => eco_format!("\"{}\"", name.escape_default().to_string().replace("\\'", "'")),
+    Err(_) => eco_format!(
+      "\"{}\"",
+      name.escape_default().to_string().replace("\\'", "'")
+    ),
   }
 }
 

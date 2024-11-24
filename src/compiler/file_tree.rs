@@ -283,7 +283,10 @@ impl ResourceLocation {
 
         location.modules.extend(resource.modules.clone());
         let name = if resource.name.is_empty() {
-          &location.modules.pop().expect("TODO: Make this work for namespaces")
+          &location
+            .modules
+            .pop()
+            .expect("TODO: Make this work for namespaces")
         } else {
           &resource.name
         };

@@ -129,7 +129,9 @@ impl Compiler {
       .iter()
       .any(|param| matches!(param.kind, ParameterKind::Scoreboard))
     {
-      self.use_scoreboard_dummy(ScoreboardLocation::new(function_location.clone(), "").scoreboard_string());
+      self.use_scoreboard_dummy(
+        ScoreboardLocation::new(function_location.clone(), "").scoreboard_string(),
+      );
     }
 
     let definition = FunctionDefinition {
