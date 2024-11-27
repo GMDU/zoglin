@@ -110,7 +110,7 @@ impl Lexer {
       if !self.tokenise_json() {
         value = Some(self.src[position + 1..self.position - 1].into());
       }
-    } else if self.current() == '`' && self.is_newline {
+    } else if self.current() == '`' {
       self.consume();
       kind = TokenKind::CommandBegin(true);
     } else if self.current() == '#' {
@@ -466,7 +466,12 @@ impl Lexer {
     let mut current_part = EcoString::new();
     let mut line = self.line;
     let mut column = self.column;
+
+    // Which char the string within the command was opened with. One of either `'` or `"`.
+    // Used to determine when the string has closed.
     let mut string_char: Option<char> = None;
+
+    // Flag for when the last character was a whitespace character. Used to strip whitespace.
     let mut last_was_whitespace: bool = false;
 
     while if backtick {self.current() != '`'} else {!self.current_is_delim()} {
@@ -569,7 +574,7 @@ impl Lexer {
             current_part.push(' ');
             self.consume();
           } else if current.is_ascii_whitespace() {
-            if last_was_whitespace && !string_char.is_some()  {
+            if last_was_whitespace && string_char.is_none()  {
               self.consume();
             } else {
               current_part.push(self.consume());
