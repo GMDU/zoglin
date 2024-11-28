@@ -656,6 +656,8 @@ impl Compiler {
       }
     }
 
+    result = result.trim().into();
+
     if is_macro && !has_macro_prefix {
       result = eco_format!("${result}")
     }
