@@ -20,7 +20,7 @@ enum Precedence {
   Logical,
   Equality,
   Comparison,
-  Bitshift,
+  BitShift,
   Addition,
   Multiplication,
   Exponentiation,
@@ -48,11 +48,11 @@ impl Parser {
       TokenKind::DoubleAmpersand => Operator::LogicalAnd,
       TokenKind::DoublePipe => Operator::LogicalOr,
       TokenKind::Equals => Operator::Assign,
-      TokenKind::PlusEquals => Operator::OperatorAssign(Box::new(Operator::Plus)),
-      TokenKind::MinusEquals => Operator::OperatorAssign(Box::new(Operator::Minus)),
-      TokenKind::StarEquals => Operator::OperatorAssign(Box::new(Operator::Multiply)),
-      TokenKind::ForwardSlashEquals => Operator::OperatorAssign(Box::new(Operator::Divide)),
-      TokenKind::PercentEquals => Operator::OperatorAssign(Box::new(Operator::Modulo)),
+      TokenKind::PlusEquals => Operator::AddAssign,
+      TokenKind::MinusEquals => Operator::SubAssign,
+      TokenKind::StarEquals => Operator::MulAssign,
+      TokenKind::ForwardSlashEquals => Operator::DivAssign,
+      TokenKind::PercentEquals => Operator::ModAssign,
       _ => unreachable!("Invalid Operator"),
     }
   }
@@ -66,7 +66,7 @@ impl Parser {
         (Multiplication, Multiplication)
       }
       TokenKind::Plus | TokenKind::Minus => (Addition, Addition),
-      TokenKind::LeftShift | TokenKind::RightShift => (Bitshift, Bitshift),
+      TokenKind::LeftShift | TokenKind::RightShift => (BitShift, BitShift),
       TokenKind::LessThan
       | TokenKind::GreaterThan
       | TokenKind::LessThanEquals

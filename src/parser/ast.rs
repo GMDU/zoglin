@@ -255,7 +255,7 @@ pub struct BinaryOperation {
   pub operator: Operator,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub enum Operator {
   Plus,
   Minus,
@@ -274,7 +274,11 @@ pub enum Operator {
   LogicalAnd,
   LogicalOr,
   Assign,
-  OperatorAssign(Box<Operator>),
+  AddAssign,
+  SubAssign,
+  MulAssign,
+  DivAssign,
+  ModAssign,
 }
 
 #[derive(Debug, Clone)]

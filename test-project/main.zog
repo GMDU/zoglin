@@ -1,8 +1,9 @@
 namespace example
 
-fn &foo(something) {
-  return &something
-} 
+fn load() {
+  $a = 1
+  $a *= 2
+  $a = $a * 2
 
 fn foo() {}
 
