@@ -1,7 +1,5 @@
 namespace std
 
-fn load() {
-  math/constants()
-}
-
+include "src/core"
 module math { include "src/math" }
+module string { include "src/string" }

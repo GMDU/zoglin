@@ -1,0 +1,27 @@
+fn &print(&values) {
+  # TODO
+}
+
+fn &log(&level, &values) {
+  # TODO
+}
+
+fn &info(&values) {
+  &log("info", &values)
+}
+
+fn &warn(&values) {
+  &log("warn", &values)
+}
+
+fn &error(&values) {
+  &log("error", &values)
+}
+
+fn %exec(%command) {
+  /&{%command}
+}
+
+fn &execute(&subcommand, &block) {
+  # TODO
+}

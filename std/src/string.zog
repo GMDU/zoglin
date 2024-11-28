@@ -1,0 +1,7 @@
+fn concat(%left, %right) {
+  data modify storage std:string/concat return set value "%left%right"
+}
+
+fn &concat(&left, &right) {
+  # TODO
+}

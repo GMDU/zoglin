@@ -1,30 +1,7 @@
-fn constants() {
-  $[-10] = -10
-  $[-9] = -9
-  $[-8] = -8
-  $[-7] = -7
-  $[-6] = -6
-  $[-5] = -5
-  $[-4] = -4
-  $[-3] = -3
-  $[-2] = -2
-  $[-1] = -1
-  $[1] = 1
-  $[2] = 2
-  $[3] = 3
-  $[4] = 4
-  $[5] = 5
-  $[6] = 6
-  $[7] = 7
-  $[8] = 8
-  $[9] = 9
-  $[10] = 10
-}
-
 fn $abs($value) {
   $[$return] = $value
   if $value < 0 {
-    scoreboard players operation $return std.math.abs *= $-1 std.math.constants
+    $[$return] *= -1
   }
 }
 
@@ -102,7 +79,7 @@ fn $pow($value, $power = 2) {
 
   $[$return] = $value
 
-  if $power == $~/constants[$1] {
+  if $power == 1 {
     /return run scoreboard players get $return std.math.pow
   }
 
@@ -114,5 +91,5 @@ fn $pow($value, $power = 2) {
 }
 
 fn &pow(&value, &power) {
-  # TODO
+  &value ** &power
 }
