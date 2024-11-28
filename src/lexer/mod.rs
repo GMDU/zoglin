@@ -5,7 +5,7 @@ use crate::error::{raise_error, raise_floating_error, raise_warning, Location, R
 use ecow::EcoString;
 use glob::glob;
 use registries::{COMMANDS, KEYWORD_REGISTRY, OPERATOR_REGISTRY};
-use std::{collections::HashSet, fs, path::Path};
+use std::{collections::HashSet, fs, path::Path, str};
 use token::{Token, TokenKind};
 
 pub struct Lexer {
@@ -61,18 +61,22 @@ impl Lexer {
     self.dependent_files.insert(self.file.clone());
     loop {
       let next = self.next_token()?;
-      if next.kind == TokenKind::IncludeKeyword {
-        tokens.extend(self.parse_include()?);
-      } else if next.kind == TokenKind::CommandBegin {
-        tokens.push(next);
-        tokens.extend(self.parse_command()?);
-      } else {
-        tokens.push(next);
-        if tokens.last().expect("Tokens was just pushed to").kind == TokenKind::EndOfFile {
-          break;
+      
+      match next.kind {
+        TokenKind::IncludeKeyword => {tokens.extend(self.parse_include()?);},
+        TokenKind::CommandBegin(backtick) => {
+          tokens.push(next);
+          tokens.extend(self.parse_command(backtick)?);
         }
-      }
+        _ => {
+          tokens.push(next);
+          if tokens.last().expect("Tokens was just pushed to").kind == TokenKind::EndOfFile {
+            break;
+          }
+        }
+      };
     }
+
     Ok(tokens)
   }
 
@@ -106,9 +110,9 @@ impl Lexer {
       if !self.tokenise_json() {
         value = Some(self.src[position + 1..self.position - 1].into());
       }
-    } else if self.current() == '/' && self.is_newline {
+    } else if self.current() == '`' {
       self.consume();
-      kind = TokenKind::CommandBegin;
+      kind = TokenKind::CommandBegin(true);
     } else if self.current() == '#' {
       while !self.current_is_delim() {
         self.consume();
@@ -253,7 +257,7 @@ impl Lexer {
       self.position = position;
       self.line = line;
       self.column = column;
-      Ok((TokenKind::CommandBegin, EcoString::new()))
+      Ok((TokenKind::CommandBegin(false), EcoString::new()))
     } else {
       Ok((TokenKind::Identifier, identifier_value.into()))
     }
@@ -456,19 +460,34 @@ impl Lexer {
     Ok(tokens)
   }
 
-  fn parse_command(&mut self) -> Result<Vec<Token>> {
+  fn parse_command(&mut self, backtick: bool) -> Result<Vec<Token>> {
     let mut tokens = Vec::new();
 
     let mut current_part = EcoString::new();
     let mut line = self.line;
     let mut column = self.column;
 
-    while !self.current_is_delim() {
-      match (self.current(), self.peek(1)) {
-        ('\\', '\\' | '&' | '%') => {
+    // Which char the string within the command was opened with. One of either `'` or `"`.
+    // Used to determine when the string has closed.
+    let mut string_char: Option<char> = None;
+
+    // Flag for when the last character was a whitespace character. Used to strip whitespace.
+    let mut last_was_whitespace: bool = false;
+
+    while if backtick {self.current() != '`'} else {!self.current_is_delim()} {
+      let current = self.current();
+
+      match (current, self.peek(1)) {
+        ('\\', '\\' | '&' | '%' | '`') => {
           self.consume();
           current_part.push(self.current());
           self.consume();
+        }
+        ('\\', '\'' | '"') => {
+          if string_char.is_some() {
+            current_part.push(self.consume());
+          }
+          current_part.push(self.consume());
         }
         ('&', '{') => {
           tokens.push(Token {
@@ -540,10 +559,33 @@ impl Lexer {
           line = self.line;
           column = self.column;
         }
-        _ => {
+        ('\'' | '"', _) => {
+          if let Some(value) = string_char {
+            if value == self.current() {
+              string_char = None;
+            }
+          } else {
+            string_char = Some(self.current());
+          }
           current_part.push(self.consume());
         }
+        (current, _) => {
+          if current == '\n' {
+            current_part.push(' ');
+            self.consume();
+          } else if current.is_ascii_whitespace() {
+            if last_was_whitespace && string_char.is_none()  {
+              self.consume();
+            } else {
+              current_part.push(self.consume());
+            }
+          } else {
+            current_part.push(self.consume());
+          }
+        }
       }
+
+      last_was_whitespace = current.is_ascii_whitespace();
     }
 
     tokens.push(Token {
@@ -558,6 +600,10 @@ impl Lexer {
       raw: EcoString::new(),
       location: self.location(self.line, self.column),
     });
+
+    if backtick {
+      self.consume();
+    }
 
     Ok(tokens)
   }
