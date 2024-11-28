@@ -69,7 +69,11 @@ impl Parser {
     let mut path = Vec::new();
     let mut is_comptime = false;
     let namespace = self.expect(TokenKind::Identifier)?;
-    validate(namespace.get_value(), &namespace.location, NameKind::Namespace)?;
+    validate(
+      namespace.get_value(),
+      &namespace.location,
+      NameKind::Namespace,
+    )?;
     let namespace = namespace.get_value().clone();
     self.expect(TokenKind::Colon)?;
 
@@ -84,7 +88,11 @@ impl Parser {
 
       let identifier = self.expect(TokenKind::Identifier)?.clone();
       if self.current().kind == TokenKind::ForwardSlash {
-        validate(identifier.get_value(), &identifier.location, NameKind::Module)?;
+        validate(
+          identifier.get_value(),
+          &identifier.location,
+          NameKind::Module,
+        )?;
         path.push(identifier.take_value());
         self.consume();
       } else {

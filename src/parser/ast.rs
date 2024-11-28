@@ -71,7 +71,7 @@ pub struct Parameter {
   pub name: EcoString,
   pub location: Location,
   pub kind: ParameterKind,
-  pub default: Option<Expression>
+  pub default: Option<Expression>,
 }
 
 #[derive(Debug)]

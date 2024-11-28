@@ -204,7 +204,7 @@ impl Parser {
   fn parse_module(&mut self) -> Result<Module> {
     self.expect(TokenKind::ModuleKeyword)?;
     let name = self.expect(TokenKind::Identifier)?;
-    validate(&name.get_value(), &name.location, NameKind::Module)?;
+    validate(name.get_value(), &name.location, NameKind::Module)?;
     let name = name.get_value().clone();
     self.expect(TokenKind::LeftBrace)?;
 
@@ -238,11 +238,14 @@ impl Parser {
 
     let content: ResourceContent = if self.current().kind == TokenKind::Identifier {
       let name = self.consume();
-      validate(&name.get_value(), &name.location, NameKind::Resource)?;
+      validate(name.get_value(), &name.location, NameKind::Resource)?;
       let name = name.get_value().clone();
       let token = self.expect(TokenKind::Json)?;
 
-      ResourceContent::Text(name, json5_to_json(&token.get_value(), token.location.clone())?)
+      ResourceContent::Text(
+        name,
+        json5_to_json(token.get_value(), token.location.clone())?,
+      )
     } else {
       let token = self.expect(TokenKind::String)?;
       let (base_path, path) = if token.get_value().starts_with('/') {
@@ -277,15 +280,23 @@ impl Parser {
     }
 
     let text = self.expect(TokenKind::Identifier)?;
-    validate(&text.get_value(), &text.location, NameKind::ResourcePathComponent)?;
+    validate(
+      text.get_value(),
+      &text.location,
+      NameKind::ResourcePathComponent,
+    )?;
     let mut text = text.get_value().clone();
 
     while self.current().kind == TokenKind::ForwardSlash {
       text.push('/');
       self.consume();
       let next = self.expect(TokenKind::Identifier)?;
-      validate(&next.get_value(), &next.location, NameKind::ResourcePathComponent)?;
-      text.push_str(&next.get_value());
+      validate(
+        next.get_value(),
+        &next.location,
+        NameKind::ResourcePathComponent,
+      )?;
+      text.push_str(next.get_value());
     }
     Ok(text)
   }
@@ -424,7 +435,10 @@ impl Parser {
     Ok(match self.current_including(&[TokenKind::Comment]).kind {
       TokenKind::CommandBegin => Statement::Command(self.parse_command()?),
       TokenKind::Comment => {
-        let comment = self.consume_including(&[TokenKind::Comment]).get_value().clone();
+        let comment = self
+          .consume_including(&[TokenKind::Comment])
+          .get_value()
+          .clone();
         Statement::Comment(comment)
       }
       TokenKind::IfKeyword => Statement::If(self.parse_if_statement()?),
@@ -440,7 +454,9 @@ impl Parser {
 
     while self.current().kind != TokenKind::CommandEnd {
       match self.current().kind {
-        TokenKind::CommandString => parts.push(CommandPart::Literal(self.consume().get_value().clone())),
+        TokenKind::CommandString => {
+          parts.push(CommandPart::Literal(self.consume().get_value().clone()))
+        }
         _ => parts.push(CommandPart::Expression(self.parse_static_expr()?)),
       }
     }
@@ -532,7 +548,10 @@ impl Parser {
 
   fn parse_string(&mut self) -> Result<Expression> {
     let token = self.consume().clone();
-    Ok(Expression::String(token.get_value().clone(), token.location))
+    Ok(Expression::String(
+      token.get_value().clone(),
+      token.location,
+    ))
   }
 
   fn parse_array(&mut self) -> Result<Expression> {
@@ -548,7 +567,10 @@ impl Parser {
         _ => {
           return Err(raise_error(
             self.current().location.clone(),
-            format!("\"{}\" is not a valid array type.", self.current().get_value()),
+            format!(
+              "\"{}\" is not a valid array type.",
+              self.current().get_value()
+            ),
           ))
         }
       };
@@ -631,8 +653,11 @@ impl Parser {
 
     if self.current().kind == TokenKind::LeftSquare {
       let name = self.parse_scoreboard_variable_name()?;
-      resource = ZoglinResource{
-        namespace: None, location: self.current().location.clone(), modules: Vec::new(), name
+      resource = ZoglinResource {
+        namespace: None,
+        location: self.current().location.clone(),
+        modules: Vec::new(),
+        name,
       }
     } else {
       resource = self.parse_zoglin_resource(NameKind::ScoreboardVariable)?;
@@ -646,9 +671,7 @@ impl Parser {
       }
     }
 
-    Ok(Expression::ScoreboardVariable(
-      resource
-    ))
+    Ok(Expression::ScoreboardVariable(resource))
   }
 
   fn parse_scoreboard_variable_name(&mut self) -> Result<EcoString> {
@@ -657,8 +680,12 @@ impl Parser {
     let mut output = EcoString::new();
 
     while square_count > 0 || self.current().kind != TokenKind::RightSquare {
-      if self.current().kind == TokenKind::LeftSquare { square_count += 1; }
-      if self.current().kind == TokenKind::RightSquare { square_count -= 1; }
+      if self.current().kind == TokenKind::LeftSquare {
+        square_count += 1;
+      }
+      if self.current().kind == TokenKind::RightSquare {
+        square_count -= 1;
+      }
 
       output.push_str(&self.consume().raw);
     }
@@ -673,7 +700,7 @@ impl Parser {
       TokenKind::Percent => {
         self.consume();
         let name = self.expect(TokenKind::Identifier)?;
-        validate(&name.get_value(), &name.location, NameKind::MacroVariable)?;
+        validate(name.get_value(), &name.location, NameKind::MacroVariable)?;
         Ok(StaticExpr::MacroVariable(name.get_value().clone()))
       }
       TokenKind::Ampersand => match self.parse_comptime_variable()? {

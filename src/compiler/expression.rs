@@ -177,7 +177,9 @@ impl Expression {
     data_type: NbtType,
   ) -> Result<()> {
     if let Some(string) = self.kind.to_comptime_string(false) {
-      code.push(eco_format!("data modify storage {storage} {operation} value {string}"));
+      code.push(eco_format!(
+        "data modify storage {storage} {operation} value {string}"
+      ));
       return Ok(());
     }
 
@@ -270,7 +272,7 @@ impl Expression {
             "data modify storage {storage} {operation} from storage {temp_storage}",
           ))
         }
-      },
+      }
       StorageKind::MacroStore => {
         if operation == "set" {
           code.push(eco_format!(
@@ -285,7 +287,7 @@ impl Expression {
             "data modify storage {storage} {operation} from storage {temp_storage}",
           ))
         }
-      },
+      }
     }
 
     Ok(())
@@ -778,7 +780,13 @@ fn array_to_storage(
       continue;
     }
 
-    element.to_storage(state, &mut computed_elements_code, storage, &eco_format!("insert {i}"), data_type)?
+    element.to_storage(
+      state,
+      &mut computed_elements_code,
+      storage,
+      &eco_format!("insert {i}"),
+      data_type,
+    )?
   }
 
   code.push(eco_format!(
@@ -807,10 +815,19 @@ fn compound_to_storage(
     let mut element_location = storage.clone();
     element_location.name = eco_format!("{}.{}", element_location.name, key);
 
-    value.to_storage(state, &mut computed_elements_code, &element_location, "set", NbtType::Unknown)?
+    value.to_storage(
+      state,
+      &mut computed_elements_code,
+      &element_location,
+      "set",
+      NbtType::Unknown,
+    )?
   }
 
-  code.push(eco_format!("data modify storage {storage} set value {{{}}}", constant_elements.join(", ")));
+  code.push(eco_format!(
+    "data modify storage {storage} set value {{{}}}",
+    constant_elements.join(", ")
+  ));
   code.extend(computed_elements_code);
 
   Ok(())

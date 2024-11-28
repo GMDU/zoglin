@@ -83,11 +83,7 @@ impl Compiler {
 
     match arguments.first() {
       None => {}
-      Some(value) => self.set_storage(
-        &mut context.code,
-        &storage,
-        value,
-      )?,
+      Some(value) => self.set_storage(&mut context.code, &storage, value)?,
     }
 
     Ok(Expression::new(ExpressionKind::Storage(storage), location))
@@ -99,7 +95,7 @@ impl Compiler {
     location: Location,
     _context: &mut FunctionContext,
   ) -> Result<Expression> {
-    if arguments.len() > 2 || arguments.len() < 1 {
+    if arguments.len() > 2 || arguments.is_empty() {
       return Err(raise_error(
         location,
         format!(
@@ -180,11 +176,9 @@ impl Compiler {
           "`@set` can only be used on scoreboards and storages.",
         ))
       }
-      ExpressionKind::Storage(storage_location) => self.set_storage(
-        &mut context.code,
-        &storage_location,
-        &src,
-      )?,
+      ExpressionKind::Storage(storage_location) => {
+        self.set_storage(&mut context.code, &storage_location, &src)?
+      }
       ExpressionKind::Scoreboard(scoreboard_location) => {
         self.set_scoreboard(&mut context.code, &scoreboard_location, &src)?
       }

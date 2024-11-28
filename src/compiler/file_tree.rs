@@ -283,11 +283,14 @@ impl ResourceLocation {
 
         location.modules.extend(resource.modules.clone());
         let name = if resource.name.is_empty() {
-          &location.modules.pop().expect("TODO: Make this work for namespaces")
+          &location
+            .modules
+            .pop()
+            .expect("TODO: Make this work for namespaces")
         } else {
           &resource.name
         };
-        return location.with_name(&name);
+        return location.with_name(name);
       }
 
       let modules = resource.modules.clone();
@@ -353,7 +356,7 @@ impl ResourceLocation {
     Self {
       namespace: namespace.into(),
       modules: modules
-        .into_iter()
+        .iter()
         .map(|&module| EcoString::from(module))
         .collect(),
       kind: ResourceKind::Module,
@@ -367,7 +370,7 @@ impl ResourceLocation {
     Self {
       namespace: namespace.into(),
       modules: modules
-        .into_iter()
+        .iter()
         .map(|&module| EcoString::from(module))
         .collect(),
       kind: ResourceKind::Function,

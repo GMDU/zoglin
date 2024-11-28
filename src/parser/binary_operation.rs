@@ -98,7 +98,10 @@ impl Parser {
         parser.consume();
         let name = parser.expect(TokenKind::Identifier)?.clone();
         validate(name.get_value(), &name.location, NameKind::MacroVariable)?;
-        Ok(Expression::MacroVariable(name.get_value().clone(), name.location))
+        Ok(Expression::MacroVariable(
+          name.get_value().clone(),
+          name.location,
+        ))
       },
       Ampersand => Parser::parse_comptime_variable,
       Minus | Bang => Parser::parse_prefix_expression,
@@ -186,11 +189,7 @@ impl Parser {
   }
 
   fn parse_binary_operation(&mut self, left: Expression) -> Result<Expression> {
-    let Token {
-      location,
-      kind,
-      ..
-    } = self.consume().clone();
+    let Token { location, kind, .. } = self.consume().clone();
     let operator = Parser::match_operator(kind);
     let precedence = Parser::match_precedence(kind);
     let right = self.parse_sub_expression(precedence.1)?;

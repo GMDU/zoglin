@@ -68,11 +68,7 @@ impl Compiler {
     match left {
       ast::Expression::Variable(variable) => {
         let storage = StorageLocation::from_zoglin_resource(&context.location, &variable);
-        self.set_storage(
-          &mut context.code,
-          &storage,
-          &right,
-        )?;
+        self.set_storage(&mut context.code, &storage, &right)?;
 
         Ok(right)
       }
