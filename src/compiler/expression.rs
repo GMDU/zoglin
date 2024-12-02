@@ -106,9 +106,9 @@ impl Condition {
 
   fn invert_code(code: &str) -> EcoString {
     if let Some(condition) = code.strip_prefix("if") {
-      eco_format!("unless {condition}")
+      eco_format!("unless{condition}")
     } else if let Some(condition) = code.strip_prefix("unless") {
-      eco_format!("if {condition}")
+      eco_format!("if{condition}")
     } else {
       code.into()
     }

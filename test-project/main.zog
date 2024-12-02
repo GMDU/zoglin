@@ -1,7 +1,7 @@
 namespace example
 
 fn load(%text) {
-  if a {
-    return 10
+  while len(a) > 1 && b {
+    say hi
   }
 }
