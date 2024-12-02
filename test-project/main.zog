@@ -1,20 +1,7 @@
 namespace example
 
-fn load() {
-  $a = 1
-  $a *= 2
-  $a = $a * 2
-
-fn foo() {}
-
 fn load(%text) {
-  &value = 10
-  data modify storage example:load something set value &value
-  scoreboard players set @s example.load &foo(12)
-  tellraw @a "%text"
-  `execute
-    if data storage foo:bar {baz: true}
-    run &{foo()}
-  `
-  `tellraw @s "Foo  Bar bbbb \"      bax"`
+  a = true
+  b = false
+  c = a || b
 }
