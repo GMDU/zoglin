@@ -597,9 +597,10 @@ impl Compiler {
 
   fn generate_nested_return(&mut self, context: &mut FunctionContext) {
     let return_command = match context.return_type {
-      ReturnType::Storage | ReturnType::Scoreboard => {
-        "return run scoreboard players reset $should_return"
-      }
+      ReturnType::Storage | ReturnType::Scoreboard => &eco_format!(
+        "return run scoreboard players reset $should_return zoglin.internal.{namespace}.vars",
+        namespace = context.location.namespace
+      ),
       ReturnType::Direct => &eco_format!(
         "return run function {}",
         self.reset_direct_return(&context.location.namespace)
