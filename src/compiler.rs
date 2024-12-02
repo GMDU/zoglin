@@ -600,9 +600,12 @@ impl Compiler {
       ReturnType::Storage | ReturnType::Scoreboard => {
         "return run scoreboard players reset $should_return"
       }
-      ReturnType::Direct => &eco_format!("return run function {}", self.reset_direct_return()),
+      ReturnType::Direct => &eco_format!(
+        "return run function {}",
+        self.reset_direct_return(&context.location.namespace)
+      ),
     };
-    context. code.push(eco_format!("execute if score $should_return zoglin.internal.vars matches -2147483648..2147483647 run {return_command}"));
+    context. code.push(eco_format!("execute if score $should_return zoglin.internal.{namespace}.vars matches -2147483648..2147483647 run {return_command}", namespace = context.location.namespace));
   }
 
   fn compile_ast_function(
@@ -1227,7 +1230,7 @@ impl Compiler {
           if context.is_nested {
             self.set_scoreboard(
               &mut context.code,
-              &ScoreboardLocation::of_internal("$should_return"),
+              &ScoreboardLocation::of_internal(&context.location.namespace, "$should_return"),
               &expression,
             )?;
           } else {
@@ -1240,7 +1243,7 @@ impl Compiler {
     if context.return_type != ReturnType::Direct && context.is_nested {
       self.set_scoreboard(
         &mut context.code,
-        &ScoreboardLocation::of_internal("$should_return"),
+        &ScoreboardLocation::of_internal(&context.location.namespace, "$should_return"),
         &Expression::new(ExpressionKind::Integer(1), Location::blank()),
       )?;
     }

@@ -1,7 +1,7 @@
 namespace example
 
 fn load(%text) {
-  a = true
-  b = false
-  c = a || b
+  if a {
+    return 10
+  }
 }

@@ -464,9 +464,9 @@ impl ScoreboardLocation {
     }
   }
 
-  pub fn of_internal(name: &str) -> ScoreboardLocation {
+  pub fn of_internal(namespace: &str, name: &str) -> ScoreboardLocation {
     ScoreboardLocation {
-      scoreboard: ResourceLocation::new_function("zoglin", &["internal", "vars"]),
+      scoreboard: ResourceLocation::new_function("zoglin", &["internal", namespace, "vars"]),
       name: eco_format!("{name}"),
     }
   }
