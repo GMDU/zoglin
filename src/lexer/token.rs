@@ -43,7 +43,7 @@ pub enum TokenKind {
   ReturnKeyword,
 
   // Non-zoglin
-  CommandBegin,
+  CommandBegin(bool),
   CommandString,
   CommandEnd,
   Json,

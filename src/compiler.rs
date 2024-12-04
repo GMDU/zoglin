@@ -43,6 +43,7 @@ pub struct Compiler {
   namespaces: HashMap<EcoString, Namespace>,
   // TODO: Refactor used scoreboards to be a HashMap
   used_scoreboards: HashSet<UsedScoreboard>,
+  constant_scoreboard_values: HashSet<i32>,
   function_registry: HashMap<ResourceLocation, FunctionDefinition>,
   comptime_function_registry: HashMap<ResourceLocation, ComptimeFunction>,
 }
@@ -356,6 +357,15 @@ impl Compiler {
     }
   }
 
+  fn constant_scoreboard(&mut self, value: i32) -> ScoreboardLocation {
+    self.use_scoreboard_dummy("zoglin.internal.constants".into());
+    self.constant_scoreboard_values.insert(value);
+    ScoreboardLocation {
+      scoreboard: ResourceLocation::new_function("zoglin", &["internal", "constants"]),
+      name: eco_format!("${value}"),
+    }
+  }
+
   fn next_storage(&mut self, namespace: &str) -> StorageLocation {
     StorageLocation::new(
       ResourceLocation::new_function("zoglin", &["internal", namespace, "vars"]),
@@ -450,18 +460,24 @@ impl Compiler {
     self.exit_scope();
     self.comptime_scopes.pop();
 
+    let load_commands = self
+      .used_scoreboards
+      .iter()
+      .map(|scoreboard| {
+        eco_format!(
+          "scoreboard objectives add {} {}",
+          scoreboard.name,
+          scoreboard.criteria
+        )
+      })
+      .chain(self.constant_scoreboard_values.iter().map(|value| {
+        eco_format!("scoreboard players set ${value} zoglin.internal.constants {value}")
+      }))
+      .collect();
+
     let load_function = Item::Function(Function {
       name: "load".to_eco_string(),
-      commands: take(&mut self.used_scoreboards)
-        .into_iter()
-        .map(|scoreboard| {
-          eco_format!(
-            "scoreboard objectives add {} {}",
-            scoreboard.name,
-            scoreboard.criteria
-          )
-        })
-        .collect(),
+      commands: load_commands,
       location: Location::blank(),
     });
     self.add_item(
@@ -581,12 +597,16 @@ impl Compiler {
 
   fn generate_nested_return(&mut self, context: &mut FunctionContext) {
     let return_command = match context.return_type {
-      ReturnType::Storage | ReturnType::Scoreboard => {
-        "return run scoreboard players reset $should_return"
-      }
-      ReturnType::Direct => &eco_format!("return run function {}", self.reset_direct_return()),
+      ReturnType::Storage | ReturnType::Scoreboard => &eco_format!(
+        "return run scoreboard players reset $should_return zoglin.internal.{namespace}.vars",
+        namespace = context.location.namespace
+      ),
+      ReturnType::Direct => &eco_format!(
+        "return run function {}",
+        self.reset_direct_return(&context.location.namespace)
+      ),
     };
-    context. code.push(eco_format!("execute if score $should_return zoglin.internal.vars matches -2147483648..2147483647 run {return_command}"));
+    context. code.push(eco_format!("execute if score $should_return zoglin.internal.{namespace}.vars matches -2147483648..2147483647 run {return_command}", namespace = context.location.namespace));
   }
 
   fn compile_ast_function(
@@ -655,6 +675,8 @@ impl Compiler {
         }
       }
     }
+
+    result = result.trim().into();
 
     if is_macro && !has_macro_prefix {
       result = eco_format!("${result}")
@@ -1209,7 +1231,7 @@ impl Compiler {
           if context.is_nested {
             self.set_scoreboard(
               &mut context.code,
-              &ScoreboardLocation::of_internal("$should_return"),
+              &ScoreboardLocation::of_internal(&context.location.namespace, "$should_return"),
               &expression,
             )?;
           } else {
@@ -1222,7 +1244,7 @@ impl Compiler {
     if context.return_type != ReturnType::Direct && context.is_nested {
       self.set_scoreboard(
         &mut context.code,
-        &ScoreboardLocation::of_internal("$should_return"),
+        &ScoreboardLocation::of_internal(&context.location.namespace, "$should_return"),
         &Expression::new(ExpressionKind::Integer(1), Location::blank()),
       )?;
     }

@@ -13,6 +13,61 @@ use super::{
   Compiler,
 };
 
+struct Operation {
+  operator: &'static str,
+  native_operation: Option<&'static str>,
+  constant_operation: fn(i32, i32) -> i32,
+  commutative: bool,
+}
+
+impl Operation {
+  const ADD: Operation = Operation {
+    operator: "+",
+    native_operation: Some("add"),
+    constant_operation: |a, b| a + b,
+    commutative: true,
+  };
+
+  const SUB: Operation = Operation {
+    operator: "-",
+    native_operation: Some("remove"),
+    constant_operation: |a, b| a - b,
+    commutative: false,
+  };
+
+  const MUL: Operation = Operation {
+    operator: "*",
+    native_operation: None,
+    constant_operation: |a, b| a * b,
+    commutative: true,
+  };
+
+  const DIV: Operation = Operation {
+    operator: "/",
+    native_operation: None,
+    constant_operation: |a, b| a / b,
+    commutative: false,
+  };
+
+  const MOD: Operation = Operation {
+    operator: "%",
+    native_operation: None,
+    constant_operation: |a, b| a % b,
+    commutative: false,
+  };
+
+  fn from_operator(operator: Operator) -> Option<Operation> {
+    match operator {
+      Operator::Plus => Some(Operation::ADD),
+      Operator::Minus => Some(Operation::SUB),
+      Operator::Divide => Some(Operation::DIV),
+      Operator::Multiply => Some(Operation::MUL),
+      Operator::Modulo => Some(Operation::MOD),
+      _ => None,
+    }
+  }
+}
+
 impl Compiler {
   pub(super) fn compile_binary_operation(
     &mut self,
@@ -20,11 +75,13 @@ impl Compiler {
     context: &mut FunctionContext,
   ) -> Result<Expression> {
     match binary_operation.operator {
-      Operator::Plus => self.compile_plus(binary_operation, context),
-      Operator::Minus => self.compile_minus(binary_operation, context),
-      Operator::Divide => self.compile_divide(binary_operation, context),
-      Operator::Multiply => self.compile_multiply(binary_operation, context),
-      Operator::Modulo => self.compile_modulo(binary_operation, context),
+      Operator::Plus => self.compile_numeric_operation(binary_operation, Operation::ADD, context),
+      Operator::Minus => self.compile_numeric_operation(binary_operation, Operation::SUB, context),
+      Operator::Divide => self.compile_numeric_operation(binary_operation, Operation::DIV, context),
+      Operator::Multiply => {
+        self.compile_numeric_operation(binary_operation, Operation::MUL, context)
+      }
+      Operator::Modulo => self.compile_numeric_operation(binary_operation, Operation::MOD, context),
       Operator::Power => todo!(),
       Operator::LeftShift => todo!(),
       Operator::RightShift => todo!(),
@@ -37,12 +94,22 @@ impl Compiler {
       Operator::LogicalAnd => self.compile_logical_and(binary_operation, context),
       Operator::LogicalOr => self.compile_logical_or(binary_operation, context),
       Operator::Assign => {
-        let right = self.compile_expression(*binary_operation.right, context, false)?;
-        self.compile_assignment(*binary_operation.left, right, context)
+        self.compile_assignment(*binary_operation.left, *binary_operation.right, context)
       }
-      Operator::OperatorAssign(ref operator) => {
-        let operator = operator.as_ref().clone();
-        self.compile_operator_assignment(binary_operation, operator, context)
+      Operator::AddAssign => {
+        self.compile_operator_assignment(binary_operation, Operator::Plus, context)
+      }
+      Operator::SubAssign => {
+        self.compile_operator_assignment(binary_operation, Operator::Minus, context)
+      }
+      Operator::MulAssign => {
+        self.compile_operator_assignment(binary_operation, Operator::Multiply, context)
+      }
+      Operator::DivAssign => {
+        self.compile_operator_assignment(binary_operation, Operator::Divide, context)
+      }
+      Operator::ModAssign => {
+        self.compile_operator_assignment(binary_operation, Operator::Modulo, context)
       }
     }
   }
@@ -54,25 +121,45 @@ impl Compiler {
     context: &mut FunctionContext,
   ) -> Result<Expression> {
     binary_operation.operator = operator;
-    let left = binary_operation.left.as_ref().clone();
-    let right = self.compile_binary_operation(binary_operation, context)?;
-    self.compile_assignment(left, right, context)
+
+    match binary_operation.left.as_ref() {
+      ast::Expression::ScoreboardVariable(variable) => {
+        let right = self.compile_expression(*binary_operation.right, context, false)?;
+        let scoreboard = ScoreboardLocation::from_zoglin_resource(&context.location, variable);
+        self.use_scoreboard_dummy(scoreboard.scoreboard_string());
+        self.scoreboard_operation(
+          &scoreboard,
+          right.clone(),
+          Operation::from_operator(operator).expect("Operator must be numeric"),
+          context,
+        )?;
+
+        Ok(right)
+      }
+      left => self.compile_assignment(
+        left.clone(),
+        ast::Expression::BinaryOperation(binary_operation),
+        context,
+      ),
+    }
   }
 
   fn compile_assignment(
     &mut self,
     left: ast::Expression,
-    right: Expression,
+    right: ast::Expression,
     context: &mut FunctionContext,
   ) -> Result<Expression> {
     match left {
       ast::Expression::Variable(variable) => {
+        let right = self.compile_expression(right, context, false)?;
         let storage = StorageLocation::from_zoglin_resource(&context.location, &variable);
         self.set_storage(&mut context.code, &storage, &right)?;
 
         Ok(right)
       }
       ast::Expression::ScoreboardVariable(variable) => {
+        let right = self.compile_expression(right, context, false)?;
         let scoreboard = ScoreboardLocation::from_zoglin_resource(&context.location, &variable);
         self.set_scoreboard(&mut context.code, &scoreboard, &right)?;
         self.use_scoreboard_dummy(scoreboard.scoreboard_string());
@@ -80,6 +167,7 @@ impl Compiler {
         Ok(right)
       }
       ast::Expression::ComptimeVariable(name, _) => {
+        let right = self.compile_expression(right, context, false)?;
         self
           .comptime_scopes
           .last_mut()
@@ -94,9 +182,10 @@ impl Compiler {
     }
   }
 
-  fn compile_plus(
+  fn compile_numeric_operation(
     &mut self,
     binary_operation: BinaryOperation,
+    operation: Operation,
     context: &mut FunctionContext,
   ) -> Result<Expression> {
     let left = self.compile_expression(*binary_operation.left, context, false)?;
@@ -104,216 +193,76 @@ impl Compiler {
     let needs_macro = left.needs_macro || right.needs_macro;
 
     match (&left.kind, &right.kind) {
-      (ExpressionKind::Void, _) | (_, ExpressionKind::Void) => Err(raise_error(
-        left.location,
-        "Cannot add type void to another value.",
-      )),
-      (ExpressionKind::Boolean(_), _) | (_, ExpressionKind::Boolean(_)) => Err(raise_error(
-        left.location,
-        "Cannot perform plus with boolean.",
-      )),
-      (ExpressionKind::String(_), _) | (_, ExpressionKind::String(_)) => Err(raise_error(
-        left.location,
-        "Cannot perform plus with string.",
-      )),
       (left, right) if left.numeric_value().is_some() && right.numeric_value().is_some() => {
-        Ok(ExpressionKind::Integer(
-          left.numeric_value().expect("Numeric value exists")
-            + right.numeric_value().expect("Numeric value exists"),
-        ))
+        Ok(ExpressionKind::Integer((operation.constant_operation)(
+          left.numeric_value().expect("Numeric value exists"),
+          right.numeric_value().expect("Numeric value exists"),
+        )))
       }
-      (num, _) if num.numeric_value().is_some() => {
+      // It's more efficient to have a constant value on the right-hand-side,
+      // So if the left side is constant, we rearrange it. However, that only works
+      // if the operator is commutative.
+      (num, _) if operation.commutative && num.numeric_value().is_some() => {
         let scoreboard =
           self.copy_to_scoreboard(&mut context.code, &right, &context.location.namespace)?;
-        context.code.push(eco_format!(
-          "scoreboard players add {scoreboard} {}",
-          num.numeric_value().expect("Numeric value exists"),
-        ));
+        self.scoreboard_operation(&scoreboard, left, operation, context)?;
         Ok(ExpressionKind::Scoreboard(scoreboard))
       }
-      (_, num) if num.numeric_value().is_some() => {
+      _ => {
         let scoreboard =
           self.copy_to_scoreboard(&mut context.code, &left, &context.location.namespace)?;
-        context.code.push(eco_format!(
-          "scoreboard players add {scoreboard} {}",
-          num.numeric_value().expect("Numeric value exists"),
-        ));
+        self.scoreboard_operation(&scoreboard, right, operation, context)?;
         Ok(ExpressionKind::Scoreboard(scoreboard))
       }
-      _ => self.compile_basic_operator(
-        left,
-        right,
-        '+',
-        &mut context.code,
-        &context.location.namespace,
-      ),
     }
     .map(|kind| Expression::with_macro(kind, binary_operation.location, needs_macro))
   }
 
-  fn compile_minus(
+  fn scoreboard_operation(
     &mut self,
-    binary_operation: BinaryOperation,
+    scoreboard: &ScoreboardLocation,
+    value: Expression,
+    operation: Operation,
     context: &mut FunctionContext,
-  ) -> Result<Expression> {
-    let left = self.compile_expression(*binary_operation.left, context, false)?;
-    let right = self.compile_expression(*binary_operation.right, context, false)?;
-    let needs_macro = left.needs_macro || right.needs_macro;
-
-    match (&left.kind, &right.kind) {
-      (ExpressionKind::Void, _) | (_, ExpressionKind::Void) => Err(raise_error(
-        left.location,
-        "Cannot perform subtraction with void.",
-      )),
-      (ExpressionKind::Boolean(_), _) | (_, ExpressionKind::Boolean(_)) => Err(raise_error(
-        left.location,
-        "Cannot perform subtraction with boolean.",
-      )),
-      (ExpressionKind::String(_), _) | (_, ExpressionKind::String(_)) => Err(raise_error(
-        left.location,
-        "Cannot perform subtraction with string.",
-      )),
-      (left, right) if left.numeric_value().is_some() && right.numeric_value().is_some() => {
-        Ok(ExpressionKind::Integer(
-          left.numeric_value().expect("Numeric value exists")
-            - right.numeric_value().expect("Numeric value exists"),
+  ) -> Result<()> {
+    match &value.kind {
+      ExpressionKind::Void
+      | ExpressionKind::String(_)
+      | ExpressionKind::Array { .. }
+      | ExpressionKind::ByteArray(_)
+      | ExpressionKind::IntArray(_)
+      | ExpressionKind::LongArray(_)
+      | ExpressionKind::SubString(_, _, _)
+      | ExpressionKind::Compound(_) => {
+        return Err(raise_error(
+          value.location,
+          "Can only perform operations on numbers.",
         ))
       }
-      (_, num) if num.numeric_value().is_some() => {
-        let scoreboard =
-          self.copy_to_scoreboard(&mut context.code, &left, &context.location.namespace)?;
+      num if num.numeric_value().is_some() => {
+        let number = num.numeric_value().expect("Numeric value exists");
+        if let Some(native_operation) = operation.native_operation {
+          context.code.push(eco_format!(
+            "scoreboard players {native_operation} {scoreboard} {number}",
+          ));
+        } else {
+          let constant_scoreboard = self.constant_scoreboard(number);
+          context.code.push(eco_format!(
+            "scoreboard players operation {scoreboard} {}= {constant_scoreboard}",
+            operation.operator
+          ));
+        }
+      }
+      _ => {
+        let other_scoreboard =
+          self.move_to_scoreboard(&mut context.code, value, &context.location.namespace)?;
         context.code.push(eco_format!(
-          "scoreboard players remove {scoreboard} {}",
-          num.numeric_value().expect("Numeric value exists"),
+          "scoreboard players operation {scoreboard} {}= {other_scoreboard}",
+          operation.operator
         ));
-        Ok(ExpressionKind::Scoreboard(scoreboard))
       }
-      _ => self.compile_basic_operator(
-        left,
-        right,
-        '-',
-        &mut context.code,
-        &context.location.namespace,
-      ),
     }
-    .map(|kind| Expression::with_macro(kind, binary_operation.location, needs_macro))
-  }
-
-  fn compile_multiply(
-    &mut self,
-    binary_operation: BinaryOperation,
-    context: &mut FunctionContext,
-  ) -> Result<Expression> {
-    let left = self.compile_expression(*binary_operation.left, context, false)?;
-    let right = self.compile_expression(*binary_operation.right, context, false)?;
-    let needs_macro = left.needs_macro || right.needs_macro;
-
-    match (&left.kind, &right.kind) {
-      (ExpressionKind::Void, _) | (_, ExpressionKind::Void) => Err(raise_error(
-        left.location,
-        "Cannot perform multiplication with void.",
-      )),
-      (ExpressionKind::Boolean(_), _) | (_, ExpressionKind::Boolean(_)) => Err(raise_error(
-        left.location,
-        "Cannot perform multiplication with boolean.",
-      )),
-      (ExpressionKind::String(_), _) | (_, ExpressionKind::String(_)) => Err(raise_error(
-        left.location,
-        "Cannot perform multiplication with string.",
-      )),
-      (left, right) if left.numeric_value().is_some() && right.numeric_value().is_some() => {
-        Ok(ExpressionKind::Integer(
-          left.numeric_value().expect("Numeric value exists")
-            * right.numeric_value().expect("Numeric value exists"),
-        ))
-      }
-      _ => self.compile_basic_operator(
-        left,
-        right,
-        '*',
-        &mut context.code,
-        &context.location.namespace,
-      ),
-    }
-    .map(|kind| Expression::with_macro(kind, binary_operation.location, needs_macro))
-  }
-
-  fn compile_divide(
-    &mut self,
-    binary_operation: BinaryOperation,
-    context: &mut FunctionContext,
-  ) -> Result<Expression> {
-    let left = self.compile_expression(*binary_operation.left, context, false)?;
-    let right = self.compile_expression(*binary_operation.right, context, false)?;
-    let needs_macro = left.needs_macro || right.needs_macro;
-
-    match (&left.kind, &right.kind) {
-      (ExpressionKind::Void, _) | (_, ExpressionKind::Void) => Err(raise_error(
-        left.location,
-        "Cannot perform division with void.",
-      )),
-      (ExpressionKind::Boolean(_), _) | (_, ExpressionKind::Boolean(_)) => Err(raise_error(
-        left.location,
-        "Cannot perform division with boolean.",
-      )),
-      (ExpressionKind::String(_), _) | (_, ExpressionKind::String(_)) => Err(raise_error(
-        left.location,
-        "Cannot perform division with string.",
-      )),
-      (left, right) if left.numeric_value().is_some() && right.numeric_value().is_some() => {
-        Ok(ExpressionKind::Integer(
-          left.numeric_value().expect("Numeric value exists")
-            / right.numeric_value().expect("Numeric value exists"),
-        ))
-      }
-      _ => self.compile_basic_operator(
-        left,
-        right,
-        '/',
-        &mut context.code,
-        &context.location.namespace,
-      ),
-    }
-    .map(|kind| Expression::with_macro(kind, binary_operation.location, needs_macro))
-  }
-
-  fn compile_modulo(
-    &mut self,
-    binary_operation: BinaryOperation,
-    context: &mut FunctionContext,
-  ) -> Result<Expression> {
-    let left = self.compile_expression(*binary_operation.left, context, false)?;
-    let right = self.compile_expression(*binary_operation.right, context, false)?;
-    let needs_macro = left.needs_macro || right.needs_macro;
-
-    match (&left.kind, &right.kind) {
-      (ExpressionKind::Void, _) | (_, ExpressionKind::Void) => Err(raise_error(
-        left.location,
-        "Cannot perform modulo with void.",
-      )),
-      (ExpressionKind::Boolean(_), _) | (_, ExpressionKind::Boolean(_)) => Err(raise_error(
-        left.location,
-        "Cannot perform modulo with boolean.",
-      )),
-      (ExpressionKind::String(_), _) | (_, ExpressionKind::String(_)) => Err(raise_error(
-        left.location,
-        "Cannot perform modulo with string.",
-      )),
-      (left, right) if left.numeric_value().is_some() && right.numeric_value().is_some() => {
-        Ok(ExpressionKind::Integer(
-          left.numeric_value().expect("Numeric value exists")
-            % right.numeric_value().expect("Numeric value exists"),
-        ))
-      }
-      _ => self.compile_basic_operator(
-        left,
-        right,
-        '%',
-        &mut context.code,
-        &context.location.namespace,
-      ),
-    }
-    .map(|kind| Expression::with_macro(kind, binary_operation.location, needs_macro))
+    Ok(())
   }
 
   fn compile_less_than(
@@ -676,6 +625,9 @@ impl Compiler {
       (ConditionKind::Check(a), ConditionKind::Check(b)) => {
         let scoreboard = self.next_scoreboard(&context.location.namespace);
         context.code.push(eco_format!(
+          "scoreboard players set {scoreboard} 0",
+        ));
+        context.code.push(eco_format!(
           "execute {a} run scoreboard players set {scoreboard} 1",
         ));
         context.code.push(eco_format!(
@@ -709,22 +661,6 @@ impl Compiler {
       condition_scoreboard,
       if check_equality { "0" } else { "1" }.to_eco_string(),
     )))
-  }
-
-  fn compile_basic_operator(
-    &mut self,
-    left: Expression,
-    right: Expression,
-    operator: char,
-    code: &mut Vec<EcoString>,
-    namespace: &str,
-  ) -> Result<ExpressionKind> {
-    let left_scoreboard = self.copy_to_scoreboard(code, &left, namespace)?;
-    let right_scoreboard = self.move_to_scoreboard(code, right, namespace)?;
-    code.push(eco_format!(
-      "scoreboard players operation {left_scoreboard} {operator}= {right_scoreboard}"
-    ));
-    Ok(ExpressionKind::Scoreboard(left_scoreboard))
   }
 
   fn compile_comparison_operator(

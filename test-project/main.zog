@@ -1,12 +1,7 @@
 namespace example
 
-fn &foo(something) {
-  return &something
-} 
-
 fn load(%text) {
-  &value = 10
-  data modify storage example:load something set value &value
-  scoreboard players set @s example.load &foo(12)
-  tellraw @a "%text"
+  while len(a) > 1 && b {
+    say hi
+  }
 }

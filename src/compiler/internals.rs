@@ -1,6 +1,6 @@
 use std::sync::OnceLock;
 
-use ecow::{eco_format, EcoString};
+use ecow::eco_format;
 
 use crate::error::Location;
 
@@ -15,7 +15,7 @@ static DYNAMIC_MEMBER: OnceLock<ResourceLocation> = OnceLock::new();
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 impl Compiler {
-  pub fn reset_direct_return(&mut self) -> &ResourceLocation {
+  pub fn reset_direct_return(&mut self, namespace: &str) -> &ResourceLocation {
     RESET_DIRECT_RETURN.get_or_init(|| {
       let location = ResourceLocation::new_function(
         "zoglin", &["internal", VERSION,
@@ -26,10 +26,10 @@ impl Compiler {
           Location::blank(),
           location.clone(),
           Vec::from([
-            "scoreboard players operation $temp_return zoglin.internal.vars = $should_return zoglin.internal.vars",
-            "scoreboard players reset $should_return zoglin.internal.vars", 
-            "return run scoreboard players get $temp_return zoglin.internal.vars"
-          ].map(EcoString::from)),
+            eco_format!("scoreboard players operation $temp_return zoglin.internal.{namespace}.vars = $should_return zoglin.internal.{namespace}.vars"),
+            eco_format!("scoreboard players reset $should_return zoglin.internal.{namespace}.vars"),
+            eco_format!("return run scoreboard players get $temp_return zoglin.internal.{namespace}.vars")
+          ]),
         )
         .expect("Function should not already be defined");
       location
