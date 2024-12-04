@@ -5,3 +5,27 @@ fn concat(%left, %right) {
 fn &concat(&left, &right) {
   # TODO
 }
+
+fn ljust(string, amount, spacer = " ") {
+  if string >= amount {
+    return string
+  }
+
+  while string < amount {
+    string = concat(spacer, string)
+  }
+
+  return string
+}
+
+fn rjust(string, amount, spacer = " ") {
+  if string >= amount {
+    return string
+  }
+
+  while string < amount {
+    string = concat(string, spacer)
+  }
+
+  return string
+}

@@ -65,7 +65,7 @@ fn &clamp(&value, &min, &max) {
 }
 
 fn %rand(%min, %max) {
-  /return run random value %min..%max
+  `return run random value %min..%max`
 }
 
 fn &rand(&min, &max) {
@@ -74,13 +74,13 @@ fn &rand(&min, &max) {
 
 fn $pow($value, $power = 2) {
   if $power <= 0 {
-    /return run scoreboard players set $return std.math.pow 1
+    `return run scoreboard players set $return std.math.pow 1`
   }
 
   $[$return] = $value
 
   if $power == 1 {
-    /return run scoreboard players get $return std.math.pow
+    `return run scoreboard players get $return std.math.pow`
   }
 
   scoreboard players remove $power std.math.pow 1

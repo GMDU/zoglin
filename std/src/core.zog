@@ -1,3 +1,7 @@
+fn print(value) {
+  tellraw @a {"storage": "&{fn}", "nbt": "value"}
+}
+
 fn &print(&values) {
   # TODO
 }
@@ -19,7 +23,7 @@ fn &error(&values) {
 }
 
 fn %exec(%command) {
-  /&{%command}
+  `%command`
 }
 
 fn &execute(&subcommand, &block) {

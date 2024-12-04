@@ -3,3 +3,4 @@ namespace std
 include "src/core"
 module math { include "src/math" }
 module string { include "src/string" }
+module util { include "src/util" }

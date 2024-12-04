@@ -1,0 +1,91 @@
+module uuid {
+  fn to_hex(array) {
+    hex = '""'
+    $iter = 0
+
+    while array {
+      $iter += 1
+
+      value = private/int_to_hex(array[0])
+      part = private/hex_to_str(value)
+
+      data remove storage &{fn} array[0]
+
+      if $iter > 1 {
+        if $iter > 3 {  `return -1` }
+
+        part = std:string/ljust(part, 8, '"f"')
+
+        left = part[0..4]
+        right = part[4..8]
+
+        part = std:string/concat(left, '"-"')
+        part = std:string/concat(part, right)
+      }
+
+      hex = std:string/concat(hex, part)
+
+      if ($iter < 3) {
+        hex = std:string/concat(hex, '"-"')
+      }
+    }
+
+    return hex
+  }
+
+  module private {
+    fn int_to_hex($int) {
+      output = []
+
+      if $int < 0 {
+        $first_loop = true
+        $negative = true
+        $int *= -1
+      } else {
+        $negative = false
+      }
+
+      while $int > 0 {
+        $remainder = $int % 16
+
+        # If the number was negative, we need to convert back to negatives
+        if $negative {
+          $remainder = 15 - $remainder
+
+          # Because its a negative turned positive, its off by 1
+          if $first_loop {
+            $remainder += 1
+            $first_loop = false
+          }
+        }
+
+        remainder = $remainder
+        data modify storage &{fn} output append from storage &{fn} remainder
+
+        $int: /= 16
+      }
+
+      return output
+    }
+
+    fn hex_to_str(array) {
+      output = '""'
+
+      while array {
+        output = std:string/concat(output, int_to_hex_str(array[-1]))
+        data remove storage &{fn} array[-1]
+      }
+
+      return output
+    }
+
+    fn int_to_hex_str(%int) {
+      hex = [
+        '"0"', '"1"', '"2"', '"3"', '"4"', '"5"', '"6"', '"7"', '"8"',
+        '"9"', '"a"', '"b"', '"c"', '"d"', '"e"', '"f"'
+      ]
+
+      data modify storage &{fn} return set from storage &{fn} hex[%int]
+    }
+  }
+}
