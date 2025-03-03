@@ -1,7 +1,9 @@
 namespace example
 
 fn load() {
-  &uuid = "something"
-  uuid = &uuid
-  execute as &uuid run tellraw @a "HI"
+  while a {
+    if b {
+      return 10
+    }
+  }
 }

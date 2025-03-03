@@ -597,6 +597,7 @@ impl Compiler {
 
   fn generate_nested_return(&mut self, context: &mut FunctionContext) {
     let return_command = match context.return_type {
+      ReturnType::Storage | ReturnType::Scoreboard if context.is_nested => "return 0",
       ReturnType::Storage | ReturnType::Scoreboard => &eco_format!(
         "return run scoreboard players reset $should_return zoglin.internal.{namespace}.vars",
         namespace = context.location.namespace
@@ -606,7 +607,7 @@ impl Compiler {
         self.reset_direct_return(&context.location.namespace)
       ),
     };
-    context. code.push(eco_format!("execute if score $should_return zoglin.internal.{namespace}.vars matches -2147483648..2147483647 run {return_command}", namespace = context.location.namespace));
+    context.code.push(eco_format!("execute if score $should_return zoglin.internal.{namespace}.vars matches -2147483648..2147483647 run {return_command}", namespace = context.location.namespace));
   }
 
   fn compile_ast_function(
