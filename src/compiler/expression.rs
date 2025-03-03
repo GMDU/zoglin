@@ -615,7 +615,13 @@ impl ExpressionKind {
       ExpressionKind::Float(f) => eco_format!("{f}f"),
       ExpressionKind::Double(d) => eco_format!("{d}d"),
       ExpressionKind::Boolean(b) => b.to_eco_string(),
-      ExpressionKind::String(s) => s.clone(),
+      ExpressionKind::String(s) => {
+        if top_level {
+          s.clone()
+        } else {
+          eco_format!("\"{}\"", s.escape_default())
+        }
+      }
       ExpressionKind::Array { values, .. } => return array_to_string(values, ""),
       ExpressionKind::ByteArray(values) => return array_to_string(values, "B; "),
       ExpressionKind::IntArray(values) => return array_to_string(values, "I; "),

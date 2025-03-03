@@ -1,7 +1,7 @@
 namespace example
 
-fn load(%text) {
-  while len(a) > 1 && b {
-    say hi
-  }
+fn load() {
+  &uuid = "something"
+  uuid = &uuid
+  execute as &uuid run tellraw @a "HI"
 }
