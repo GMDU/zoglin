@@ -624,9 +624,9 @@ impl Compiler {
       }
       (ConditionKind::Check(a), ConditionKind::Check(b)) => {
         let scoreboard = self.next_scoreboard(&context.location.namespace);
-        context.code.push(eco_format!(
-          "scoreboard players set {scoreboard} 0",
-        ));
+        context
+          .code
+          .push(eco_format!("scoreboard players set {scoreboard} 0",));
         context.code.push(eco_format!(
           "execute {a} run scoreboard players set {scoreboard} 1",
         ));

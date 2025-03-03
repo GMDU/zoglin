@@ -453,10 +453,14 @@ impl Parser {
     if next.kind != TokenKind::CommandBegin(true) && next.kind != TokenKind::CommandBegin(false) {
       return Err(raise_error(
         next.location.clone(),
-        format!("Expected {:?}, got {:?}", TokenKind::CommandBegin(true), next.kind),
+        format!(
+          "Expected {:?}, got {:?}",
+          TokenKind::CommandBegin(true),
+          next.kind
+        ),
       ));
     }
-    
+
     let mut parts = Vec::new();
 
     while self.current().kind != TokenKind::CommandEnd {

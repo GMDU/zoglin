@@ -61,9 +61,11 @@ impl Lexer {
     self.dependent_files.insert(self.file.clone());
     loop {
       let next = self.next_token()?;
-      
+
       match next.kind {
-        TokenKind::IncludeKeyword => {tokens.extend(self.parse_include()?);},
+        TokenKind::IncludeKeyword => {
+          tokens.extend(self.parse_include()?);
+        }
         TokenKind::CommandBegin(backtick) => {
           tokens.push(next);
           tokens.extend(self.parse_command(backtick)?);
@@ -474,7 +476,11 @@ impl Lexer {
     // Flag for when the last character was a whitespace character. Used to strip whitespace.
     let mut last_was_whitespace: bool = false;
 
-    while if backtick {self.current() != '`'} else {!self.current_is_delim()} {
+    while if backtick {
+      self.current() != '`'
+    } else {
+      !self.current_is_delim()
+    } {
       let current = self.current();
 
       match (current, self.peek(1)) {
@@ -574,7 +580,7 @@ impl Lexer {
             current_part.push(' ');
             self.consume();
           } else if current.is_ascii_whitespace() {
-            if last_was_whitespace && string_char.is_none()  {
+            if last_was_whitespace && string_char.is_none() {
               self.consume();
             } else {
               current_part.push(self.consume());
